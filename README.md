@@ -13,6 +13,7 @@ Registro maestro de empresas por RUT del que salen muestras aleatorias y auditab
 | Guía de despliegue | [`docs/despliegue.md`](docs/despliegue.md) |
 | Registro de decisiones | [`docs/decisiones.md`](docs/decisiones.md) |
 | Costos | [`docs/costos.md`](docs/costos.md) |
+| Cambio de Cloud SQL de `db-f1-micro` a `db-g1-small` | [`docs/cambio_a_small.md`](docs/cambio_a_small.md) |
 
 ## Estructura
 

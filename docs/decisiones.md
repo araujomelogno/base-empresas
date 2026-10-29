@@ -34,10 +34,11 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 | D24 | El estado por parte no retrocede, salvo al corregir el mapeo | Vigente |
 | D25 | Límite de 30 MB por archivo | Vigente |
 | D26 | Autenticación de jobs y tareas con token compartido | Vigente |
-| D27 | Región southamerica-east1 | Vigente (PRD) |
+| D27 | Región Iowa (`us-central1`) para todo el sistema | Vigente (29/10/2026) |
 | D28 | La fase 0 reusa los módulos del backend | Vigente |
 | D29 | Catálogo de naturalezas sin exclusiones hasta cargar la hoja "excluidos" | Pendiente |
 | D30 | Meses de enfriamiento por defecto: 6 | Pendiente |
+| D31 | Cloud SQL arranca en `db-f1-micro`; el paso siguiente es `db-g1-small` | Vigente (29/10/2026) |
 
 ## D01 — Cloud SQL Postgres como núcleo
 
@@ -223,7 +224,17 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 
 ## D27 — Región
 
-**Decisión (PRD).** `southamerica-east1` (São Paulo) para Cloud SQL, Cloud Run, Cloud Tasks y el bucket: menor latencia desde Montevideo y datos en la región. El dataset de BigQuery para auditoría queda en `US` (multirregión) porque solo se usa para consultas largas; si legal pide que todo quede en la región, se crea en `southamerica-east1`.
+**Contexto.** El PRD proponía `southamerica-east1` (São Paulo) por cercanía. Al revisar los costos se decidió (29/10/2026) que el sistema va **siempre en Iowa**.
+
+**Decisión.** `us-central1` (Iowa) para Cloud SQL, Cloud Run, Cloud Tasks, Cloud Scheduler, Artifact Registry y el bucket; `firebase.json` reescribe `/api/**` al servicio de esa región. El dataset de BigQuery para auditoría queda en la multirregión `US`.
+
+**Por qué.** Iowa es la región de precio de referencia de Google: los servicios cuestan del orden de un tercio menos que en São Paulo.
+
+**Consecuencias.**
+
+- Más latencia desde Montevideo (del orden de 150 ms por pedido en lugar de 40 ms). La API y la base están en la misma región, así que solo lo nota el navegador y no afecta las consultas internas. Para pantallas administrativas es imperceptible.
+- Los datos personales (contactos) quedan alojados en Estados Unidos. Legal tiene que confirmar el encuadre de la transferencia internacional bajo la Ley 18.331, además de la inscripción ante la URCDP que ya estaba pendiente.
+- El script de despliegue usa `REGION=us-central1` por defecto.
 
 ## D28 — La fase 0 reusa los módulos del backend
 
@@ -238,6 +249,18 @@ El catálogo inicial (`db/empresas/0003_seed.sql`) trae las naturalezas jurídic
 ## D30 — Enfriamiento por defecto (pendiente)
 
 La configuración inicial usa 6 meses de enfriamiento desde el último contacto efectivo; el PRD lo deja abierto. Es un parámetro: se cambia desde la pantalla de configuración sin despliegue. **Decide:** dirección.
+
+## D31 — Cloud SQL arranca en `db-f1-micro`
+
+**Contexto.** La propuesta original era `db-custom-1-3840` (1 vCPU dedicada, 3,75 GB), unos US$50 por mes solo en la instancia. Al revisar los costos se decidió (29/10/2026) empezar con el tamaño mínimo.
+
+**Decisión.** La instancia se crea con `db-f1-micro` (núcleo compartido, 0,6 GB, 25 conexiones) y 10 GB de disco con autoincremento. Para respetar las 25 conexiones, la API se despliega con `DB_POOL_MAX=5` y hasta 3 instancias de Cloud Run. El script elige esos límites según el tamaño real de la instancia, así que un cambio de tamaño no requiere tocar código.
+
+**Por qué alcanza para empezar.** El sistema tiene pocos usuarios simultáneos y lo pesado (cargas e ingestas) corre en segundo plano, con a lo sumo 2 tareas a la vez.
+
+**Contras aceptados.** No tiene SLA de Google ni admite descuento por compromiso, y las cargas grandes y los sorteos son más lentos.
+
+**Paso siguiente.** `db-g1-small` (1,7 GB, 50 conexiones), con `TIER=db-g1-small ./infra/desplegar.sh redimensionar`: unos minutos sin servicio y sin migrar datos. Las señales para hacerlo y el procedimiento están en `docs/cambio_a_small.md`. Cuando se haga, anotar acá la fecha.
 
 ## Preguntas abiertas que heredan del PRD
 
