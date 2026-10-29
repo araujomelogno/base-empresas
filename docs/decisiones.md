@@ -1,8 +1,3 @@
----
-titulo: Registro de decisiones
-subtitulo: Base de Empresas — Fase 0 y Fase 1
----
-
 # Registro de decisiones
 
 Este registro explica **por qué** el sistema quedó como quedó. Cada decisión tiene contexto, la opción elegida, las alternativas que se descartaron y sus consecuencias. Las decisiones que vienen del PRD o del spec (28/10/2026) se citan como tales; el resto se tomó durante la construcción y se puede revisar.

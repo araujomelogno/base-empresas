@@ -1,8 +1,3 @@
----
-titulo: Guía de despliegue
-subtitulo: Base de Empresas — Fase 1 en Google Cloud y Firebase
----
-
 # Guía de despliegue
 
 Esta guía lleva la Base de Empresas desde el repositorio hasta producción en un proyecto de Google Cloud propio, y explica cómo actualizarla, operarla y desarrollar en local. La fase 0 no se despliega: sus scripts corren en una laptop o en el servidor Ubuntu (ver `fase0/README.md`).
@@ -186,7 +181,7 @@ cd jobs/cdr && python -m pytest -q
 
 Los tests de la API usan Postgres real: cada test migra un esquema limpio. Cubren los criterios de aceptación de R1.1 a R1.13, incluido el control de que ninguna empresa excluida, en no llamar o en enfriamiento entra a una muestra ni a un CSV, y que toda muestra se reproduce con su semilla.
 
-### Documentos
+### Manual de usuario en PDF
 
 ```bash
 node docs/build/capturas.js http://localhost:8080 docs/manual/img <rut> api/demo/clima_parte_a_ola1.sav <base.csv>

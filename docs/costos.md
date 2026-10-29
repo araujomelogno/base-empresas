@@ -1,8 +1,3 @@
----
-titulo: Costos
-subtitulo: Base de Empresas — Fase 0 y Fase 1
----
-
 # Costos
 
 **La fase 0 no tiene costo de infraestructura. La fase 1 cuesta aproximadamente US$80–100 por mes, y casi todo es la instancia de Cloud SQL**; el resto de los servicios entra en los niveles gratuitos con el volumen previsto (menos de 50 usuarios internos, decenas de miles de empresas, unos pocos estudios a empresas por año). No hay gasto en APIs de enriquecimiento hasta la fase 2.

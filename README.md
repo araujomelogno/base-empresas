@@ -7,12 +7,12 @@ Registro maestro de empresas por RUT del que salen muestras aleatorias y auditab
 
 ## Documentos
 
-| Documento | PDF | Fuente |
-| --- | --- | --- |
-| Manual de usuario (con capturas) | [`docs/pdf/Manual_de_usuario.pdf`](docs/pdf/Manual_de_usuario.pdf) | [`docs/manual/manual_usuario.md`](docs/manual/manual_usuario.md) |
-| Guía de despliegue | [`docs/pdf/Guia_de_despliegue.pdf`](docs/pdf/Guia_de_despliegue.pdf) | [`docs/despliegue.md`](docs/despliegue.md) |
-| Registro de decisiones | [`docs/pdf/Registro_de_decisiones.pdf`](docs/pdf/Registro_de_decisiones.pdf) | [`docs/decisiones.md`](docs/decisiones.md) |
-| Costos | [`docs/pdf/Costos.pdf`](docs/pdf/Costos.pdf) | [`docs/costos.md`](docs/costos.md) |
+| Documento | Archivo |
+| --- | --- |
+| Manual de usuario (PDF con capturas) | [`docs/pdf/Manual_de_usuario.pdf`](docs/pdf/Manual_de_usuario.pdf) (fuente: [`docs/manual/manual_usuario.md`](docs/manual/manual_usuario.md)) |
+| Guía de despliegue | [`docs/despliegue.md`](docs/despliegue.md) |
+| Registro de decisiones | [`docs/decisiones.md`](docs/decisiones.md) |
+| Costos | [`docs/costos.md`](docs/costos.md) |
 
 ## Estructura
 
