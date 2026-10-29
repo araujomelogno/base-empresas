@@ -9,7 +9,7 @@ Esta guía lleva la Base de Empresas desde el repositorio hasta producción en u
 | Web | Firebase Hosting (`web/public`) | Pantallas en JS sin framework. Reescribe `/api/**` a Cloud Run |
 | Autenticación | Firebase Authentication | Email y clave. La API valida el ID token |
 | API | Cloud Run `empresas-api` (`Dockerfile`) | FastAPI. Reglas de negocio, permisos por rol, auditoría |
-| Base de datos | Cloud SQL Postgres 16 `empresas-pg`, tamaño `db-f1-micro` | Esquema `empresas`, migraciones en `db/empresas/` |
+| Base de datos | Cloud SQL Postgres 16 `empresas-pg` | Esquema `empresas`, migraciones en `db/empresas/` |
 | Migraciones | Cloud Run job `empresas-migrar` | Corre `db/migrate.py` con la misma imagen de la API |
 | Tareas diferidas | Cloud Tasks `empresas-tareas` | Preview y confirmación de cargas, ingestas y remapeos del .sav |
 | Archivos | Cloud Storage `<proyecto>-empresas-archivos` | Bases y .sav subidos (privado) |
@@ -17,13 +17,7 @@ Esta guía lleva la Base de Empresas desde el repositorio hasta producción en u
 | Auditoría larga | BigQuery `empresas_auditoria.auditoria` | Export diario a las 5:10 (Cloud Scheduler) |
 | CDR | Servidor Ubuntu de Equipos (`jobs/cdr`) | Job a las 4:00: lee MySQL de uContact y empuja a la API |
 
-Todo vive en **Iowa (`us-central1`)**, salvo el dataset de BigQuery, que queda en la multirregión `US` (ver decisiones, D27).
-
-### Capacidad inicial
-
-La base de datos arranca con el tamaño más chico de Cloud SQL, **`db-f1-micro`** (núcleo compartido, 0,6 GB de memoria, 25 conexiones, sin SLA de Google), para que el costo inicial sea mínimo (ver `docs/costos.md` y la decisión D31). Para que la API no supere esas 25 conexiones, el script la despliega con **5 conexiones por instancia (`DB_POOL_MAX=5`) y hasta 3 instancias de Cloud Run**.
-
-Cuando el uso crezca, se pasa a `db-g1-small` con un solo comando y unos minutos sin servicio. Las señales para hacerlo y el paso a paso están en **[`docs/cambio_a_small.md`](cambio_a_small.md)**.
+Todo vive en `southamerica-east1` (São Paulo), salvo el dataset de BigQuery (ver decisiones, D27).
 
 ## Requisitos
 
@@ -58,15 +52,13 @@ PROYECTO=equipos-base-empresas ADMIN_EMAILS=garaujo@equipos.com.uy ./infra/despl
 
 El script es idempotente (se puede volver a correr) y hace, en orden:
 
-1. **base:** habilita las APIs; crea la cuenta de servicio `empresas-api` con los roles mínimos (Cloud SQL client, Secret Manager accessor, Cloud Tasks enqueuer, BigQuery data editor y job user); crea la instancia de Cloud SQL (Enterprise, `db-f1-micro`, 10 GB SSD con autoincremento, backups diarios a las 6:00 con recuperación a un punto en el tiempo y 14 copias), la base `empresas` y el usuario `empresas_app` con clave aleatoria; guarda en Secret Manager la cadena de conexión y dos tokens aleatorios; crea el bucket privado, la cola de Cloud Tasks, el dataset y la tabla de BigQuery, y el repositorio de Artifact Registry.
-2. **api:** construye la imagen con Cloud Build y despliega Cloud Run con `AUTH_MODE=firebase`, `TASKS_MODE=cloudtasks`, el bucket, la cola, la tabla de BigQuery y los secretos. El pool de conexiones (`DB_POOL_MAX`) y el máximo de instancias se ajustan solos al tamaño real de la instancia de Cloud SQL. La primera vez completa `API_URL` con la URL que asigna Cloud Run.
+1. **base:** habilita las APIs; crea la cuenta de servicio `empresas-api` con los roles mínimos (Cloud SQL client, Secret Manager accessor, Cloud Tasks enqueuer, BigQuery data editor y job user); crea la instancia de Cloud SQL (Enterprise, 1 vCPU, 3,75 GB, 20 GB SSD con autoincremento, backups diarios a las 6:00 con recuperación a un punto en el tiempo y 14 copias), la base `empresas` y el usuario `empresas_app` con clave aleatoria; guarda en Secret Manager la cadena de conexión y dos tokens aleatorios; crea el bucket privado, la cola de Cloud Tasks, el dataset y la tabla de BigQuery, y el repositorio de Artifact Registry.
+2. **api:** construye la imagen con Cloud Build y despliega Cloud Run con `AUTH_MODE=firebase`, `TASKS_MODE=cloudtasks`, el bucket, la cola, la tabla de BigQuery y los secretos. La primera vez completa `API_URL` con la URL que asigna Cloud Run.
 3. **migrar:** crea y ejecuta el Cloud Run job `empresas-migrar`, que aplica las migraciones pendientes.
 4. **programar:** crea el Cloud Scheduler que exporta la auditoría a BigQuery todos los días a las 5:10.
 5. **web:** `firebase deploy --only hosting`.
 
 `ADMIN_EMAILS` lista (separados por coma) los emails que quedan como administradores la primera vez que entran. Después los usuarios se gestionan desde la pantalla **Usuarios**.
-
-Variables opcionales del script: `REGION` (por defecto `us-central1`), `TIER` (tamaño de Cloud SQL al crearla, por defecto `db-f1-micro`) y `DISCO_GB` (por defecto 10). El disco de Cloud SQL se puede agrandar pero no achicar: conviene no subir `DISCO_GB` de entrada; el autoincremento lo agranda si hace falta.
 
 ### 3. Usuarios
 
@@ -78,7 +70,7 @@ Cada persona necesita dos cosas con el **mismo email**:
 ### 4. Job del CDR en el servidor Ubuntu
 
 ```bash
-gcloud run services describe empresas-api --region us-central1 --format 'value(status.url)'
+gcloud run services describe empresas-api --region southamerica-east1 --format 'value(status.url)'
 gcloud secrets versions access latest --secret empresas-job-token
 ```
 
@@ -95,7 +87,7 @@ Con un usuario administrador, en la aplicación:
 ### 6. Verificación
 
 ```bash
-URL=$(gcloud run services describe empresas-api --region us-central1 --format 'value(status.url)')
+URL=$(gcloud run services describe empresas-api --region southamerica-east1 --format 'value(status.url)')
 curl -s $URL/api/salud                     # {"ok":true}
 ```
 
@@ -111,14 +103,13 @@ curl -s $URL/api/salud                     # {"ok":true}
 | Migración nueva (`db/empresas/NNNN_*.sql`) | `./infra/desplegar.sh api` y después `./infra/desplegar.sh migrar` |
 | Web | `PROYECTO=… ./infra/desplegar.sh web` |
 | Job del CDR | `git pull` en `/opt/base-empresas` (no requiere reiniciar el timer) |
-| Tamaño de Cloud SQL | `PROYECTO=… TIER=db-g1-small ./infra/desplegar.sh redimensionar` (ver [`docs/cambio_a_small.md`](cambio_a_small.md)) |
 
 Las migraciones se escriben para ser compatibles hacia atrás (agregar columnas o tablas, no borrar) para que la versión anterior de la API siga funcionando mientras corren. Una migración nunca se edita una vez aplicada: se agrega otra.
 
 **Volver atrás la API:** Cloud Run guarda las revisiones anteriores.
 
 ```bash
-gcloud run services update-traffic empresas-api --region us-central1 --to-revisions <revision>=100
+gcloud run services update-traffic empresas-api --region southamerica-east1 --to-revisions <revision>=100
 ```
 
 **Volver atrás la web:** consola de Firebase → Hosting → historial de versiones → *Revertir*.
@@ -140,7 +131,7 @@ Se recomienda hacerlo una vez por trimestre (coincide con la auditoría por mues
 - **Errores de la API:** Cloud Run → `empresas-api` → *Registros* (filtrar por severidad ERROR). Cada error no manejado queda con su traza.
 - **Tareas diferidas:** si una carga o ingesta queda en error, la pantalla lo muestra con el mensaje; la cola está en Cloud Tasks → `empresas-tareas`.
 - **CDR:** la pantalla de inicio muestra la fecha del último lote. En el servidor: `journalctl -u cdr-job.service --since today`.
-- **Alertas sugeridas:** en Cloud Monitoring, una política sobre errores 5xx de Cloud Run y otra sobre CPU o almacenamiento de Cloud SQL por encima del 80%. Con `db-f1-micro`, esas alertas de CPU y memoria son las que avisan que llegó el momento de pasar a `db-g1-small`.
+- **Alertas sugeridas:** en Cloud Monitoring, una política sobre errores 5xx de Cloud Run y otra sobre CPU o almacenamiento de Cloud SQL por encima del 80%.
 
 ### Rotar los tokens
 
@@ -158,7 +149,7 @@ Después actualizar `JOB_TOKEN` en `jobs/cdr/cdr_job.env` del servidor Ubuntu. E
 - El bucket es privado (acceso uniforme, prevención de acceso público).
 - La base no tiene IP pública habilitada para usuarios: Cloud Run entra por el conector de Cloud SQL.
 - Exportar contactos personales requiere el permiso específico del usuario y queda auditado.
-- Pendiente legal antes de operar: inscripción de la base ante la URCDP y plazo de conservación de contactos sin uso. Como los datos quedan en Estados Unidos (Iowa), conviene que legal confirme también el encuadre de la transferencia internacional de datos personales (Google ofrece cláusulas contractuales en su acuerdo de procesamiento de datos).
+- Pendiente legal antes de operar: inscripción de la base ante la URCDP y plazo de conservación de contactos sin uso.
 
 ## Desarrollo local
 
@@ -202,7 +193,6 @@ python docs/build/generar_pdfs.py
 | Variable | Producción | Descripción |
 | --- | --- | --- |
 | `DATABASE_URL` | secreto | `postgresql://usuario:clave@/empresas?host=/cloudsql/PROYECTO:REGION:INSTANCIA` |
-| `DB_POOL_MAX` | 5 con `db-f1-micro`, 8 con `db-g1-small` | Conexiones a Postgres por instancia de la API (lo fija el script) |
 | `AUTH_MODE` | `firebase` | `dev` solo en local y tests |
 | `FIREBASE_PROJECT_ID` | id del proyecto | Para validar los tokens |
 | `ADMIN_EMAILS` | emails | Administradores iniciales |
@@ -226,5 +216,3 @@ python docs/build/generar_pdfs.py
 | El CSV sale con menos renglones de lo esperado | Ítems sin teléfono discable o ya completos en la parte | El resumen de la exportación lo detalla |
 | El job del CDR termina con código 1 | La API no respondió | Se reintenta en la próxima corrida desde el último lote enviado |
 | "Archivo demasiado grande" | Más de 30 MB | Pasar el Excel a CSV o partirlo |
-| Errores `remaining connection slots are reserved` o `too many clients` | La API pidió más conexiones de las que admite `db-f1-micro` | Pasar a `db-g1-small` ([`docs/cambio_a_small.md`](cambio_a_small.md)) |
-| Cargas grandes o sorteos muy lentos | `db-f1-micro` tiene poca CPU y memoria | Ídem |

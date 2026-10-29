@@ -5,19 +5,12 @@
 #   PROYECTO=equipos-base-empresas ./infra/desplegar.sh api         # nueva versión de la API
 #   PROYECTO=equipos-base-empresas ./infra/desplegar.sh migrar      # aplicar migraciones
 #   PROYECTO=equipos-base-empresas ./infra/desplegar.sh web         # nueva versión de la web
-#   PROYECTO=equipos-base-empresas TIER=db-g1-small ./infra/desplegar.sh redimensionar
-#                                                                  # cambiar el tamaño de Cloud SQL (docs/cambio_a_small.md)
 #
 # Se puede correr de nuevo sin romper nada: los "create" que ya existen se saltean.
 set -euo pipefail
 
 : "${PROYECTO:?Definí PROYECTO (id del proyecto de GCP)}"
-REGION="${REGION:-us-central1}"          # Iowa: región decidida para todo el sistema
-# Tamaño de Cloud SQL. Se arranca con db-f1-micro (núcleo compartido, 0,6 GB, 25 conexiones);
-# el paso siguiente es db-g1-small (docs/cambio_a_small.md). Si no se indica, se usa el de la
-# instancia existente, o db-f1-micro al crearla.
-TIER="${TIER:-}"
-DISCO_GB="${DISCO_GB:-10}"
+REGION="${REGION:-southamerica-east1}"
 INSTANCIA="${INSTANCIA:-empresas-pg}"
 DB="${DB:-empresas}"
 DB_USUARIO="${DB_USUARIO:-empresas_app}"
@@ -31,20 +24,6 @@ CONEXION="${PROYECTO}:${REGION}:${INSTANCIA}"
 ADMIN_EMAILS="${ADMIN_EMAILS:-}"
 
 g() { gcloud --project "$PROYECTO" "$@"; }
-
-# Conexiones por instancia de la API y máximo de instancias de Cloud Run según el tamaño de
-# Cloud SQL, dejando margen para las 3 conexiones reservadas y el job de migraciones.
-limites() {
-  if [ -z "$TIER" ]; then
-    TIER="$(g sql instances describe "$INSTANCIA" --format 'value(settings.tier)' 2>/dev/null || true)"
-    TIER="${TIER:-db-f1-micro}"
-  fi
-  case "$TIER" in
-    db-f1-micro) POOL=5; INSTANCIAS=3 ;;     # 25 conexiones: 3 × 5 = 15
-    db-g1-small) POOL=8; INSTANCIAS=4 ;;     # 50 conexiones: 4 × 8 = 32
-    *) POOL=10; INSTANCIAS=4 ;;              # 100 o más
-  esac
-}
 existe() { "$@" >/dev/null 2>&1; }
 secreto() {  # secreto NOMBRE VALOR — crea el secreto o agrega una versión
   if existe g secrets describe "$1"; then printf '%s' "$2" | g secrets versions add "$1" --data-file=-;
@@ -64,10 +43,9 @@ base() {
     g projects add-iam-policy-binding "$PROYECTO" --member "serviceAccount:$SA" --role "$rol" --condition=None >/dev/null
   done
 
-  limites
-  echo "▶ Cloud SQL (Postgres 16, ${TIER}, ${DISCO_GB} GB SSD, backups diarios)"
+  echo "▶ Cloud SQL (Postgres 16, 1 vCPU, 3,75 GB, 20 GB SSD, backups diarios)"
   existe g sql instances describe "$INSTANCIA" || g sql instances create "$INSTANCIA" --database-version=POSTGRES_16 \
-    --edition=ENTERPRISE --tier="$TIER" --region="$REGION" --storage-size="$DISCO_GB" --storage-type=SSD \
+    --edition=ENTERPRISE --tier=db-custom-1-3840 --region="$REGION" --storage-size=20 --storage-type=SSD \
     --storage-auto-increase --backup-start-time=06:00 --enable-point-in-time-recovery --retained-backups-count=14
   existe g sql databases describe "$DB" --instance "$INSTANCIA" || g sql databases create "$DB" --instance "$INSTANCIA"
   if ! existe g secrets describe empresas-database-url; then
@@ -99,7 +77,6 @@ base() {
 }
 
 api() {
-  limites
   echo "▶ Imagen $IMAGEN"
   g builds submit --tag "$IMAGEN" .
   local url
@@ -107,8 +84,8 @@ api() {
   echo "▶ Cloud Run $SERVICIO"
   g run deploy "$SERVICIO" --image "$IMAGEN" --region "$REGION" --service-account "$SA" \
     --add-cloudsql-instances "$CONEXION" --allow-unauthenticated --memory 1Gi --cpu 1 --timeout 1800 \
-    --min-instances 0 --max-instances "$INSTANCIAS" --concurrency 20 \
-    --set-env-vars "DB_POOL_MAX=${POOL},AUTH_MODE=firebase,FIREBASE_PROJECT_ID=${PROYECTO},TASKS_MODE=cloudtasks,TASKS_QUEUE=projects/${PROYECTO}/locations/${REGION}/queues/${COLA},STORAGE_BUCKET=${BUCKET},BQ_TABLA_AUDITORIA=${PROYECTO}.empresas_auditoria.auditoria,ADMIN_EMAILS=${ADMIN_EMAILS},API_URL=${url}" \
+    --min-instances 0 --max-instances 4 --concurrency 20 \
+    --set-env-vars "AUTH_MODE=firebase,FIREBASE_PROJECT_ID=${PROYECTO},TASKS_MODE=cloudtasks,TASKS_QUEUE=projects/${PROYECTO}/locations/${REGION}/queues/${COLA},STORAGE_BUCKET=${BUCKET},BQ_TABLA_AUDITORIA=${PROYECTO}.empresas_auditoria.auditoria,ADMIN_EMAILS=${ADMIN_EMAILS},API_URL=${url}" \
     --set-secrets "DATABASE_URL=empresas-database-url:latest,JOB_TOKEN=empresas-job-token:latest,TAREA_TOKEN=empresas-tarea-token:latest"
   if [ -z "$url" ]; then  # primera vez: la URL recién existe después del deploy
     url="$(g run services describe "$SERVICIO" --region "$REGION" --format 'value(status.url)')"
@@ -132,23 +109,6 @@ web() {
   (cd web && firebase deploy --only hosting --project "$PROYECTO")
 }
 
-redimensionar() {
-  : "${TIER:?Indicá el tamaño nuevo: TIER=db-g1-small}"
-  # Cambia el tamaño de la instancia existente (reinicio de unos minutos, sin migrar datos)
-  # y ajusta el pool de conexiones y las instancias de la API al nuevo tamaño.
-  limites
-  local actual
-  actual="$(g sql instances describe "$INSTANCIA" --format 'value(settings.tier)')"
-  echo "▶ Cloud SQL: ${actual} → ${TIER} (la base se reinicia y queda sin servicio unos minutos)"
-  if [ "$actual" != "$TIER" ]; then
-    g sql backups create --instance "$INSTANCIA" --description "antes de pasar a ${TIER}"
-    g sql instances patch "$INSTANCIA" --tier "$TIER" --quiet
-  fi
-  echo "▶ API: DB_POOL_MAX=${POOL}, hasta ${INSTANCIAS} instancias"
-  g run services update "$SERVICIO" --region "$REGION" --max-instances "$INSTANCIAS" --update-env-vars "DB_POOL_MAX=${POOL}"
-  g sql instances describe "$INSTANCIA" --format 'value(settings.tier,state)'
-}
-
 programar() {
   echo "▶ Cloud Scheduler: export de auditoría a BigQuery todos los días a las 5:10"
   local url token
@@ -167,7 +127,6 @@ case "${1:-}" in
   migrar) migrar ;;
   web) web ;;
   programar) programar ;;
-  redimensionar) redimensionar ;;
   todo) base; api; migrar; programar; web ;;
-  *) echo "uso: PROYECTO=... $0 {todo|base|api|migrar|web|programar|redimensionar}"; exit 1 ;;
+  *) echo "uso: PROYECTO=... $0 {todo|base|api|migrar|web|programar}"; exit 1 ;;
 esac
