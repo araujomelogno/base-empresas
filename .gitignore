@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.env
+*.egg-info/
+/var/
+web/public/js/config.js
+jobs/cdr/estado.json
+jobs/cdr/cdr_job.env
+fase0/salida/
