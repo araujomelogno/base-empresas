@@ -1,0 +1,9 @@
+.git
+**/__pycache__
+**/.pytest_cache
+web
+docs
+fase0
+jobs
+api/tests
+api/demo

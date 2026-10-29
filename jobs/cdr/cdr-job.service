@@ -1,0 +1,17 @@
+# Job nocturno del CDR → API de la Base de Empresas (R1.8). Lo dispara cdr-job.timer.
+# Instalación: ver jobs/cdr/README.md. Ajustar User y las rutas si el repo no está en /opt/base-empresas.
+[Unit]
+Description=Base de Empresas: envío del CDR de uContact a la API
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=equipos
+WorkingDirectory=/opt/base-empresas/jobs/cdr
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/base-empresas/jobs/cdr/.venv/bin/python cdr_job.py
+# El export de auditoría a BigQuery lo dispara Cloud Scheduler (infra/desplegar.sh, 5:10). Si no se usa
+# Cloud Scheduler, este job puede hacerlo después del CDR:
+# ExecStart=/opt/base-empresas/jobs/cdr/.venv/bin/python cdr_job.py --exportar-auditoria
+TimeoutStartSec=2h

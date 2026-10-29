@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.env
+*.egg-info/
+/var/
+jobs/cdr/estado.json
+jobs/cdr/cdr_job.env
+fase0/salida/
+jobs/cdr/cdr_payload_*.json
+jobs/cdr/estado.tmp

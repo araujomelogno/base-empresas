@@ -1,0 +1,60 @@
+{
+  "response_id": "responseid",
+  "identificador": {"variable": "EC_ID_ITEM", "tipo": "id_item"},
+  "variables": {
+    "rut": "EC_RUT",
+    "tel_usado": "EC_TEL_USADO",
+    "calidad_tel": "EC_CALIDAD_TEL",
+    "tel_alt": "EC_TEL_ALT",
+    "resp_nombre": "EC_RESP_NOMBRE",
+    "resp_cargo": "EC_RESP_CARGO",
+    "resp_area": "EC_RESP_AREA",
+    "resultado": "EC_RESULTADO",
+    "fecha": "datesubmitted",
+    "estado_alchemer": "status"
+  },
+  "valores": {
+    "calidad_tel": {
+      "1": "corresponde",
+      "2": "no_corresponde",
+      "3": "intermediario",
+      "4": "cerro",
+      "5": "inexistente"
+    },
+    "resultado": {
+      "1": "completa",
+      "2": "rechazo",
+      "3": "no_corresponde",
+      "4": "agendada"
+    },
+    "estado_alchemer": {
+      "Complete": "completa",
+      "Partial": "parcial",
+      "Disqualified": "descalificada",
+      "Deleted": "ignorar"
+    }
+  },
+  "bloque": [
+    {"variable": "EC_ID_ITEM", "tipo": "numerica", "alchemer": "url_variable_oculta", "obligatoria": true,
+     "destino": "identificador", "contenido": "Identificador del ítem de muestra (id_item del CSV de uContact)"},
+    {"variable": "EC_RUT", "tipo": "texto", "alchemer": "url_variable_oculta", "obligatoria": true,
+     "destino": "rut", "contenido": "RUT de la empresa, 12 dígitos sin puntos ni guion"},
+    {"variable": "EC_TEL_USADO", "tipo": "texto", "alchemer": "url_variable_oculta_o_pregunta", "obligatoria": true,
+     "destino": "tel_usado", "contenido": "Teléfono con el que se hizo la encuesta (formato nacional: 29011234, 099123456)"},
+    {"variable": "EC_CALIDAD_TEL", "tipo": "numerica_codificada", "alchemer": "pregunta_cerrada", "obligatoria": true,
+     "destino": "calidad_tel", "contenido": "Calidad del número marcado",
+     "codigos": {"1": "Corresponde a la empresa", "2": "No es de la empresa", "3": "Estudio contable o jurídico",
+                 "4": "La empresa cerró", "5": "Número inexistente"}},
+    {"variable": "EC_TEL_ALT", "tipo": "texto", "alchemer": "pregunta_abierta", "obligatoria": false,
+     "destino": "tel_alt", "contenido": "Número alternativo que dieron"},
+    {"variable": "EC_RESP_NOMBRE", "tipo": "texto", "alchemer": "pregunta_abierta", "obligatoria": false,
+     "destino": "resp_nombre", "contenido": "Nombre de quien contestó"},
+    {"variable": "EC_RESP_CARGO", "tipo": "texto", "alchemer": "pregunta_abierta", "obligatoria": false,
+     "destino": "resp_cargo", "contenido": "Cargo de quien contestó"},
+    {"variable": "EC_RESP_AREA", "tipo": "texto", "alchemer": "pregunta_abierta", "obligatoria": false,
+     "destino": "resp_area", "contenido": "Área de quien contestó"},
+    {"variable": "EC_RESULTADO", "tipo": "numerica_codificada", "alchemer": "pregunta_cerrada_o_estado", "obligatoria": true,
+     "destino": "resultado", "contenido": "Resultado del contacto",
+     "codigos": {"1": "Completa", "2": "Rechazo", "3": "No corresponde", "4": "Agendada"}}
+  ]
+}
