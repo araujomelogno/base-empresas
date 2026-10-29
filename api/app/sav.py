@@ -452,6 +452,16 @@ def obtener(conn, ingesta_id: int) -> dict:
         (ingesta_id,)).fetchone()
     if ing is None:
         raise HTTPException(404, "Ingesta inexistente")
+    # Variables y códigos presentes en el crudo guardado, para corregir el mapeo sin el archivo
+    primera = conn.execute("SELECT valores FROM sav_fila WHERE ingesta_id = %s LIMIT 1", (ingesta_id,)).fetchone()
+    ing["columnas"] = list(primera["valores"].keys()) if primera else []
+    ing["frecuencias"] = {}
+    for destino in CODIFICADOS:
+        var = ((ing["mapeo"] or {}).get("variables") or {}).get(destino)
+        if var:
+            ing["frecuencias"][var] = [[r["v"], r["n"]] for r in conn.execute(
+                "SELECT valores->>%s AS v, count(*) AS n FROM sav_fila WHERE ingesta_id = %s AND valores->>%s IS NOT NULL"
+                " GROUP BY 1 ORDER BY 2 DESC", (var, ingesta_id, var))]
     ing["tarea"] = conn.execute(
         "SELECT id, estado, progreso, total, error FROM tarea WHERE tipo LIKE 'sav.%%'"
         " AND (payload->>'ingesta_id')::int = %s ORDER BY id DESC LIMIT 1", (ingesta_id,)).fetchone()

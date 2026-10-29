@@ -1,0 +1,11 @@
+# Todos los días a las 4:00 hora de Montevideo. Persistent: si el servidor estaba apagado, corre al arrancar.
+[Unit]
+Description=Base de Empresas: CDR de uContact a las 4:00
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 America/Montevideo
+Persistent=true
+Unit=cdr-job.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,8 @@
+patron,descripcion,origen,estado
+"^\d{1,5}$","Extensiones, colas, conferencias y números cortos (5 dígitos o menos)",config inicial (0003_seed.sql),activo
+^\*,"Códigos de servicio de la central que empiezan con * (*97 buzón, *98…)",config inicial (0003_seed.sql),activo
+^#,Códigos de función que empiezan con #,config inicial (0003_seed.sql),activo
+,"COMPLETAR con coordinación de campo: números propios de Equipos (líneas de la sala, DID entrantes) — número exacto, ej. 29001234",coordinación de campo,pendiente
+,"COMPLETAR: IVR, buzón de voz o conferencias de la central si se marcan con más de 5 dígitos",coordinación de campo,pendiente
+,COMPLETAR: celulares de supervisores y encuestadores usados para pruebas del marcador,coordinación de campo,pendiente
+,NOTA: los dígitos que la central agrega para tomar línea (ej. 9 o 0) no van acá: van en prefijos_salida,—,nota

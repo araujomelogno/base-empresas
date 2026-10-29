@@ -7,8 +7,8 @@ from fastapi import HTTPException
 
 from . import settings
 
-TIPOS = {".xlsx": "xlsx", ".xls": "xlsx", ".csv": "csv", ".txt": "csv", ".sav": "sav"}
-MAX_BYTES = 200 * 1024 * 1024
+TIPOS = {".xlsx": "xlsx", ".csv": "csv", ".txt": "csv", ".sav": "sav"}
+MAX_BYTES = 30 * 1024 * 1024  # Firebase Hosting no deja pasar más de 32 MB a Cloud Run
 
 
 def tipo_de(nombre: str) -> str:
@@ -26,7 +26,7 @@ def _bucket():
 
 def guardar(conn, nombre: str, datos: bytes, actor: str) -> dict:
     if len(datos) > MAX_BYTES:
-        raise HTTPException(413, "Archivo demasiado grande (máximo 200 MB)")
+        raise HTTPException(413, "Archivo demasiado grande (máximo 30 MB): partilo o comprimí el Excel a CSV")
     tipo = tipo_de(nombre)
     sha = hashlib.sha256(datos).hexdigest()
     ruta = f"subidas/{sha[:2]}/{uuid.uuid4().hex}{pathlib.Path(nombre).suffix.lower()}"

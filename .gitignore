@@ -5,7 +5,8 @@ __pycache__/
 .env
 *.egg-info/
 /var/
-web/public/js/config.js
 jobs/cdr/estado.json
 jobs/cdr/cdr_job.env
 fase0/salida/
+jobs/cdr/cdr_payload_*.json
+jobs/cdr/estado.tmp

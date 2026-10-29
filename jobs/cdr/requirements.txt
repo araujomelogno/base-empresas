@@ -1,0 +1,3 @@
+# Job del CDR (servidor Ubuntu). Solo hace falta el driver de MySQL: HTTP con urllib.
+pymysql>=1.1,<2
+# Para correr los tests: pip install pytest

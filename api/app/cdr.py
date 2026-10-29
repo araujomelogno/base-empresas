@@ -110,7 +110,7 @@ def procesar_lote(conn, llamadas: list[dict], origen: str, actor: str) -> dict:
             conn.execute(
                 "INSERT INTO conciliacion (tipo, objeto_id, motivo, candidatos) VALUES ('intento', %s, %s, %s)"
                 " ON CONFLICT (tipo, objeto_id) DO NOTHING",
-                (intento["id"], "El teléfono está en más de una muestra activa", Jsonb({"items": posibles})))
+                (intento["id"], "El teléfono corresponde a más de un ítem de muestras activas (número compartido o empresa en dos muestras)", Jsonb({"items": posibles})))
             c["a_conciliacion"] += 1
     c["intentos_nuevos"] = nuevos
     conteos = dict(c)

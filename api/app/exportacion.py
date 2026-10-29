@@ -67,11 +67,16 @@ def filas_csv(conn, muestra_id: int, parte_id: int, con_contactos: bool) -> tupl
             "link": link_alchemer(p["link_base"], r["id_item"], r["rut"], r["e164"]), "parte": p["nombre"],
             "muestra": m["nombre"],
         })
+    # Ítems que deberían ir a campo en esta parte (liberados y pendientes o en curso) sin ningún teléfono discable
+    exportables = conn.execute(
+        """
+        SELECT count(*) AS n, count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM v_vinculo_discable d WHERE d.empresa_id = i.empresa_id)) AS sin_tel
+        FROM muestra_item i LEFT JOIN item_parte_estado ps ON ps.item_id = i.id AND ps.parte_id = %s
+        WHERE i.muestra_id = %s AND i.liberado AND coalesce(ps.estado, 'pendiente') = ANY(%s)
+        """, (parte_id, muestra_id, list(ESTADOS_EXPORTABLES))).fetchone()
     resumen = {"renglones": len(salida), "items": len({s["id_item"] for s in salida}),
-               "items_liberados": conn.execute("SELECT count(*) AS n FROM muestra_item WHERE muestra_id = %s AND liberado",
-                                               (muestra_id,)).fetchone()["n"],
+               "items_pendientes": exportables["n"], "items_sin_telefono": exportables["sin_tel"],
                "con_contactos": con_contactos}
-    resumen["items_sin_telefono"] = resumen["items_liberados"] - resumen["items"]
     return salida, {"cfg": cfg, "parte": p, "muestra": m, "resumen": resumen}
 
 
