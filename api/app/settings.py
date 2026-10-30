@@ -11,6 +11,9 @@ def _lista(nombre: str) -> list[str]:
 
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres@localhost/empresas_dev")
+# Conexiones por instancia de Cloud Run. Con db-f1-micro (25 conexiones en total) va 5 y
+# Cloud Run con máximo 3 instancias; ver docs/cambio_a_small.md.
+DB_POOL_MAX = int(os.environ.get("DB_POOL_MAX", "10"))
 # firebase: valida el ID token de Firebase Auth. dev: confía en el header X-Dev-User (solo local).
 AUTH_MODE = os.environ.get("AUTH_MODE", "firebase")
 FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID")
