@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Job del CDR en una Mac (launchd). Ver jobs/cdr/README.md, "Instalación en una Mac".
+     /Users/USUARIO se reemplaza por la carpeta personal al instalarlo. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>uy.equipos.cdr-job</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/USUARIO/base-empresas/jobs/cdr/.venv/bin/python</string>
+    <string>/Users/USUARIO/base-empresas/jobs/cdr/cdr_job.py</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/USUARIO/base-empresas/jobs/cdr</string>
+  <!-- Todos los días a las 4:00, hora de la Mac (tiene que estar en hora de Montevideo) -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>4</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/USUARIO/Library/Logs/cdr-job.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/USUARIO/Library/Logs/cdr-job.log</string>
+</dict>
+</plist>

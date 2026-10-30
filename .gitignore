@@ -10,3 +10,5 @@ jobs/cdr/cdr_job.env
 fase0/salida/
 jobs/cdr/cdr_payload_*.json
 jobs/cdr/estado.tmp
+docs/build/node_modules/
+docs/build/package-lock.json

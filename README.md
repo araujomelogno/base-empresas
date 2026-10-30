@@ -23,16 +23,31 @@ Registro maestro de empresas por RUT del que salen muestras aleatorias y auditab
 | `db/` | Migraciones numeradas del esquema `empresas` (Postgres 16) y `migrate.py` |
 | `api/` | API FastAPI para Cloud Run (`app/`), tests con Postgres real (`tests/`) y datos de demostración (`demo/`) |
 | `web/` | Web sin framework para Firebase Hosting (`public/`) y `firebase.json` |
-| `jobs/cdr/` | Job nocturno del CDR para el servidor Ubuntu (systemd o cron) |
+| `jobs/cdr/` | Job nocturno del CDR: servidor Ubuntu (systemd o cron) o una Mac (launchd) |
 | `infra/` | `desplegar.sh`: infraestructura de GCP, API, migraciones, web y Cloud Scheduler |
 | `docs/` | Documentos, capturas y generador de PDFs |
 
-## Arranque rápido (local)
+## Arranque rápido en una Mac
+
+Con [Homebrew](https://brew.sh) (detalle en la [guía de despliegue](docs/despliegue.md), "Desarrollo local en la Mac"):
 
 ```bash
-pip install -r api/requirements-dev.txt
-createdb empresas_dev
+brew install python@3.12 postgresql@16 && brew services start postgresql@16
+```
+
+```bash
+createuser -s postgres && createdb empresas_dev
+```
+
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate && pip install -r api/requirements-dev.txt
+```
+
+```bash
 DATABASE_URL=postgresql://postgres@localhost/empresas_dev python api/demo/sembrar_demo.py
+```
+
+```bash
 cd api && DATABASE_URL=postgresql://postgres@localhost/empresas_dev AUTH_MODE=dev SERVE_WEB=1 uvicorn app.main:app --port 8080
 ```
 
@@ -42,9 +57,14 @@ Abrir http://localhost:8080 y entrar con `admin@equipos.com.uy` (modo dev, sin c
 
 ```bash
 createdb empresas_test
-cd api && TEST_DATABASE_URL=postgresql://postgres@localhost/empresas_test python -m pytest -q   # 77 tests, R1.1–R1.13
-cd fase0 && python -m pytest -q
-cd jobs/cdr && python -m pytest -q
+```
+
+```bash
+(cd api && TEST_DATABASE_URL=postgresql://postgres@localhost/empresas_test python -m pytest -q)
+```
+
+```bash
+(cd fase0 && python -m pytest -q) && (cd jobs/cdr && python -m pytest -q)
 ```
 
 ## Despliegue
