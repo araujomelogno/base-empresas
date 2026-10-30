@@ -1,0 +1,8 @@
+{
+  "name": "base-empresas-docs",
+  "private": true,
+  "description": "Capturas y PDF del manual de usuario (ver README.md)",
+  "dependencies": {
+    "playwright": "^1.48.0"
+  }
+}
