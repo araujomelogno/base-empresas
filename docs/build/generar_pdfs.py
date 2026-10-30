@@ -1,10 +1,12 @@
-"""Genera los PDF de la documentación con la estética de Equipos Consultores.
+"""Genera el manual de usuario en PDF con la estética de Equipos Consultores.
+
+La guía de despliegue, el registro de decisiones y los costos quedan solo en Markdown
+(docs/despliegue.md, docs/decisiones.md, docs/costos.md).
 
     pip install markdown pypdf
-    python docs/build/generar_pdfs.py            # todos
-    python docs/build/generar_pdfs.py costos     # uno
+    python docs/build/generar_pdfs.py
 
-Convierte cada Markdown a HTML (portada, índice, estilos de marca) y lo imprime a PDF con
+Convierte el Markdown a HTML (portada, índice, estilos de marca) y lo imprime a PDF con
 Chromium (Playwright de Node, ver pdf.js). Las imágenes se embeben en el HTML.
 Requiere: pip install markdown pypdf; Node con Playwright.
 """
@@ -27,9 +29,6 @@ SALIDA = DOCS / "pdf"
 
 DOCUMENTOS = {
     "manual": (DOCS / "manual" / "manual_usuario.md", "Manual_de_usuario.pdf", True),
-    "despliegue": (DOCS / "despliegue.md", "Guia_de_despliegue.pdf", True),
-    "decisiones": (DOCS / "decisiones.md", "Registro_de_decisiones.pdf", True),
-    "costos": (DOCS / "costos.md", "Costos.pdf", False),
 }
 
 MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",

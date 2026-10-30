@@ -1,11 +1,11 @@
-# Generación de documentos
+# Generación del manual en PDF
 
-Los PDF de `docs/pdf/` salen de los Markdown de `docs/` con la estética de Equipos.
+`docs/pdf/Manual_de_usuario.pdf` sale de `docs/manual/manual_usuario.md` con la estética de Equipos.
+La guía de despliegue, las decisiones y los costos quedan solo en Markdown.
 
 ```bash
 pip install markdown pypdf
-python docs/build/generar_pdfs.py                 # todos
-python docs/build/generar_pdfs.py manual          # manual | despliegue | decisiones | costos
+python docs/build/generar_pdfs.py
 ```
 
 ## Capturas del manual

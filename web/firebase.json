@@ -3,7 +3,7 @@
     "public": "public",
     "ignore": ["firebase.json", "**/.*"],
     "rewrites": [
-      { "source": "/api/**", "run": { "serviceId": "empresas-api", "region": "southamerica-east1" } }
+      { "source": "/api/**", "run": { "serviceId": "empresas-api", "region": "us-central1" } }
     ],
     "headers": [
       { "source": "**/*.@(js|css)", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },

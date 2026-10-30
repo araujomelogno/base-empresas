@@ -19,7 +19,7 @@ def pool() -> ConnectionPool:
         _pool = ConnectionPool(
             settings.DATABASE_URL,
             min_size=1,
-            max_size=10,
+            max_size=max(2, settings.DB_POOL_MAX),
             kwargs={"row_factory": dict_row, "options": "-c search_path=empresas,public -c timezone=" + settings.TZ},
             open=True,
         )
