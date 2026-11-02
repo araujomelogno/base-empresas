@@ -15,6 +15,7 @@ Registro maestro de empresas por RUT del que salen muestras aleatorias y auditab
 | Costos | [`docs/costos.md`](docs/costos.md) |
 | Cambio de Cloud SQL de `db-f1-micro` a `db-g1-small` | [`docs/cambio_a_small.md`](docs/cambio_a_small.md) |
 | Despliegue del alta de usuarios con enlace de acceso | [`docs/despliegue_alta_usuarios.md`](docs/despliegue_alta_usuarios.md) |
+| Despliegue del job del CDR en Google Cloud | [`docs/despliegue_job_cdr.md`](docs/despliegue_job_cdr.md) |
 
 ## Estructura
 
