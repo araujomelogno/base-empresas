@@ -10,7 +10,7 @@ import * as campo from './vistas/campo.js';
 import * as admin from './vistas/admin.js';
 
 const CFG = window.APP_CONFIG || {};
-const S = { me: null, auth: null, fb: null };
+const S = { me: null, auth: null, fb: null, ultimoError: null };
 const ROL_NOMBRE = { admin: 'Administrador/a', steward: 'Data steward', jefe: 'Jefe/a de proyecto', coordinador: 'Coordinador/a de campo', lectura: 'Lectura' };
 
 // Secciones del menú: [ruta, ícono, título, roles que la ven (vacío = todos)]
@@ -66,17 +66,40 @@ async function entrar() {
   try {
     S.me = await api.get('/me');
   } catch (e) {
-    renderLogin(e.status === 403 ? e.message : `No se pudo conectar con la API: ${e.message}`);
+    // El signOut dispara onAuthStateChanged(null), que vuelve a dibujar el login: el mensaje se
+    // guarda en S.ultimoError para que ese segundo dibujo también lo muestre (R1).
+    S.ultimoError = mensajeApi(e);
+    renderLogin();
     if (CFG.authMode === 'dev') localStorage.removeItem('devUser');
     else if (S.auth) S.fb.signOut(S.auth);
     return;
   }
+  S.ultimoError = null;
   renderShell();
   window.onhashchange = rutear;
   rutear();
 }
 
-function renderLogin(error) {
+function mensajeApi(e) {
+  if (e.status === 401 || e.status === 403) return e.message;
+  if (!e.status) return 'No se pudo conectar con la Base de Empresas. Revisá tu conexión e intentá de nuevo.';
+  return `La Base de Empresas respondió con un error (${e.status}): ${e.message}`;
+}
+
+const ERRORES_FIREBASE = {
+  'auth/invalid-credential': 'Email o clave incorrectos. Si es tu primer ingreso, creá tu contraseña con el enlace del correo de bienvenida.',
+  'auth/invalid-login-credentials': 'Email o clave incorrectos. Si es tu primer ingreso, creá tu contraseña con el enlace del correo de bienvenida.',
+  'auth/wrong-password': 'Email o clave incorrectos.',
+  'auth/user-not-found': 'Ese email no tiene cuenta. Pedile a un administrador que te dé de alta.',
+  'auth/user-disabled': 'Tu acceso está desactivado. Pedile a un administrador que lo reactive.',
+  'auth/too-many-requests': 'Demasiados intentos fallidos. Esperá unos minutos o restablecé tu contraseña.',
+  'auth/network-request-failed': 'No hay conexión con el servicio de ingreso. Revisá tu conexión.',
+  'auth/invalid-email': 'El email no es válido.',
+  'auth/missing-password': 'Escribí tu clave.',
+};
+const mensajeFirebase = (e) => ERRORES_FIREBASE[e.code] || e.message;
+
+function renderLogin(error = S.ultimoError) {
   const dev = CFG.authMode === 'dev';
   document.getElementById('app').innerHTML = `
   <div class="login-wrap">
@@ -96,12 +119,16 @@ function renderLogin(error) {
         <div class="form-group"><label>Email</label><input type="email" id="login-user" placeholder="nombre@equipos.com.uy" autocomplete="username" /></div>
         ${dev ? '' : `<div class="form-group"><label>Clave</label><input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password" /></div>`}
         <button class="btn btn-orange btn-full" id="login-btn">Ingresar</button>
-        ${dev ? '' : `<p class="login-forgot"><a id="login-forgot">¿Olvidaste tu contraseña?</a></p>`}
+        ${dev ? '' : `<p class="login-forgot"><a id="login-forgot">¿Olvidaste tu contraseña?</a></p>
+        <p class="login-sub" style="margin:1.25rem 0 0; font-size:.76rem; text-align:center">¿Primera vez? Creá tu contraseña con el enlace del correo de bienvenida.
+        Si venció, escribí tu email y tocá «¿Olvidaste tu contraseña?».</p>`}
       </div>
     </div>
   </div>`;
   const alerta = (m, cls = 'alert-error') => { const a = $('#login-alert'); a.className = 'alert ' + cls; a.textContent = m; };
   const ingresar = async () => {
+    S.ultimoError = null;
+    $('#login-alert').className = 'hidden';
     const email = $('#login-user').value.trim().toLowerCase();
     if (!email) return alerta('Ingresá tu email');
     if (dev) { localStorage.setItem('devUser', email); return entrar(); }
@@ -109,7 +136,7 @@ function renderLogin(error) {
       $('#login-btn').disabled = true;
       await S.fb.signInWithEmailAndPassword(S.auth, email, $('#login-pass').value);
     } catch (e) {
-      alerta(/invalid|wrong|not-found|credential/.test(e.code || '') ? 'Email o clave incorrectos' : e.message);
+      alerta(mensajeFirebase(e));
     } finally { $('#login-btn').disabled = false; }
   };
   $('#login-btn').onclick = ingresar;
@@ -119,8 +146,9 @@ function renderLogin(error) {
     e.preventDefault();
     const email = $('#login-user').value.trim();
     if (!email) return alerta('Escribí tu email y volvé a tocar el enlace');
-    try { await S.fb.sendPasswordResetEmail(S.auth, email); alerta('Te enviamos un correo para restablecer la clave', 'alert-success'); }
-    catch (err) { alerta(err.message); }
+    S.ultimoError = null;
+    try { await S.fb.sendPasswordResetEmail(S.auth, email); alerta('Te enviamos un correo para restablecer la clave. Revisá también la carpeta de spam.', 'alert-success'); }
+    catch (err) { alerta(mensajeFirebase(err)); }
   };
 }
 
@@ -167,6 +195,7 @@ export async function actualizarContadores() {
 }
 
 async function rutear() {
+  if (!main()) return;  // sesión cerrada: se está mostrando el login
   const ruta = (location.hash || '#/inicio').replace(/^#\/?/, '') || 'inicio';
   const [path, query] = ruta.split('?');
   const raiz = path.split('/')[0];

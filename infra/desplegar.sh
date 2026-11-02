@@ -7,6 +7,7 @@
 #   PROYECTO=equipos-base-empresas ./infra/desplegar.sh web         # nueva versión de la web
 #   PROYECTO=equipos-base-empresas TIER=db-g1-small ./infra/desplegar.sh redimensionar
 #                                                                  # cambiar el tamaño de Cloud SQL (docs/cambio_a_small.md)
+#   PROYECTO=equipos-base-empresas ./infra/desplegar.sh invitar     # enlace de acceso nuevo para ADMIN_EMAILS
 #
 # Se puede correr de nuevo sin romper nada: los "create" que ya existen se saltean.
 set -euo pipefail
@@ -29,6 +30,11 @@ SA="empresas-api@${PROYECTO}.iam.gserviceaccount.com"
 IMAGEN="${REGION}-docker.pkg.dev/${PROYECTO}/${REPO}/api:$(git rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M)"
 CONEXION="${PROYECTO}:${REGION}:${INSTANCIA}"
 ADMIN_EMAILS="${ADMIN_EMAILS:-}"
+# Correo de acceso (alta de usuarios con enlace): SMTP de Google Workspace y URL de la web
+APP_URL="${APP_URL:-https://${PROYECTO}.web.app}"
+SMTP_USUARIO="${SMTP_USUARIO:-notificaciones@equipos.com.uy}"
+SMTP_HOST="${SMTP_HOST:-smtp.gmail.com}"
+SMTP_PORT="${SMTP_PORT:-587}"
 
 g() { gcloud --project "$PROYECTO" "$@"; }
 
@@ -60,7 +66,7 @@ base() {
   echo "▶ Cuenta de servicio de la API"
   existe g iam service-accounts describe "$SA" || g iam service-accounts create empresas-api --display-name "Base de Empresas API"
   for rol in roles/cloudsql.client roles/secretmanager.secretAccessor roles/cloudtasks.enqueuer roles/bigquery.dataEditor \
-             roles/bigquery.jobUser; do
+             roles/bigquery.jobUser roles/firebaseauth.admin; do
     g projects add-iam-policy-binding "$PROYECTO" --member "serviceAccount:$SA" --role "$rol" --condition=None >/dev/null
   done
 
@@ -77,6 +83,19 @@ base() {
   fi
   existe g secrets describe empresas-job-token || secreto empresas-job-token "$(openssl rand -hex 32)"
   existe g secrets describe empresas-tarea-token || secreto empresas-tarea-token "$(openssl rand -hex 32)"
+  if ! existe g secrets describe empresas-smtp-password; then
+    echo "▶ Contraseña de aplicación de ${SMTP_USUARIO} para este proyecto (docs/despliegue.md, paso 0)"
+    if [ ! -t 0 ]; then
+      echo "  Falta el secreto empresas-smtp-password y la terminal no es interactiva. Crealo con:"
+      echo "  printf '%s' 'CLAVE' | gcloud secrets create empresas-smtp-password --project $PROYECTO --data-file=-"
+      exit 1
+    fi
+    local clave
+    read -rs -p "  Pegá la contraseña de aplicación (no se muestra): " clave; echo
+    clave="${clave// /}"   # Google la muestra en grupos de 4 con espacios
+    [ -n "$clave" ] || { echo "  La contraseña está vacía"; exit 1; }
+    secreto empresas-smtp-password "$clave"
+  fi
 
   echo "▶ Bucket de archivos subidos (privado)"
   existe gcloud storage buckets describe "gs://$BUCKET" || gcloud storage buckets create "gs://$BUCKET" --project "$PROYECTO" \
@@ -104,12 +123,18 @@ api() {
   g builds submit --tag "$IMAGEN" .
   local url
   url="$(g run services describe "$SERVICIO" --region "$REGION" --format 'value(status.url)' 2>/dev/null || true)"
+  # Si no se pasa ADMIN_EMAILS, se conserva el valor que ya tiene el servicio
+  local admins="$ADMIN_EMAILS"
+  if [ -z "$admins" ] && [ -n "$url" ]; then
+    admins="$(g run services describe "$SERVICIO" --region "$REGION" --format json | python3 -c \
+      'import json,sys; e=json.load(sys.stdin)["spec"]["template"]["spec"]["containers"][0].get("env",[]); print(next((x.get("value","") for x in e if x["name"]=="ADMIN_EMAILS"),""))')"
+  fi
   echo "▶ Cloud Run $SERVICIO"
   g run deploy "$SERVICIO" --image "$IMAGEN" --region "$REGION" --service-account "$SA" \
     --add-cloudsql-instances "$CONEXION" --allow-unauthenticated --memory 1Gi --cpu 1 --timeout 1800 \
     --min-instances 0 --max-instances "$INSTANCIAS" --concurrency 20 \
-    --set-env-vars "DB_POOL_MAX=${POOL},AUTH_MODE=firebase,FIREBASE_PROJECT_ID=${PROYECTO},TASKS_MODE=cloudtasks,TASKS_QUEUE=projects/${PROYECTO}/locations/${REGION}/queues/${COLA},STORAGE_BUCKET=${BUCKET},BQ_TABLA_AUDITORIA=${PROYECTO}.empresas_auditoria.auditoria,ADMIN_EMAILS=${ADMIN_EMAILS},API_URL=${url}" \
-    --set-secrets "DATABASE_URL=empresas-database-url:latest,JOB_TOKEN=empresas-job-token:latest,TAREA_TOKEN=empresas-tarea-token:latest"
+    --set-env-vars "^;^DB_POOL_MAX=${POOL};AUTH_MODE=firebase;FIREBASE_PROJECT_ID=${PROYECTO};TASKS_MODE=cloudtasks;TASKS_QUEUE=projects/${PROYECTO}/locations/${REGION}/queues/${COLA};STORAGE_BUCKET=${BUCKET};BQ_TABLA_AUDITORIA=${PROYECTO}.empresas_auditoria.auditoria;ADMIN_EMAILS=${admins};API_URL=${url};APP_URL=${APP_URL};SMTP_USUARIO=${SMTP_USUARIO};SMTP_HOST=${SMTP_HOST};SMTP_PORT=${SMTP_PORT}" \
+    --set-secrets "DATABASE_URL=empresas-database-url:latest,JOB_TOKEN=empresas-job-token:latest,TAREA_TOKEN=empresas-tarea-token:latest,SMTP_PASSWORD=empresas-smtp-password:latest"
   if [ -z "$url" ]; then  # primera vez: la URL recién existe después del deploy
     url="$(g run services describe "$SERVICIO" --region "$REGION" --format 'value(status.url)')"
     g run services update "$SERVICIO" --region "$REGION" --update-env-vars "API_URL=${url}"
@@ -149,6 +174,31 @@ redimensionar() {
   g sql instances describe "$INSTANCIA" --format 'value(settings.tier,state)'
 }
 
+invitar() {
+  # Crea la cuenta de cada email de ADMIN_EMAILS y le manda su enlace de acceso, con la misma
+  # lógica que el alta desde la pantalla Usuarios. forzar=false (al final de "todo"): una cuenta
+  # que ya existe no se toca. forzar=true ("invitar"): le llega un enlace nuevo.
+  local forzar="${1:-true}" url token
+  url="$(g run services describe "$SERVICIO" --region "$REGION" --format 'value(status.url)')"
+  token="$(g secrets versions access latest --secret empresas-job-token)"
+  echo "▶ Administradores iniciales: enlace de acceso"
+  curl -sS --fail-with-body -X POST "${url}/api/jobs/invitar-admins" -H "X-Job-Token: ${token}" \
+    -H "Content-Type: application/json" -d "{\"forzar\": ${forzar}}" | python3 -c '
+import json, sys
+for r in json.load(sys.stdin)["resultados"]:
+    c = r.get("correo") or {}
+    linea = "  " + r["email"] + ": " + r["estado"]
+    if c:
+        linea += " · correo " + ("enviado" if c.get("enviado") else "NO enviado: " + c.get("detalle", ""))
+    print(linea)
+    if r.get("mensaje"):
+        print("    " + r["mensaje"])
+    if r.get("enlace"):
+        print("    Enlace de acceso (se muestra una sola vez y vence en una hora):")
+        print("    " + r["enlace"])
+'
+}
+
 programar() {
   echo "▶ Cloud Scheduler: export de auditoría a BigQuery todos los días a las 5:10"
   local url token
@@ -168,6 +218,7 @@ case "${1:-}" in
   web) web ;;
   programar) programar ;;
   redimensionar) redimensionar ;;
-  todo) base; api; migrar; programar; web ;;
-  *) echo "uso: PROYECTO=... $0 {todo|base|api|migrar|web|programar|redimensionar}"; exit 1 ;;
+  invitar) invitar true ;;
+  todo) base; api; migrar; programar; web; invitar false ;;
+  *) echo "uso: PROYECTO=... $0 {todo|base|api|migrar|web|programar|redimensionar|invitar}"; exit 1 ;;
 esac

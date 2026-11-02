@@ -30,21 +30,27 @@ class Usuario:
 _firebase_app = None
 
 
-def _verificar_token_firebase(token: str) -> str:
+def firebase_app():
+    """App del Admin SDK de Firebase (la comparten la validación de tokens y el alta de usuarios)."""
     global _firebase_app
-    import firebase_admin
-    from firebase_admin import auth as fb_auth
-
     if _firebase_app is None:
+        import firebase_admin
+
         opciones = {"projectId": settings.FIREBASE_PROJECT_ID} if settings.FIREBASE_PROJECT_ID else None
         _firebase_app = firebase_admin.initialize_app(options=opciones)
+    return _firebase_app
+
+
+def _verificar_token_firebase(token: str) -> str:
+    from firebase_admin import auth as fb_auth
+
     try:
-        datos = fb_auth.verify_id_token(token, app=_firebase_app)
+        datos = fb_auth.verify_id_token(token, app=firebase_app())
     except Exception as e:  # token vencido, firma inválida, etc.
-        raise HTTPException(401, f"Token inválido: {e}") from e
+        raise HTTPException(401, f"Token inválido: {e}. Cerrá sesión y volvé a entrar.") from e
     email = (datos.get("email") or "").lower()
     if not email or not datos.get("email_verified", True):
-        raise HTTPException(401, "El usuario no tiene email verificado")
+        raise HTTPException(401, "Tu email no está verificado. Pedile a un administrador que te reenvíe el acceso.")
     return email
 
 
@@ -68,8 +74,10 @@ def usuario_actual(request: Request, conn=Depends(get_conn)) -> Usuario:
             "INSERT INTO usuario (email, rol, exportar_contactos) VALUES (%s, 'admin', true) RETURNING *",
             (email,),
         ).fetchone()
-    if row is None or not row["activo"]:
-        raise HTTPException(403, f"{email} no tiene acceso a la Base de Empresas")
+    if row is None:
+        raise HTTPException(403, f"{email} no tiene acceso a la Base de Empresas. Pedile a un administrador que te dé de alta.")
+    if not row["activo"]:
+        raise HTTPException(403, "Tu acceso está desactivado. Pedile a un administrador que lo reactive.")
     return Usuario(row["id"], row["email"], row["nombre"], row["rol"], row["exportar_contactos"])
 
 

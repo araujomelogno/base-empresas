@@ -30,7 +30,7 @@ const W = 1280, H = 820;
 
   await p.goto(BASE);
   await espera(800);
-  await foto('01-login');
+  // 01-login y 27-usuarios salen de capturas_usuarios.js (login de producción y alta con enlace)
   await p.fill('#login-user', 'admin@equipos.com.uy');
   await p.click('#login-btn');
   await espera(1500);
@@ -90,7 +90,6 @@ const W = 1280, H = 820;
   await ir('config'); await foto('24-config', { alto: 1500 });
   await ir('naturalezas'); await foto('25-naturalezas');
   await ir('no-llamar'); await foto('26-no-llamar');
-  await ir('usuarios'); await foto('27-usuarios');
   await ir('auditoria'); await foto('28-auditoria');
 
   if (errores.length) console.error('Errores en la página:\n' + errores.join('\n'));

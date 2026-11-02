@@ -35,10 +35,11 @@ La fase 0 son scripts de Python (`fase0/`) que corren en una laptop o en el serv
 | Cloud Tasks | cientos de tareas por mes | primer millón de operaciones gratis | 0 |
 | Cloud Scheduler | 1 trabajo (export de auditoría) | 3 trabajos gratis por cuenta | 0 |
 | Cloud Storage | bases y .sav subidos, pocos GB | ≈ US$0,02 por GB | 0–1 |
-| Secret Manager | 3 secretos | 6 versiones activas gratis | 0–1 |
+| Secret Manager | 4 secretos (incluida la contraseña SMTP) | 6 versiones activas gratis; después US$0,06 por versión al mes | 0–1 |
 | Artifact Registry y Cloud Build | imágenes de la API, pocos despliegues | 0,5 GB y minutos de build gratis | 0–2 |
 | BigQuery | auditoría, menos de 10 GB | 10 GB y 1 TB de consultas gratis | 0–2 |
-| Firebase Authentication | email y clave, menos de 50 usuarios | gratis | 0 |
+| Firebase Authentication | email y clave, menos de 50 usuarios; altas y enlaces por Admin SDK | gratis | 0 |
+| Correo de acceso (SMTP de Google Workspace) | decenas de correos al mes desde `notificaciones@equipos.com.uy` | incluido en la licencia de Workspace que ya se paga | 0 |
 | Firebase Hosting | web estática de menos de 1 MB | gratis | 0 |
 | Cloud Logging y Monitoring | registros de la API | 50 GB gratis por proyecto | 0 |
 | **Total** | | | **≈ 10–25** |
@@ -73,6 +74,8 @@ Todos en Iowa, con 10 GB de disco y backups. El cambio entre escalones es un com
 | `db-custom-1-3840` | 1 vCPU dedicada | 3,75 GB | ≈ 100 | ≈ 52 | ≈ 52–65 | Uso intensivo; tiene SLA y admite descuento por compromiso |
 
 Cálculo de `db-custom-1-3840`: 1 vCPU × 730 h × US$0,0413 + 3,75 GB × 730 h × US$0,007 ≈ US$49, más disco y backups.
+
+El alta de usuarios con enlace de acceso (D32) no suma costo recurrente. Límite a tener en cuenta: Workspace permite 2.000 destinatarios por día por cuenta, compartidos entre `paneles`, `plataforma-informes-ec` y este sistema; con el volumen de altas de la Base de Empresas no es un riesgo.
 
 ## Lo que puede hacer subir la factura
 

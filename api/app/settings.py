@@ -19,6 +19,15 @@ AUTH_MODE = os.environ.get("AUTH_MODE", "firebase")
 FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID")
 # Emails que quedan como administradores la primera vez que entran (arranque del sistema).
 ADMIN_EMAILS = [e.lower() for e in _lista("ADMIN_EMAILS")]
+# Correo de acceso por SMTP de Google Workspace (SPEC alta de usuarios). La clave es una
+# contraseña de aplicación exclusiva de este proyecto (Secret Manager: empresas-smtp-password).
+SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USUARIO = os.environ.get("SMTP_USUARIO", "notificaciones@equipos.com.uy")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+SMTP_NOMBRE = os.environ.get("SMTP_NOMBRE", "Equipos Consultores")
+# URL de la web (Firebase Hosting): destino del enlace de acceso y {{url_app}} en los correos.
+APP_URL = os.environ.get("APP_URL", "http://localhost:8080")
 # Token compartido con el job del CDR (servidor Ubuntu) y con Cloud Tasks.
 JOB_TOKEN = os.environ.get("JOB_TOKEN", "")
 TAREA_TOKEN = os.environ.get("TAREA_TOKEN", "")
