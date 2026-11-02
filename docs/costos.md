@@ -9,11 +9,13 @@ Los precios son de lista en dólares, sin impuestos, tomados en octubre de 2026.
 | Concepto | Fase 0 | Fase 1, inicio (por mes) |
 | --- | --- | --- |
 | Infraestructura en Google Cloud y Firebase | US$0 | **US$10–25** |
-| Servidor Ubuntu (job del CDR) | Ya existe | Ya existe |
+| IP fija de salida para el CDR (solo si el MySQL filtra por IP) | — | US$0 o US$4–6 |
 | APIs de enriquecimiento (Places, búsqueda, IA) | — | US$0 (fase 2) |
-| **Total recurrente** | **US$0** | **US$10–25** |
+| **Total recurrente** | **US$0** | **US$10–25** (US$14–31 con IP fija) |
 
 El PRD estimaba US$65–100 por mes para la infraestructura. La diferencia sale de dos decisiones (D27 y D31 en `docs/decisiones.md`): todo en Iowa y Cloud SQL con el tamaño mínimo para empezar.
+
+El job del CDR corre en Google Cloud (D33), dentro de los niveles gratuitos: no hace falta ningún servidor de Equipos prendido.
 
 ## Fase 0
 
@@ -32,17 +34,19 @@ La fase 0 son scripts de Python (`fase0/`) que corren en una laptop o en el serv
 | Cloud SQL Postgres (Enterprise) | `db-f1-micro`: núcleo compartido, 0,6 GB, 10 GB SSD, backups diarios y recuperación a un punto en el tiempo | ver detalle abajo | 10–14 |
 | Cloud Run (API) | 1 vCPU, 1 GiB, mínimo 0 instancias, máximo 3; cobro por pedido | dentro del nivel gratuito | 0–5 |
 | Cloud Run job (migraciones) | unos segundos por despliegue | dentro del nivel gratuito | 0 |
+| Cloud Run job (CDR, `empresas-cdr`) | 1 corrida diaria de pocos minutos, más las manuales | 180.000 vCPU-segundos y 360.000 GiB-segundos gratis por mes | 0 |
 | Cloud Tasks | cientos de tareas por mes | primer millón de operaciones gratis | 0 |
-| Cloud Scheduler | 1 trabajo (export de auditoría) | 3 trabajos gratis por cuenta | 0 |
+| Cloud Scheduler | 2 trabajos (export de auditoría y job del CDR) | 3 trabajos gratis por cuenta | 0 |
 | Cloud Storage | bases y .sav subidos, pocos GB | ≈ US$0,02 por GB | 0–1 |
-| Secret Manager | 4 secretos (incluida la contraseña SMTP) | 6 versiones activas gratis; después US$0,06 por versión al mes | 0–1 |
+| Secret Manager | 5 secretos (incluidas la contraseña SMTP y la de MySQL del CDR; al cambiar la del CDR se deshabilitan las versiones viejas) | 6 versiones activas gratis; después US$0,06 por versión al mes | 0–1 |
 | Artifact Registry y Cloud Build | imágenes de la API, pocos despliegues | 0,5 GB y minutos de build gratis | 0–2 |
 | BigQuery | auditoría, menos de 10 GB | 10 GB y 1 TB de consultas gratis | 0–2 |
 | Firebase Authentication | email y clave, menos de 50 usuarios; altas y enlaces por Admin SDK | gratis | 0 |
 | Correo de acceso (SMTP de Google Workspace) | decenas de correos al mes desde `notificaciones@equipos.com.uy` | incluido en la licencia de Workspace que ya se paga | 0 |
 | Firebase Hosting | web estática de menos de 1 MB | gratis | 0 |
-| Cloud Logging y Monitoring | registros de la API | 50 GB gratis por proyecto | 0 |
+| Cloud Logging y Monitoring | registros de la API y del job | 50 GB gratis por proyecto | 0 |
 | **Total** | | | **≈ 10–25** |
+| IP fija de salida (opcional, `IP_FIJA=1`) | IP estática + Cloud NAT, solo si el MySQL del CDR filtra por IP | IP ≈ 730 h × US$0,005; gateway NAT ≈ US$1; datos US$0,045 por GB (pocos MB por noche) | 4–6 |
 
 ### Detalle de Cloud SQL
 
@@ -94,7 +98,7 @@ El spec estima 7–8 semanas después de la fase 0. Lo construido en este reposi
 | --- | --- | --- | --- |
 | 1 — Base | R1.1–R1.4, R1.12, R1.13 | 2 semanas | Cargar las bases propias reales y la hoja "excluidos" |
 | 2 — Muestra | R1.5–R1.7 | 2 semanas | Validar el formato del CSV con una importación de prueba en uContact |
-| 3 — Campo | R1.8–R1.10 | 2 semanas | Instalar el job del CDR en el servidor Ubuntu; bloque estándar en Alchemer |
+| 3 — Campo | R1.8–R1.10 | 2 semanas | Cargar la conexión del CDR en Configuración y probarla; bloque estándar en Alchemer |
 | 4 — Piloto | R1.11 y un estudio real de punta a punta | 1–2 semanas | Correr el estudio piloto y medir las métricas de la fase 1 |
 
 Para pasar el esfuerzo a dinero: horas de cada rol × tarifa interna de Equipos. No se incluye acá porque depende de quién haga cada tarea.
@@ -108,5 +112,6 @@ Fuera del alcance actual, pero para dimensionar (PRD): el enriquecimiento con ca
 - [Cloud SQL — precios](https://cloud.google.com/sql/pricing): Enterprise con CPU dedicada, US$0,0413 por vCPU-hora y US$0,007 por GB-hora en Iowa.
 - Núcleo compartido (`db-f1-micro` ≈ US$0,0105–0,015 por hora; `db-g1-small` ≈ US$0,033–0,035 por hora): [Bytebase](https://www.bytebase.com/dbcost/cloudsql-pricing/), [Cloud Price Check](https://cloudpricecheck-com.pages.dev/gcp/cloud-sql-pricing), [Spare Cores](https://sparecores.com/database/gcp/db-g1-small).
 - Conexiones máximas por tamaño (25 y 50): [Demystifying max_connections in Cloud SQL for PostgreSQL](https://dev.to/gleb_otochkin/demystifying-max-connections-limit-in-cloud-sql-for-postgresql-55o6).
+- [Cloud NAT](https://cloud.google.com/nat/pricing) y [direcciones IP externas](https://cloud.google.com/vpc/network-pricing#ipaddress): IP fija opcional del CDR.
 - [Cloud Run — precios](https://cloud.google.com/run/pricing), [Cloud Tasks](https://cloud.google.com/tasks/pricing), [Cloud Scheduler](https://cloud.google.com/scheduler/pricing), [Secret Manager](https://cloud.google.com/secret-manager/pricing), [Cloud Storage](https://cloud.google.com/storage/pricing), [BigQuery](https://cloud.google.com/bigquery/pricing) y [Firebase](https://firebase.google.com/pricing): niveles gratuitos.
 - [Calculadora de Google Cloud](https://cloud.google.com/products/calculator), para confirmar los precios.

@@ -4,10 +4,12 @@ Cada cambio crea una versión nueva (autor, fecha, comentario). Las muestras gua
 versión con la que se sortearon. El código nunca tiene estos valores fijos: los lee de acá.
 """
 import re
+from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from . import auditoria
 
@@ -54,6 +56,77 @@ class CsvUcontact(BaseModel):
     columnas: list[ColumnaCsv]
 
 
+def validar_consulta_cdr(consulta: str) -> str:
+    """Consulta propia del CDR: un solo SELECT, con uno (desde) o dos (desde, hasta) %s."""
+    c = consulta.strip().rstrip(";").strip()
+    if not re.match(r"(?is)^select\b", c):
+        raise ValueError("la consulta tiene que empezar con SELECT")
+    if ";" in c:
+        raise ValueError("la consulta tiene que ser una sola sentencia (sin ;)")
+    n = len(re.findall(r"(?<!%)%s", c))
+    if n not in (1, 2):
+        raise ValueError("la consulta tiene que tener uno (desde) o dos (desde, hasta) %s")
+    return c
+
+
+class ConfigCdr(BaseModel):
+    """Conexión a la base MySQL del CDR de uContact. La contraseña NO va acá: vive en Secret
+    Manager (empresas-cdr-mysql-password), porque los parámetros se guardan en la base y se ven
+    en el historial de configuración."""
+    host: str = ""
+    puerto: int = Field(3306, ge=1, le=65535)
+    base: str = ""
+    usuario: str = ""
+    tabla: str = "cdr"
+    consulta: str | None = None
+    tls: Literal["requerido", "preferido", "desactivado"] = "preferido"
+    zona_horaria: str = "America/Montevideo"
+    lote_tamano: int = Field(2000, ge=1, le=20000)
+    activo: bool = False
+
+    @field_validator("host", "base", "usuario")
+    @classmethod
+    def sin_espacios(cls, v):
+        return v.strip()
+
+    @field_validator("tabla")
+    @classmethod
+    def tabla_ok(cls, v):
+        if not re.fullmatch(r"[A-Za-z0-9_$]+(\.[A-Za-z0-9_$]+)?", v.strip()):
+            raise ValueError("nombre de tabla inválido (letras, números, _ y $; opcionalmente base.tabla)")
+        return v.strip()
+
+    @field_validator("consulta")
+    @classmethod
+    def consulta_ok(cls, v):
+        if v is None or not v.strip():
+            return None
+        return validar_consulta_cdr(v)
+
+    @field_validator("zona_horaria")
+    @classmethod
+    def zona_ok(cls, v):
+        try:
+            ZoneInfo(v)
+        except (ZoneInfoNotFoundError, ValueError) as e:
+            raise ValueError(f"zona horaria desconocida: {v}") from e
+        return v
+
+    @model_validator(mode="after")
+    def completo_si_activo(self):
+        if self.activo:
+            faltan = [c for c in ("host", "base", "usuario") if not getattr(self, c)]
+            if faltan:
+                raise ValueError(f"para activar el job del CDR faltan: {', '.join(faltan)}")
+        return self
+
+
+def cdr(parametros: dict) -> dict:
+    """Bloque cdr de una versión de configuración, con los valores por defecto (las versiones
+    anteriores a este cambio no lo tienen)."""
+    return ConfigCdr.model_validate(parametros.get("cdr") or {}).model_dump()
+
+
 class Parametros(BaseModel):
     umbral_intermediario: int = Field(ge=2, le=100)
     meses_enfriamiento: int = Field(ge=0, le=120)
@@ -66,6 +139,7 @@ class Parametros(BaseModel):
     franjas: list[Franja]
     contacto_efectivo: list[str]
     csv_ucontact: CsvUcontact
+    cdr: ConfigCdr = Field(default_factory=ConfigCdr)
 
     @field_validator("reglas_disponibilidad")
     @classmethod

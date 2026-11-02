@@ -1,10 +1,12 @@
 """Configuración, naturalezas, no llamar, usuarios, auditoría y tareas (R1.4, R1.12, R1.13)."""
+import datetime as dt
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .. import accesos, auditoria, config, empresas, settings, tareas, telefonos as telmod
+from .. import accesos, auditoria, cdr_corridas, config, empresas, settings, tareas, telefonos as telmod
 from ..auth import ROLES, Usuario, requiere, requiere_job, requiere_tarea, usuario_actual
-from ..db import get_conn
+from ..db import conexion, get_conn
 
 router = APIRouter()
 
@@ -25,13 +27,13 @@ def inicio(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
                (SELECT count(*) FROM conciliacion WHERE estado = 'pendiente') AS conciliacion,
                (SELECT count(*) FROM muestra WHERE estado = 'activa') AS muestras_activas,
                (SELECT count(*) FROM no_llamar WHERE activo) AS no_llamar,
-               (SELECT max(recibido) FROM cdr_lote) AS ultimo_cdr,
                (SELECT count(*) FROM intento WHERE inicio > now() - interval '7 days') AS intentos_7d
         """).fetchone()
     r["ultimas_cargas"] = conn.execute(
         "SELECT id, fuente, estado, fecha, conteos->>'altas' AS altas FROM carga ORDER BY id DESC LIMIT 5").fetchall()
     version, _ = config.vigente(conn)
     r["config_version"] = version
+    r["cdr"] = cdr_corridas.resumen(conn)
     return r
 
 
@@ -40,7 +42,56 @@ def inicio(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
 @router.get("/config")
 def ver_config(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
     version, params = config.vigente(conn)
-    return {"version": version, "parametros": params, "historial": config.historial(conn)}
+    params = {**params, "cdr": config.cdr(params)}
+    r = {"version": version, "parametros": params, "historial": config.historial(conn)}
+    if u.rol == "admin":  # nunca el valor: solo si está configurada, cuándo y por quién
+        r["cdr_password"] = cdr_corridas.estado_password(conn)
+    return r
+
+
+# ── CDR: contraseña, prueba de conexión y corridas (SPEC_job_cdr_en_cloud) ──
+
+class PasswordCdr(BaseModel):
+    password: str
+
+
+@router.put("/config/cdr/password")
+def guardar_password_cdr(body: PasswordCdr, conn=Depends(get_conn), u: Usuario = Depends(requiere("admin"))):
+    return cdr_corridas.guardar_password(conn, body.password, u.email)
+
+
+class PruebaCdr(BaseModel):
+    parametros: dict | None = None
+    password: str | None = None
+
+
+@router.post("/config/cdr/probar")
+def probar_cdr(body: PruebaCdr, conn=Depends(get_conn), u: Usuario = Depends(requiere("admin"))):
+    return cdr_corridas.probar(conn, body.parametros, body.password or None)
+
+
+class CorridaCdr(BaseModel):
+    desde: dt.date | None = None
+    hasta: dt.date | None = None
+    dry_run: bool = False
+
+
+@router.post("/config/cdr/correr")
+def correr_cdr(body: CorridaCdr, u: Usuario = Depends(requiere("admin"))):
+    with conexion() as conn:
+        corrida_id = cdr_corridas.lanzar(conn, u.email, body.desde, body.hasta, body.dry_run)
+    cdr_corridas.despachar(corrida_id, cdr_corridas.argumentos(corrida_id, body.desde, body.hasta, body.dry_run))
+    return {"corrida_id": corrida_id}
+
+
+@router.get("/cdr/corridas")
+def corridas_cdr(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+    return cdr_corridas.corridas(conn)
+
+
+@router.get("/cdr/corridas/{corrida_id}")
+def corrida_cdr(corrida_id: int, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+    return cdr_corridas.corrida(conn, corrida_id)
 
 
 @router.get("/config/{version}")

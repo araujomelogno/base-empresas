@@ -13,6 +13,8 @@ export async function inicio(ctx) {
     ['conciliacion', '🧩', 'Filas del .sav y llamadas sin asociar', r.conciliacion, ['coordinador']],
   ].filter(b => ctx.puede(...b[4]));
   main().innerHTML = pageHeader('Hola,', nombre, 'Estado de la base y bandejas pendientes.') +
+    (r.cdr.aviso && ctx.puede('coordinador') ? `<div class="alert alert-error"><span><strong>CDR:</strong> ${esc(r.cdr.aviso)}.
+      ${ctx.puede('admin') ? '<a class="link" href="#/config">Revisar la conexión</a>' : 'Avisale a un administrador.'}</span></div>` : '') +
     stats([[r.empresas, 'Empresas activas', 's-total'], [r.disponibles, 'Disponibles para muestra', 's-ok'],
       [r.con_telefono_discable, 'Con teléfono discable', 's-free'], [r.muestras_activas, 'Muestras activas', 's-warn'],
       [r.intermediarios, 'Intermediarios confirmados', 's-bad'], [r.intentos_7d, 'Llamadas últimos 7 días', '']]) +
@@ -29,7 +31,7 @@ export async function inicio(ctx) {
     </div>
     <div class="card mt"><div class="card-body small muted">
       Configuración vigente: <strong>versión ${r.config_version}</strong> ·
-      Último lote del CDR: <strong>${r.ultimo_cdr ? fechaHora(r.ultimo_cdr) : 'nunca'}</strong> ·
+      Última corrida del CDR: <strong>${r.cdr.ultima ? `${fechaHora(r.cdr.ultima.inicio)}</strong> ${est(r.cdr.ultima.estado)}` : 'ninguna</strong>'}${r.cdr.activo ? '' : ' <span class="muted">(job inactivo)</span>'} ·
       Registros activos en no llamar: <strong>${num(r.no_llamar)}</strong></div></div>`;
 }
 

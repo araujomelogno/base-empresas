@@ -60,3 +60,11 @@ En otra Terminal:
 ```bash
 BASE=http://localhost:8080 node docs/build/capturas_usuarios.js docs/manual/img
 ```
+
+## Captura de la conexión al CDR
+
+`capturas_cdr.js` saca `32-config-cdr.png` (tarjeta del CDR en Configuración). Sirve la misma API en modo dev con la demo; como en local no hay un MySQL de uContact, el script simula una respuesta exitosa de «Probar conexión». Con la API levantada como arriba:
+
+```bash
+BASE=http://localhost:8080 node docs/build/capturas_cdr.js docs/manual/img
+```

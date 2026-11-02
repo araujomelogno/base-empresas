@@ -174,7 +174,7 @@ Hay dos llaves de cruce. **Para las llamadas es el número destino:** el CDR se 
 - **Hacia uContact (salida del sistema):** CSV para cargar la lista de la campaña, con `id_item`, `tel_e164`, `rut`, razón social, contacto sugerido y el link de Alchemer de la parte que corresponde. Lo genera este sistema; uContact no devuelve nada por este camino.
 - **CDR (entrada):** job nocturno que consulta directamente la base MySQL del CDR (`uc`). Toma **todas** las llamadas, de campañas y del marcador manual, normaliza el número destino a E.164 y lo cruza con los teléfonos de la base. Usa las convenciones del dashboard de productividad: encuestador = `peeraccount`, `userfield` = disposición de llamada|disposición de encuesta, franjas de mañana (10:00–16:30), tarde y fin de semana. La campaña se guarda como dato cuando existe, pero no es la llave.
 - El intento se asocia a un ítem de muestra cuando el destino es un teléfono de una muestra activa y la llamada cae dentro de la ventana de campo de esa muestra. Si el número está en más de una muestra activa (no debería pasar, por el bloqueo), va a conciliación.
-- Como el CDR está en una base de la red de Equipos, la ingesta corre donde hoy corre el script del dashboard (servidor Ubuntu) y empuja a Cloud SQL, o usa un conector con IP autorizada.
+- La base MySQL del CDR es accesible desde internet, así que la ingesta corre en Google Cloud como un Cloud Run job programado a las 4:00, con la conexión configurada desde la aplicación y la contraseña en Secret Manager. Si el servidor filtra por IP, el job sale con una IP fija (Cloud NAT) que se autoriza en el servidor (ver `specs/SPEC_job_cdr_en_cloud.md`).
 
 **Alchemer (resultados)**
 
@@ -262,7 +262,7 @@ Esto no es asesoramiento legal: conviene validar con un abogado el alcance de la
 
 &#91;embedded content: arquitectura · Firebase + Google Cloud\]
 
-La ingesta del CDR corre donde se alcanza la base MySQL de uContact (hoy, el servidor Ubuntu del dashboard) y escribe en Cloud SQL. Los sorteos se hacen en SQL con semilla fija (`setseed` + `ORDER BY random()` por estrato sobre el snapshot), así que son reproducibles.
+La ingesta del CDR corre en Google Cloud (Cloud Run job con Cloud Scheduler), lee la base MySQL de uContact por internet y escribe en Cloud SQL. Los sorteos se hacen en SQL con semilla fija (`setseed` + `ORDER BY random()` por estrato sobre el snapshot), así que son reproducibles.
 
 **Costo mensual estimado (aproximado, a confirmar en la calculadora de GCP)**
 

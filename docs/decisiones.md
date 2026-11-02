@@ -28,7 +28,7 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 | D18 | Sorteo con orden sha256(semilla:empresa) sobre un snapshot congelado | Vigente |
 | D19 | El CSV vuelve a aplicar las exclusiones al exportar | Vigente |
 | D20 | Contactos en el CSV solo con permiso específico | Vigente |
-| D21 | El job del CDR empuja datos crudos; la API normaliza con la configuración | Vigente |
+| D21 | El job del CDR pasa datos crudos; la API normaliza con la configuración | Vigente (dónde corre: D33) |
 | D22 | Asociación de llamadas a ítems por teléfono y ventana de campo | Vigente |
 | D23 | Mapeo del .sav: estructura, prioridad de EC_RESULTADO y respaldo por RUT | Vigente |
 | D24 | El estado por parte no retrocede, salvo al corregir el mapeo | Vigente |
@@ -40,6 +40,7 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 | D30 | Meses de enfriamiento por defecto: 6 | Pendiente |
 | D31 | Cloud SQL arranca en `db-f1-micro`; el paso siguiente es `db-g1-small` | Vigente (29/10/2026) |
 | D32 | Alta de usuarios con enlace de acceso: un solo paso, clave aleatoria y correo desde `notificaciones@` | Vigente (02/11/2026) |
+| D33 | El job del CDR corre en Google Cloud, con la API; conexión en Configuración y contraseña en Secret Manager | Vigente (02/11/2026) |
 
 ## D01 — Cloud SQL Postgres como núcleo
 
@@ -188,9 +189,9 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 
 **Decisión (Ley 18.331, R1.13).** La columna de contacto sugerido solo se completa si el usuario tiene el permiso `exportar_contactos`; si no, sale vacía y la pantalla lo avisa. Toda exportación queda auditada con la cantidad de renglones y si incluyó contactos. El rol `lectura` ve los contactos ocultos en la ficha.
 
-## D21 — El job del CDR empuja datos crudos
+## D21 — El job del CDR pasa datos crudos
 
-**Decisión.** El job nocturno (4:00, servidor Ubuntu, systemd) lee la tabla `cdr` de MySQL en forma incremental y manda las llamadas crudas a `POST /api/intentos/lote`. Normalizar, descartar destinos internos, calcular la franja y cruzar con la base se hace en la API, con la configuración vigente.
+**Decisión.** El job nocturno (4:00) lee la tabla `cdr` de MySQL en forma incremental y pasa las llamadas crudas a `cdr.procesar_lote`, la misma función que atiende `POST /api/intentos/lote` (que queda para cargas a mano). Dónde corre y cómo se configura está en D33; originalmente corría en un servidor Ubuntu y llamaba al endpoint por HTTP. Normalizar, descartar destinos internos, calcular la franja y cruzar con la base se hace en la API, con la configuración vigente.
 
 **Por qué.** Los destinos internos, los prefijos de salida y las franjas son parámetros de la configuración (R1.12): si el job los aplicara, habría que redistribuirlo con cada cambio. Re-procesar un día no duplica intentos (idempotente por `cdr_id`). Lo que no cruza se cuenta en el lote pero no se guarda como intento.
 
@@ -221,9 +222,9 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 
 ## D26 — Autenticación de jobs y tareas
 
-**Decisión.** El job del CDR y el export de auditoría se autentican con el header `X-Job-Token`; Cloud Tasks con `X-Tarea-Token`. Los dos tokens se generan al desplegar, se guardan en Secret Manager y se comparan en tiempo constante.
+**Decisión.** El export de auditoría y el alta de los administradores iniciales (`desplegar.sh invitar`) se autentican con el header `X-Job-Token`; Cloud Tasks con `X-Tarea-Token`. Los dos tokens se generan al desplegar, se guardan en Secret Manager y se comparan en tiempo constante. El job del CDR ya no usa el token: corre con la identidad de la cuenta de servicio y escribe directo en la base (D33).
 
-**Descartado (por ahora).** Tokens OIDC de cuentas de servicio: el servidor Ubuntu no tiene identidad de Google y habría que gestionar una clave de cuenta de servicio, que es más riesgosa que un token rotable.
+**Descartado (por ahora).** Tokens OIDC de cuentas de servicio para el export de auditoría. El motivo original (un servidor Ubuntu sin identidad de Google) dejó de valer con D33; hoy todo corre en Google Cloud y se podría pasar a OIDC, pero el token rotable funciona y el cambio no aporta lo suficiente todavía.
 
 ## D27 — Región
 
@@ -300,6 +301,28 @@ La configuración inicial usa 6 meses de enfriamiento desde el último contacto 
 - «¿Olvidaste tu contraseña?» con el correo de `notificaciones@` (hoy sale del remitente de Firebase).
 - Plantillas editables desde Configuración.
 - Último ingreso guardado en `usuario`.
+
+## D33 — El job del CDR corre en Google Cloud
+
+**Contexto.** El diseño original (D21) suponía que la base MySQL del CDR de uContact solo era accesible desde la red de Equipos. Por eso el job era un script aparte (`jobs/cdr/`) para correr en el servidor Ubuntu del dashboard o en una Mac de la oficina, con systemd o launchd, la conexión en un archivo `cdr_job.env` y el estado en un `estado.json` local. **El supuesto era incorrecto:** la base es accesible desde internet. Con eso, el job dependía de una máquina prendida, la conexión solo se podía cambiar entrando a esa máquina y nadie veía desde la aplicación si había corrido. (Spec: `specs/SPEC_job_cdr_en_cloud.md`.)
+
+**Decisión.**
+
+- **El job vive con la API:** `api/app/jobs/cdr_job.py`, desplegado como Cloud Run job `empresas-cdr` con la misma imagen (como `empresas-migrar`) y ejecutado por Cloud Scheduler a las 4:00 de Montevideo. Llama a `cdr.procesar_lote` en el mismo proceso, sin HTTP: una sola copia de la lógica, se actualiza con `desplegar.sh api` y usa la misma configuración y los mismos tests.
+- **Estado y corridas en Postgres** (`cdr_estado`, `cdr_corrida`): Cloud Run no tiene disco. Cada lote y el avance del estado van en la misma transacción, así que el estado solo avanza si el lote se guardó y nunca retrocede; un reproceso no lo toca. Un lock de Postgres impide dos corridas a la vez.
+- **Conexión en Configuración → CDR:** host, puerto, base, usuario, tabla o consulta, TLS y zona horaria son un bloque más de la configuración, versionado y auditado como el resto. «Probar conexión» clasifica el error (host, puerto, credenciales, base, tabla, permisos, TLS, columnas) para que se pueda resolver sin mirar logs.
+- **La contraseña va a Secret Manager (`empresas-cdr-mysql-password`), no a `Parametros`:** la configuración se guarda en la base, se versiona, se muestra en pantalla y se audita, así que una contraseña ahí quedaría copiada en cada versión, en la auditoría y en el export a BigQuery. En Secret Manager solo la leen la API y el job, y el permiso de la cuenta de servicio es sobre ese secreto, no sobre todos. La pantalla nunca la devuelve; solo dice si está configurada, cuándo y por quién. Al cambiarla se deshabilitan las versiones anteriores. Tampoco aparece en errores ni logs (se reemplaza por `***`).
+- **«Correr ahora» y «Reprocesar desde…»** ejecutan el Cloud Run job con argumentos propios (`run_job` con overrides), y la pantalla sigue la corrida.
+- **IP fija opcional** (`IP_FIJA=1`: VPC, Cloud NAT e IP estática) solo si el servidor MySQL filtra por IP de origen.
+
+**Descartado.**
+
+- **Mantener el job en un servidor o una Mac:** depende de que la máquina esté prendida, queda fuera del monitoreo de Google Cloud y la conexión no se puede cambiar desde la aplicación.
+- **Un servicio aparte para el job:** duplicaría la lógica de cruce y la configuración, y habría que desplegarlo por separado.
+- **Contraseña en `Parametros` o en una variable de entorno fija:** la primera la expone (ver arriba); la segunda obliga a redesplegar para cambiarla.
+- **Validar el certificado TLS del MySQL:** el servidor usa un certificado propio; se cifra sin validar la CA. Con «requerido», el job se niega a seguir si la conexión no quedó cifrada.
+
+**Consecuencias.** El job escribe directo en la base, así que deja de usar `JOB_TOKEN` (D26). La migración 0005 agrega `cdr_estado`, `cdr_corrida` y la columna `cdr_lote.corrida_id`. La carpeta `jobs/cdr/` se elimina; sus tests pasan a `api/tests/test_cdr_job.py`. La fase 0 puede seguir corriendo en una laptop.
 
 ## Preguntas abiertas que heredan del PRD
 

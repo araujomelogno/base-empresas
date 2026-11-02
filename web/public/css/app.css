@@ -348,3 +348,4 @@ textarea.finput.code { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
 .compacta th, .compacta td { padding-left: 0.9rem; padding-right: 0.9rem; }
 .compacta .btn { white-space: nowrap; }
 .compacta .td-actions { flex-direction: column; align-items: stretch; }
+.est-omitida { background: var(--gray-light); color: var(--gray); }

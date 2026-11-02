@@ -11,3 +11,6 @@ firebase-admin>=6.5
 google-cloud-storage>=2.18
 google-cloud-tasks>=2.16
 google-cloud-bigquery>=3.25
+pymysql>=1.1
+google-cloud-secret-manager>=2.20
+google-cloud-run>=0.10

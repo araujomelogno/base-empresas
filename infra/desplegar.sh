@@ -8,6 +8,8 @@
 #   PROYECTO=equipos-base-empresas TIER=db-g1-small ./infra/desplegar.sh redimensionar
 #                                                                  # cambiar el tamaño de Cloud SQL (docs/cambio_a_small.md)
 #   PROYECTO=equipos-base-empresas ./infra/desplegar.sh invitar     # enlace de acceso nuevo para ADMIN_EMAILS
+#   PROYECTO=equipos-base-empresas ./infra/desplegar.sh cdr         # job del CDR (Cloud Run job + Scheduler)
+#   PROYECTO=equipos-base-empresas IP_FIJA=1 ./infra/desplegar.sh cdr  # ídem, con IP de salida fija
 #
 # Se puede correr de nuevo sin romper nada: los "create" que ya existen se saltean.
 set -euo pipefail
@@ -35,6 +37,12 @@ APP_URL="${APP_URL:-https://${PROYECTO}.web.app}"
 SMTP_USUARIO="${SMTP_USUARIO:-notificaciones@equipos.com.uy}"
 SMTP_HOST="${SMTP_HOST:-smtp.gmail.com}"
 SMTP_PORT="${SMTP_PORT:-587}"
+# Job del CDR: Cloud Run job con la misma imagen de la API, todos los días a las 4:00 de Montevideo.
+# La conexión se carga en la pantalla Configuración; la contraseña va a este secreto.
+CDR_JOB_NOMBRE="${CDR_JOB_NOMBRE:-empresas-cdr}"
+CDR_SECRETO="${CDR_SECRETO:-empresas-cdr-mysql-password}"
+# IP_FIJA=1: salida a internet por Cloud NAT con una IP estática (solo si el MySQL filtra por IP)
+IP_FIJA="${IP_FIJA:-}"
 
 g() { gcloud --project "$PROYECTO" "$@"; }
 
@@ -84,7 +92,7 @@ base() {
   existe g secrets describe empresas-job-token || secreto empresas-job-token "$(openssl rand -hex 32)"
   existe g secrets describe empresas-tarea-token || secreto empresas-tarea-token "$(openssl rand -hex 32)"
   if ! existe g secrets describe empresas-smtp-password; then
-    echo "▶ Contraseña de aplicación de ${SMTP_USUARIO} para este proyecto (docs/despliegue.md, paso 0)"
+    echo "▶ Contraseña de aplicación de ${SMTP_USUARIO} para este proyecto (docs/despliegue.md, paso 1)"
     if [ ! -t 0 ]; then
       echo "  Falta el secreto empresas-smtp-password y la terminal no es interactiva. Crealo con:"
       echo "  printf '%s' 'CLAVE' | gcloud secrets create empresas-smtp-password --project $PROYECTO --data-file=-"
@@ -129,17 +137,23 @@ api() {
     admins="$(g run services describe "$SERVICIO" --region "$REGION" --format json | python3 -c \
       'import json,sys; e=json.load(sys.stdin)["spec"]["template"]["spec"]["containers"][0].get("env",[]); print(next((x.get("value","") for x in e if x["name"]=="ADMIN_EMAILS"),""))')"
   fi
+  red_de_salida
   echo "▶ Cloud Run $SERVICIO"
   g run deploy "$SERVICIO" --image "$IMAGEN" --region "$REGION" --service-account "$SA" \
     --add-cloudsql-instances "$CONEXION" --allow-unauthenticated --memory 1Gi --cpu 1 --timeout 1800 \
     --min-instances 0 --max-instances "$INSTANCIAS" --concurrency 20 \
-    --set-env-vars "^;^DB_POOL_MAX=${POOL};AUTH_MODE=firebase;FIREBASE_PROJECT_ID=${PROYECTO};TASKS_MODE=cloudtasks;TASKS_QUEUE=projects/${PROYECTO}/locations/${REGION}/queues/${COLA};STORAGE_BUCKET=${BUCKET};BQ_TABLA_AUDITORIA=${PROYECTO}.empresas_auditoria.auditoria;ADMIN_EMAILS=${admins};API_URL=${url};APP_URL=${APP_URL};SMTP_USUARIO=${SMTP_USUARIO};SMTP_HOST=${SMTP_HOST};SMTP_PORT=${SMTP_PORT}" \
+    --set-env-vars "^;^DB_POOL_MAX=${POOL};AUTH_MODE=firebase;FIREBASE_PROJECT_ID=${PROYECTO};TASKS_MODE=cloudtasks;TASKS_QUEUE=projects/${PROYECTO}/locations/${REGION}/queues/${COLA};STORAGE_BUCKET=${BUCKET};BQ_TABLA_AUDITORIA=${PROYECTO}.empresas_auditoria.auditoria;ADMIN_EMAILS=${admins};API_URL=${url};APP_URL=${APP_URL};SMTP_USUARIO=${SMTP_USUARIO};SMTP_HOST=${SMTP_HOST};SMTP_PORT=${SMTP_PORT};GCP_PROYECTO=${PROYECTO};GCP_REGION=${REGION};CDR_JOB=${CDR_JOB_NOMBRE};CDR_SECRETO=${CDR_SECRETO}" \
+    ${RED[@]+"${RED[@]}"} \
     --set-secrets "DATABASE_URL=empresas-database-url:latest,JOB_TOKEN=empresas-job-token:latest,TAREA_TOKEN=empresas-tarea-token:latest,SMTP_PASSWORD=empresas-smtp-password:latest"
   if [ -z "$url" ]; then  # primera vez: la URL recién existe después del deploy
     url="$(g run services describe "$SERVICIO" --region "$REGION" --format 'value(status.url)')"
     g run services update "$SERVICIO" --region "$REGION" --update-env-vars "API_URL=${url}"
   fi
   echo "API en $url"
+  # El job del CDR usa la misma imagen: se actualiza junto con la API
+  if existe g run jobs describe "$CDR_JOB_NOMBRE" --region "$REGION"; then
+    g run jobs update "$CDR_JOB_NOMBRE" --region "$REGION" --image "$IMAGEN"
+  fi
 }
 
 migrar() {
@@ -155,6 +169,56 @@ migrar() {
 web() {
   echo "▶ Firebase Hosting"
   (cd web && firebase deploy --only hosting --project "$PROYECTO")
+}
+
+red_de_salida() {
+  # Con IP_FIJA=1, la API (por "Probar conexión") y el job salen a internet por Cloud NAT con una
+  # IP estática, para que un MySQL que filtra por IP de origen la pueda autorizar.
+  RED=()
+  [ "$IP_FIJA" = "1" ] || return 0
+  echo "▶ IP de salida fija (VPC, Cloud Router, Cloud NAT e IP estática)"
+  g services enable compute.googleapis.com
+  existe g compute networks describe empresas-vpc || g compute networks create empresas-vpc --subnet-mode=custom
+  existe g compute networks subnets describe empresas-subnet --region "$REGION" || g compute networks subnets create \
+    empresas-subnet --network empresas-vpc --region "$REGION" --range 10.8.0.0/26
+  existe g compute addresses describe empresas-salida-ip --region "$REGION" || g compute addresses create \
+    empresas-salida-ip --region "$REGION"
+  existe g compute routers describe empresas-router --region "$REGION" || g compute routers create empresas-router \
+    --network empresas-vpc --region "$REGION"
+  existe g compute routers nats describe empresas-nat --router empresas-router --region "$REGION" || g compute routers \
+    nats create empresas-nat --router empresas-router --region "$REGION" --nat-all-subnet-ip-ranges \
+    --nat-external-ip-pool empresas-salida-ip
+  echo "  IP de salida fija: $(g compute addresses describe empresas-salida-ip --region "$REGION" --format 'value(address)')"
+  echo "  Pedí que el servidor MySQL del CDR acepte conexiones desde esa IP."
+  RED=(--network empresas-vpc --subnet empresas-subnet --vpc-egress all-traffic)
+}
+
+cdr() {
+  echo "▶ Job del CDR: secreto, Cloud Run job ${CDR_JOB_NOMBRE} y Cloud Scheduler (4:00, Montevideo)"
+  existe g secrets describe "$CDR_SECRETO" || g secrets create "$CDR_SECRETO" --replication-policy=automatic
+  # La API agrega versiones (pantalla Configuración) y las lee, solo sobre este secreto
+  for rol in roles/secretmanager.secretVersionManager roles/secretmanager.secretAccessor; do
+    g secrets add-iam-policy-binding "$CDR_SECRETO" --member "serviceAccount:$SA" --role "$rol" >/dev/null
+  done
+  red_de_salida
+  local imagen
+  imagen="$(g run services describe "$SERVICIO" --region "$REGION" --format 'value(spec.template.spec.containers[0].image)')"
+  g run jobs deploy "$CDR_JOB_NOMBRE" --image "$imagen" --region "$REGION" --service-account "$SA" \
+    --set-cloudsql-instances "$CONEXION" --set-secrets "DATABASE_URL=empresas-database-url:latest" \
+    --set-env-vars "^;^AUTH_MODE=firebase;GCP_PROYECTO=${PROYECTO};GCP_REGION=${REGION};CDR_SECRETO=${CDR_SECRETO};STORAGE_BUCKET=${BUCKET};DB_POOL_MAX=3" \
+    --command python --args=-m,app.jobs.cdr_job --task-timeout 3600 --max-retries 0 \
+    ${RED[@]+"${RED[@]}"}
+  # "Correr ahora" y "Reprocesar desde…": la API ejecuta el job con argumentos propios
+  for rol in roles/run.invoker roles/run.jobsExecutorWithOverrides; do
+    g run jobs add-iam-policy-binding "$CDR_JOB_NOMBRE" --region "$REGION" --member "serviceAccount:$SA" \
+      --role "$rol" >/dev/null
+  done
+  local uri="https://run.googleapis.com/v2/projects/${PROYECTO}/locations/${REGION}/jobs/${CDR_JOB_NOMBRE}:run"
+  local accion=create
+  existe g scheduler jobs describe "$CDR_JOB_NOMBRE" --location "$REGION" && accion=update
+  g scheduler jobs "$accion" http "$CDR_JOB_NOMBRE" --location "$REGION" --schedule "0 4 * * *" \
+    --time-zone "America/Montevideo" --uri "$uri" --http-method POST --oauth-service-account-email "$SA"
+  echo "  Listo. Cargá la conexión en la aplicación: Configuración → CDR (docs/despliegue.md, paso 4)."
 }
 
 redimensionar() {
@@ -219,6 +283,7 @@ case "${1:-}" in
   programar) programar ;;
   redimensionar) redimensionar ;;
   invitar) invitar true ;;
-  todo) base; api; migrar; programar; web; invitar false ;;
-  *) echo "uso: PROYECTO=... $0 {todo|base|api|migrar|web|programar|redimensionar|invitar}"; exit 1 ;;
+  cdr) cdr ;;
+  todo) base; api; migrar; cdr; programar; web; invitar false ;;
+  *) echo "uso: PROYECTO=... $0 {todo|base|api|migrar|cdr|web|programar|redimensionar|invitar}"; exit 1 ;;
 esac

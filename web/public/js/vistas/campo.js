@@ -184,7 +184,7 @@ export async function conciliacion(ctx, params) {
 let _act = { estudio_id: '', muestra_id: '', encuestador: '', desde: '', hasta: '' };
 
 export async function actividad(ctx) {
-  const [estudios, muestras, lotes] = await Promise.all([api.get('/estudios'), api.get('/muestras'), api.get('/cdr/lotes')]);
+  const [estudios, muestras, corridas] = await Promise.all([api.get('/estudios'), api.get('/muestras'), api.get('/cdr/corridas')]);
   main().innerHTML = pageHeader('Actividad', 'de campo', 'Llamadas del CDR (campañas y marcador manual) y resultados de las ingestas. Filtrá por estudio, muestra, encuestador y período.') +
     `<div class="card mb"><div class="card-body"><div class="inline-form">
       <div class="form-group"><label>Estudio</label><select class="fselect" id="a-estudio_id"><option value="">Todos</option>${estudios.map(e => `<option value="${e.id}">${esc(e.nombre)}</option>`).join('')}</select></div>
@@ -209,9 +209,11 @@ export async function actividad(ctx) {
         { t: 'Intentos por completa', cls: 'num', f: e => e.completas ? (e.intentos / e.completas).toLocaleString('es-UY', { maximumFractionDigits: 1 }) : '—' }],
       t.por_encuestador, 'Sin actividad'), '', true) +
       `<div class="grid-2">${card('Disposiciones de llamada', barras(t.por_disposicion, { label: 'disposicion', valor: 'intentos' }))}
-      ${card('Lotes del CDR recibidos', tabla([{ t: 'Recibido', f: l => fechaHora(l.recibido) }, { t: 'Llamadas', cls: 'num', f: l => num(l.conteos.recibidas) },
-        { t: 'Internas', cls: 'num', f: l => num(l.conteos.internas) }, { t: 'No cruzan', cls: 'num', f: l => num(l.conteos.no_cruzan) },
-        { t: 'Nuevos', cls: 'num', f: l => num(l.conteos.intentos_nuevos) }], lotes.slice(0, 10), 'Todavía no llegó ningún lote'), '', true)}</div>`;
+      ${card('Corridas del job del CDR', tabla([{ t: 'Inicio', f: c => fechaHora(c.inicio) },
+        { t: 'Origen', f: c => esc(c.origen) + (c.dry_run ? ' · dry-run' : '') }, { t: 'Estado', f: c => est(c.estado) },
+        { t: 'Llamadas', cls: 'num', f: c => num((c.conteos || {}).filas_leidas) }, { t: 'Nuevos', cls: 'num', f: c => num((c.conteos || {}).intentos_nuevos) },
+        { t: 'Detalle', f: c => `<span class="small">${esc(c.mensaje || (c.pedido_desde ? `reproceso desde ${c.pedido_desde}` : ''))}</span>` }],
+        corridas.slice(0, 15), 'Todavía no corrió el job del CDR'), '', true)}</div>`;
   };
   $$('.inline-form select, .inline-form input').forEach(i => i.onchange = cargar);
   await cargar();
