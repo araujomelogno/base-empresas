@@ -12,3 +12,8 @@ jobs/cdr/cdr_payload_*.json
 jobs/cdr/estado.tmp
 docs/build/node_modules/
 docs/build/package-lock.json
+
+# Generados localmente: no van al repositorio
+node_modules/
+.DS_Store
+web/.firebase/
