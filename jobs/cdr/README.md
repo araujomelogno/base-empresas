@@ -1,8 +1,9 @@
 # Job nocturno del CDR (R1.8)
 
 `cdr_job.py` lee las llamadas nuevas de la base MySQL del CDR de uContact (`uc`) y las empuja a
-la API (`POST /api/intentos/lote`). Corre a las 4:00 en el servidor Ubuntu que llega a esa base
-(el mismo del dashboard de productividad), porque el CDR no es accesible desde fuera de la red.
+la API (`POST /api/intentos/lote`). Corre a las 4:00 en una máquina de la red de Equipos, porque el
+CDR no es accesible desde fuera: el servidor Ubuntu del dashboard de productividad (recomendado,
+systemd) o una Mac de la oficina (launchd).
 
 - Toma **todas** las llamadas, de campañas y del marcador manual: no filtra por campaña. La API
   normaliza el destino, descarta los destinos internos y cruza contra los teléfonos de la base.
@@ -71,6 +72,76 @@ CRON_TZ=America/Montevideo
 0 4 * * * cd /opt/base-empresas/jobs/cdr && .venv/bin/python cdr_job.py >> /var/log/cdr_job.log 2>&1
 ```
 
+## Instalación en una Mac
+
+Sirve si el job corre en una Mac de la oficina en lugar del servidor Ubuntu. La Mac tiene que estar en
+la red de Equipos (para llegar a MySQL), con la zona horaria de Montevideo y prendida a las 4:00: si
+está dormida, `launchd` corre el job al despertarse; si está apagada, se saltea ese día y la corrida
+siguiente trae todo lo pendiente (el job es incremental).
+
+Requisitos: Python 3.12 de Homebrew (`brew install python@3.12`) y el repositorio clonado en
+`~/base-empresas`. No conviene clonarlo dentro de Documentos, Escritorio o Descargas: macOS no deja que
+`launchd` lea esas carpetas sin un permiso extra.
+
+```bash
+cd ~/base-empresas/jobs/cdr
+```
+
+```bash
+python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
+```
+
+```bash
+cp cdr_job.env.example cdr_job.env && chmod 600 cdr_job.env && open -e cdr_job.env
+```
+
+Completar `cdr_job.env` (MySQL de solo lectura, `API_URL` y `JOB_TOKEN`) y probar sin enviar nada:
+
+```bash
+.venv/bin/python cdr_job.py --dry-run --dias 1
+```
+
+Primera carga real (por ejemplo, desde el inicio del período que interesa):
+
+```bash
+.venv/bin/python cdr_job.py --desde 2026-10-01
+```
+
+Programarlo con `launchd` a las 4:00 (el archivo de ejemplo usa `/Users/USUARIO`; el comando lo cambia
+por tu carpeta personal):
+
+```bash
+sed "s#/Users/USUARIO#$HOME#g" uy.equipos.cdr-job.plist > ~/Library/LaunchAgents/uy.equipos.cdr-job.plist
+```
+
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/uy.equipos.cdr-job.plist
+```
+
+```bash
+launchctl print gui/$(id -u)/uy.equipos.cdr-job | grep -E "state|last exit"
+```
+
+Para que la Mac se despierte sola un poco antes (opcional, pide la clave de administrador):
+
+```bash
+sudo pmset repeat wakeorpoweron MTWRFSU 03:55:00
+```
+
+Correrlo a mano, ver el log y desinstalarlo:
+
+```bash
+launchctl kickstart gui/$(id -u)/uy.equipos.cdr-job
+```
+
+```bash
+tail -n 100 ~/Library/Logs/cdr-job.log
+```
+
+```bash
+launchctl bootout gui/$(id -u)/uy.equipos.cdr-job && rm ~/Library/LaunchAgents/uy.equipos.cdr-job.plist
+```
+
 ## Uso
 
 ```bash
@@ -100,7 +171,7 @@ Se cambia con `CDR_SQL` (por ejemplo, si la tabla tiene otro nombre o hay que un
 campañas). Tiene que devolver esas columnas (con `AS` si se llaman distinto) y venir ordenada por
 `calldate`. Con dos `%s` recibe `desde` y `hasta`, y el re-proceso de un período no lee de más.
 
-## Logs
+## Logs (servidor Ubuntu)
 
 ```bash
 journalctl -u cdr-job.service --since today

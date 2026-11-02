@@ -3,7 +3,7 @@
 Scripts en Python para probar, con datos reales de un estudio a empresas ya terminado, que
 **las llamadas** (por número destino) y **las respuestas** (por el .sav) se asocian a la empresa
 y al teléfono sin trabajo manual (ver `specs/Spec Fase 0 y 1.md`, sección "Fase 0"). No se
-despliega nada: corren en el servidor Ubuntu o en una laptop, sobre copias de los datos.
+despliega nada: corren en una Mac o en el servidor Ubuntu, sobre copias de los datos.
 
 Los scripts reusan los módulos puros del backend (`api/app/telefonos.py`, `rut.py`,
 `lectores.py`, `sav.py`), así las reglas que se validan acá son las mismas que usa el sistema.
@@ -12,8 +12,9 @@ No necesitan base de datos.
 ## Requisitos
 
 Python 3.11+ con las dependencias del backend (`pip install -r api/requirements.txt`; alcanza con
-fastapi, psycopg, psycopg_pool, pandas, openpyxl, pyreadstat). Los comandos se corren desde la raíz
-del repo. Todo lo que generan va a `fase0/salida/` (ignorado por git: puede tener datos reales).
+fastapi, psycopg, psycopg_pool, pandas, openpyxl, pyreadstat). En una Mac, con el entorno virtual del
+repositorio (`python3.12 -m venv .venv && source .venv/bin/activate`, ver `docs/despliegue.md`,
+"Desarrollo local en la Mac"). Los comandos se corren desde la raíz del repo. Todo lo que generan va a `fase0/salida/` (ignorado por git: puede tener datos reales).
 
 ## Insumos
 
