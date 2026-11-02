@@ -33,11 +33,31 @@ Cada persona entra con su email de Equipos y ve el menú de su rol. El sistema v
 
 ## Ingreso y pantalla de inicio
 
-Entrá a la dirección de la aplicación con tu email y tu clave. Si es la primera vez o la olvidaste, escribí tu email y tocá **¿Olvidaste tu contraseña?**: te llega un correo para elegir una clave nueva.
+### Tu primer ingreso
+
+Cuando un administrador te da de alta, te llega un correo de **notificaciones@equipos.com.uy** con el asunto "Tu acceso a la Base de Empresas de Equipos". Tocá el enlace del correo, elegí tu contraseña y después entrá a la dirección de la aplicación con tu email y esa contraseña. Nadie más conoce tu contraseña: ni siquiera el administrador que te dio de alta.
+
+- **El enlace vence en una hora.** Si venció, escribí tu email en la pantalla de ingreso y tocá **¿Olvidaste tu contraseña?**, o pedile a un administrador que te **reenvíe el acceso**.
+- Si no ves el correo, buscalo en la carpeta de spam.
+
+### Ingresar
+
+Entrá con tu email y tu contraseña. Si la olvidaste, escribí tu email y tocá **¿Olvidaste tu contraseña?**: te llega un correo para elegir una nueva.
 
 ![Ingreso](img/01-login.png)
 
-Si el sistema dice que tu email "no tiene acceso", pedile a un administrador que te agregue en **Usuarios** con tu rol.
+Si no podés entrar, la pantalla te dice por qué:
+
+| Mensaje | Qué hacer |
+| --- | --- |
+| "Email o clave incorrectos" | Revisá lo que escribiste. Si es tu primer ingreso, primero creá tu contraseña con el enlace del correo de bienvenida |
+| "… no tiene acceso a la Base de Empresas" | Todavía no te dieron de alta: pedíselo a un administrador |
+| "Tu acceso está desactivado" | Un administrador te desactivó: pedile que te reactive |
+| "Tu email no está verificado" | Pedile a un administrador que te reenvíe el acceso |
+| "Demasiados intentos fallidos" | Esperá unos minutos o restablecé tu contraseña |
+| "No se pudo conectar…" | Revisá tu conexión a internet y probá de nuevo |
+
+![Mensaje de acceso desactivado](img/29-login-error.png)
 
 La pantalla de **Inicio** resume el estado de la base (empresas activas, disponibles para muestra, con teléfono discable, muestras activas, intermediarios confirmados y llamadas de los últimos 7 días) y las **bandejas pendientes** de tu rol. Los números naranjas del menú indican cuántos pendientes hay en cada bandeja.
 
@@ -299,9 +319,31 @@ Registro de pedidos de no llamar por empresa (RUT), teléfono o contacto, con mo
 
 ### Usuarios
 
-Alta y edición de usuarios: email, nombre, rol, permiso para exportar contactos personales y si está activo. La persona tiene que existir también en Firebase Authentication con el mismo email (ver la guía de despliegue). No podés quitarte a vos mismo el rol de administrador.
+En **Usuarios** se da de alta a las personas, se les cambia el rol y se las activa o desactiva. Todo se hace desde esta pantalla: no hace falta entrar a la consola de Firebase.
 
 ![Usuarios](img/27-usuarios.png)
+
+La tabla muestra, para cada persona:
+
+- **Rol**, y si puede exportar contactos personales.
+- **Estado** y **último ingreso**. "Nunca ingresó" es alguien que todavía no creó su contraseña; "sin cuenta", alguien registrado antes del alta con enlace, que necesita «Reenviar acceso».
+- **Correo de acceso:** si el último correo salió (**enviado**) o no (**fallido**, con el motivo), qué correo fue y cuándo.
+
+**Dar de alta.** Tocá **+ Usuario**, escribí email, nombre y rol, y marcá si puede exportar contactos personales. Tocá **Dar de alta**: la persona recibe un correo con el enlace para crear su contraseña (vence en una hora).
+
+![Alta de un usuario](img/30-usuario-alta.png)
+
+**Si el correo no salió**, la cuenta queda creada igual y aparece el enlace en una ventana que **se muestra una sola vez**. Tocá **Copiar enlace** y pasáselo a la persona por otro canal (WhatsApp, Teams). El enlace no se guarda en ningún lado: si se pierde, usá **Reenviar acceso**.
+
+![Enlace de acceso cuando el correo no salió](img/31-usuario-enlace.png)
+
+**Reenviar acceso.** Manda un enlace nuevo a quien lo perdió o lo dejó vencer: el de bienvenida si nunca entró, o uno para restablecer la contraseña si ya entró. Si la persona no tenía cuenta (por ejemplo, alguien registrado antes de este cambio), se la crea. Queda registrado quién lo pidió y cuándo.
+
+**Editar.** Cambiar el nombre, el rol o el permiso de exportar contactos no manda ningún correo.
+
+**Desactivar.** Desmarcá **Activo** al editar: la persona ya no puede entrar y ve "Tu acceso está desactivado". Para devolverle el acceso, volvé a marcarlo. No podés desactivarte ni quitarte el rol de administrador a vos mismo.
+
+> **Si el email ya tenía cuenta** (por ejemplo, creada a mano antes), el alta no crea otra ni le cambia la contraseña: la registra con su rol y te avisa que uses **Reenviar acceso** si necesita entrar.
 
 ### Auditoría
 
@@ -310,6 +352,10 @@ Registro inalterable de cargas, fusiones, exclusiones, sorteos, exportaciones, i
 ![Auditoría](img/28-auditoria.png)
 
 ## Preguntas frecuentes
+
+**No me llegó el correo para crear mi contraseña.** Buscalo en spam. Si no está, pedile a un administrador que use **Reenviar acceso**; si el correo vuelve a fallar, la pantalla le muestra el enlace para pasártelo por otro canal.
+
+**El enlace del correo dice que venció o que ya se usó.** Los enlaces duran una hora y sirven una vez. En la pantalla de ingreso escribí tu email y tocá **¿Olvidaste tu contraseña?**.
 
 **¿Por qué una empresa no salió en la muestra?** Abrí su ficha: el aviso de disponibilidad dice qué regla la bloquea y hasta cuándo. En la muestra, el cuadro de exclusiones dice cuántas empresas sacó cada regla.
 

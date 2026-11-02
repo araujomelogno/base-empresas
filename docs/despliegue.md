@@ -13,7 +13,8 @@ Esta guía lleva la Base de Empresas desde el repositorio hasta producción en u
 | Migraciones | Cloud Run job `empresas-migrar` | Corre `db/migrate.py` con la misma imagen de la API |
 | Tareas diferidas | Cloud Tasks `empresas-tareas` | Preview y confirmación de cargas, ingestas y remapeos del .sav |
 | Archivos | Cloud Storage `<proyecto>-empresas-archivos` | Bases y .sav subidos (privado) |
-| Secretos | Secret Manager | `empresas-database-url`, `empresas-job-token`, `empresas-tarea-token` |
+| Secretos | Secret Manager | `empresas-database-url`, `empresas-job-token`, `empresas-tarea-token`, `empresas-smtp-password` |
+| Correo de acceso | SMTP de Google Workspace (`notificaciones@equipos.com.uy`) | Enlace para que cada usuario nuevo cree su contraseña |
 | Auditoría larga | BigQuery `empresas_auditoria.auditoria` | Export diario a las 5:10 (Cloud Scheduler) |
 | CDR | Servidor Ubuntu de Equipos o una Mac de la oficina (`jobs/cdr`) | Job a las 4:00: lee MySQL de uContact y empuja a la API |
 
@@ -90,7 +91,19 @@ Los comandos de esta guía se corren desde la carpeta del repositorio (`cd ~/bas
 2. En **Configuración del proyecto** → *Tus apps* → agregar una app **Web** y copiar el objeto `firebaseConfig`.
 3. Pegarlo en `web/public/js/config.js` (las claves de una app web de Firebase son públicas; el acceso lo controla la API) y dejar `authMode: "firebase"`.
 4. Copiar `web/.firebaserc.example` a `web/.firebaserc` con el id del proyecto.
-5. En **Authentication → Configuración → Dominios autorizados** verificar que estén el dominio `*.web.app` y, si se usa, el dominio propio.
+5. En **Authentication → Configuración → Dominios autorizados** verificar que estén el dominio `*.web.app` y, si se usa, el dominio propio. El enlace de acceso que llega por correo vuelve a esa dirección (`APP_URL`).
+
+### 1b. Contraseña de aplicación para el correo de acceso
+
+La API manda el enlace de acceso desde `notificaciones@equipos.com.uy` por el SMTP de Google Workspace. Necesita una **contraseña de aplicación exclusiva de este proyecto**, para poder revocarla sin afectar a `paneles` ni a `plataforma-informes-ec`:
+
+1. Entrar a la cuenta de Google de `notificaciones@equipos.com.uy` → **Seguridad** → **Contraseñas de aplicaciones** (requiere la verificación en dos pasos activa en esa cuenta).
+2. Crear una con el nombre "Base de Empresas" y copiarla (16 letras; los espacios no importan).
+3. El paso 2 la pide por la terminal la primera vez (no se muestra al escribirla) y la guarda en Secret Manager como `empresas-smtp-password`. También se puede crear antes:
+
+```bash
+printf '%s' 'CONTRASEÑA-DE-APLICACION' | gcloud secrets create empresas-smtp-password --data-file=-
+```
 
 ### 2. Infraestructura, API, migraciones y web
 
@@ -102,22 +115,26 @@ PROYECTO=equipos-base-empresas ADMIN_EMAILS=garaujo@equipos.com.uy ./infra/despl
 
 El script es idempotente (se puede volver a correr) y hace, en orden:
 
-1. **base:** habilita las APIs; crea la cuenta de servicio `empresas-api` con los roles mínimos (Cloud SQL client, Secret Manager accessor, Cloud Tasks enqueuer, BigQuery data editor y job user); crea la instancia de Cloud SQL (Enterprise, `db-f1-micro`, 10 GB SSD con autoincremento, backups diarios a las 6:00 con recuperación a un punto en el tiempo y 14 copias), la base `empresas` y el usuario `empresas_app` con clave aleatoria; guarda en Secret Manager la cadena de conexión y dos tokens aleatorios; crea el bucket privado, la cola de Cloud Tasks, el dataset y la tabla de BigQuery, y el repositorio de Artifact Registry.
-2. **api:** construye la imagen con Cloud Build y despliega Cloud Run con `AUTH_MODE=firebase`, `TASKS_MODE=cloudtasks`, el bucket, la cola, la tabla de BigQuery y los secretos. El pool de conexiones (`DB_POOL_MAX`) y el máximo de instancias se ajustan solos al tamaño real de la instancia de Cloud SQL. La primera vez completa `API_URL` con la URL que asigna Cloud Run.
+1. **base:** habilita las APIs; crea la cuenta de servicio `empresas-api` con los roles mínimos (Cloud SQL client, Secret Manager accessor, Cloud Tasks enqueuer, BigQuery data editor y job user, y **Firebase Authentication Admin**, para crear cuentas, deshabilitarlas y generar enlaces de acceso); crea la instancia de Cloud SQL (Enterprise, `db-f1-micro`, 10 GB SSD con autoincremento, backups diarios a las 6:00 con recuperación a un punto en el tiempo y 14 copias), la base `empresas` y el usuario `empresas_app` con clave aleatoria; guarda en Secret Manager la cadena de conexión, dos tokens aleatorios y la contraseña de aplicación del correo (la pide por la terminal si no existe); crea el bucket privado, la cola de Cloud Tasks, el dataset y la tabla de BigQuery, y el repositorio de Artifact Registry.
+2. **api:** construye la imagen con Cloud Build y despliega Cloud Run con `AUTH_MODE=firebase`, `TASKS_MODE=cloudtasks`, el bucket, la cola, la tabla de BigQuery, los datos del correo (`SMTP_USUARIO`, `SMTP_HOST`, `SMTP_PORT`, `APP_URL`) y los secretos. El pool de conexiones (`DB_POOL_MAX`) y el máximo de instancias se ajustan solos al tamaño real de la instancia de Cloud SQL. La primera vez completa `API_URL` con la URL que asigna Cloud Run.
 3. **migrar:** crea y ejecuta el Cloud Run job `empresas-migrar`, que aplica las migraciones pendientes.
 4. **programar:** crea el Cloud Scheduler que exporta la auditoría a BigQuery todos los días a las 5:10.
 5. **web:** `firebase deploy --only hosting`.
+6. **invitar:** crea la cuenta de Firebase de cada email de `ADMIN_EMAILS` y le manda su **enlace de acceso** por correo. Si el correo falla, el script imprime el enlace en la terminal una sola vez (vence en una hora). Si la cuenta ya existía, no la toca y avisa cómo pedir otro enlace.
 
-`ADMIN_EMAILS` lista (separados por coma) los emails que quedan como administradores la primera vez que entran. Después los usuarios se gestionan desde la pantalla **Usuarios**.
+`ADMIN_EMAILS` lista (separados por coma) los administradores iniciales. Si no se pasa en un despliegue posterior, el script conserva el valor que ya tiene el servicio. `APP_URL` es la dirección de la web que va en los correos (por defecto `https://<proyecto>.web.app`; con un dominio propio, pasarla al script y agregarla a los dominios autorizados de Firebase).
 
 Variables opcionales del script: `REGION` (por defecto `us-central1`), `TIER` (tamaño de Cloud SQL al crearla, por defecto `db-f1-micro`) y `DISCO_GB` (por defecto 10). El disco de Cloud SQL se puede agrandar pero no achicar: conviene no subir `DISCO_GB` de entrada; el autoincremento lo agranda si hace falta.
 
 ### 3. Usuarios
 
-Cada persona necesita dos cosas con el **mismo email**:
+No hace falta crear nada en la consola de Firebase:
 
-1. Una cuenta en Firebase Authentication (consola → Authentication → *Agregar usuario*, o que el administrador la cree y la persona use "¿Olvidaste tu contraseña?" para elegir su clave).
-2. Un registro en la pantalla **Usuarios** de la aplicación con su rol. Sin ese registro, la API responde "no tiene acceso".
+1. **Administrador inicial:** al terminar el paso 2 le llega un correo de `notificaciones@equipos.com.uy` con el enlace para crear su contraseña. Lo abre, elige la clave y entra a la web. Si el enlace venció o se perdió: `PROYECTO=equipos-base-empresas ./infra/desplegar.sh invitar` manda uno nuevo, o desde el login con «¿Olvidaste tu contraseña?».
+2. **El resto de las personas:** el administrador las da de alta en la pantalla **Usuarios** con email, nombre y rol. A cada una le llega el mismo correo. Si el correo no sale, la pantalla muestra el motivo y el enlace una sola vez, para pasarlo por otro canal. «Reenviar acceso» manda un enlace nuevo cuando hace falta.
+3. **Después de verificar que el alta funciona**, en la consola de Firebase → **Authentication** → **Configuración** (*Settings*) → **Acciones del usuario** (*User actions*), desmarcar la creación de cuentas (*Enable create (sign-up)*), para que solo la API pueda crear cuentas. (Esa opción aparece en los proyectos con Firebase Authentication with Identity Platform; si no aparece, no hace falta: la web no ofrece registrarse y la API rechaza a quien no está en Usuarios.)
+
+El detalle del paso a paso, la migración de las cuentas creadas a mano y la verificación están en [`docs/despliegue_alta_usuarios.md`](despliegue_alta_usuarios.md).
 
 ### 4. Job del CDR
 
@@ -150,7 +167,8 @@ URL=$(gcloud run services describe empresas-api --region us-central1 --format 'v
 curl -s $URL/api/salud                     # {"ok":true}
 ```
 
-- Entrar a la web con un administrador y ver la pantalla de inicio.
+- Entrar a la web con el administrador inicial (con la clave que eligió desde el enlace) y ver la pantalla de inicio.
+- Dar de alta a un segundo usuario desde **Usuarios** y comprobar que le llega el correo y puede entrar.
 - Hacer una carga chica de prueba y deshacerla.
 - Correr el job del CDR a mano (en el servidor Ubuntu: `sudo systemctl start cdr-job.service`; en una Mac: `launchctl kickstart gui/$(id -u)/uy.equipos.cdr-job`) y ver el lote en **Actividad**.
 
@@ -162,6 +180,7 @@ curl -s $URL/api/salud                     # {"ok":true}
 | Migración nueva (`db/empresas/NNNN_*.sql`) | `./infra/desplegar.sh api` y después `./infra/desplegar.sh migrar` |
 | Web | `PROYECTO=… ./infra/desplegar.sh web` |
 | Job del CDR | `git pull` en `/opt/base-empresas` (no requiere reiniciar el timer) |
+| Enlace nuevo para los administradores iniciales | `PROYECTO=… ./infra/desplegar.sh invitar` |
 | Tamaño de Cloud SQL | `PROYECTO=… TIER=db-g1-small ./infra/desplegar.sh redimensionar` (ver [`docs/cambio_a_small.md`](cambio_a_small.md)) |
 
 Las migraciones se escriben para ser compatibles hacia atrás (agregar columnas o tablas, no borrar) para que la versión anterior de la API siga funcionando mientras corren. Una migración nunca se edita una vez aplicada: se agrega otra.
@@ -202,6 +221,16 @@ PROYECTO=… ./infra/desplegar.sh programar   # actualiza el Cloud Scheduler
 ```
 
 Después actualizar `JOB_TOKEN` en `jobs/cdr/cdr_job.env` de la máquina que corre el job del CDR. El token de tareas se rota igual (`empresas-tarea-token`) y solo requiere redesplegar la API.
+
+**Contraseña de aplicación del correo:** crear una nueva en la cuenta de `notificaciones@` (paso 1b), cargarla y redesplegar la API; después revocar la anterior en Google.
+
+```bash
+printf '%s' 'CONTRASEÑA-NUEVA' | gcloud secrets versions add empresas-smtp-password --data-file=-
+```
+
+```bash
+PROYECTO=… ./infra/desplegar.sh api
+```
 
 ### Seguridad y Ley 18.331
 
@@ -314,7 +343,10 @@ python docs/build/generar_pdfs.py
 | `AUTH_MODE` | `firebase` | `dev` solo en local y tests |
 | `FIREBASE_PROJECT_ID` | id del proyecto | Para validar los tokens |
 | `ADMIN_EMAILS` | emails | Administradores iniciales |
-| `JOB_TOKEN`, `TAREA_TOKEN` | secretos | Job del CDR y export de auditoría; Cloud Tasks |
+| `JOB_TOKEN`, `TAREA_TOKEN` | secretos | Job del CDR, export de auditoría e invitación de administradores; Cloud Tasks |
+| `SMTP_PASSWORD` | secreto `empresas-smtp-password` | Contraseña de aplicación de `notificaciones@` (exclusiva de este proyecto) |
+| `SMTP_USUARIO`, `SMTP_HOST`, `SMTP_PORT` | `notificaciones@equipos.com.uy`, `smtp.gmail.com`, `587` | Envío del correo de acceso |
+| `APP_URL` | `https://<proyecto>.web.app` | Dirección de la web: destino del enlace de acceso y la que figura en los correos |
 | `TASKS_MODE` | `cloudtasks` | `background` en local, `inline` en tests |
 | `TASKS_QUEUE` | `projects/…/queues/empresas-tareas` | Cola de Cloud Tasks |
 | `API_URL` | URL de Cloud Run | A dónde llama Cloud Tasks |
@@ -327,8 +359,14 @@ python docs/build/generar_pdfs.py
 
 | Síntoma | Causa probable | Qué hacer |
 | --- | --- | --- |
-| "no tiene acceso a la Base de Empresas" | El email no está en **Usuarios** o está inactivo | Agregarlo con su rol |
+| "no tiene acceso a la Base de Empresas" | El email no está en **Usuarios** | Darlo de alta en **Usuarios** |
+| "Tu acceso está desactivado" | El usuario está inactivo en **Usuarios** (y su cuenta de Firebase, deshabilitada) | Editarlo y marcarlo como activo |
+| "Tu email no está verificado" | Cuenta creada a mano en la consola antes de este cambio | «Reenviar acceso» en **Usuarios** (la marca verificada y manda un enlace) |
+| El correo de acceso figura como **fallido** | Contraseña de aplicación inválida o revocada, o Workspace rechazó el envío; el motivo se ve en **Usuarios** | Pasar el enlace que mostró la pantalla por otro canal; revisar `empresas-smtp-password` |
+| "El enlace venció" o "ya se usó" al abrir el correo | Los enlaces vencen en una hora | En el login, escribir el email y tocar «¿Olvidaste tu contraseña?», o pedir «Reenviar acceso» |
+| Los correos llegan a spam | SPF, DKIM o DMARC de `equipos.com.uy` sin configurar | Revisarlos en la consola de Workspace |
 | "Token inválido" | Reloj del equipo desfasado o sesión vencida | Cerrar sesión y volver a entrar |
+| El botón "Ingresar" no muestra nada | (Corregido: ahora todo rechazo se ve en el login con su motivo) | Actualizar la web (`./infra/desplegar.sh web`) |
 | Pantalla "Falta configurar Firebase" | `config.js` con valores de ejemplo | Completar `firebaseConfig` y redesplegar la web |
 | Una carga queda "analizando" mucho tiempo | La tarea falló o la cola está pausada | Ver Cloud Tasks y los registros de Cloud Run; la pantalla muestra el error |
 | El CSV sale con menos renglones de lo esperado | Ítems sin teléfono discable o ya completos en la parte | El resumen de la exportación lo detalla |

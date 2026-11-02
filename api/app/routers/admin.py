@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .. import auditoria, config, empresas, settings, tareas, telefonos as telmod
+from .. import accesos, auditoria, config, empresas, settings, tareas, telefonos as telmod
 from ..auth import ROLES, Usuario, requiere, requiere_job, requiere_tarea, usuario_actual
 from ..db import get_conn
 
@@ -167,24 +167,26 @@ class UsuarioIn(BaseModel):
 
 @router.get("/usuarios")
 def usuarios(conn=Depends(get_conn), u: Usuario = Depends(requiere("admin"))):
-    return conn.execute("SELECT * FROM usuario ORDER BY activo DESC, email").fetchall()
+    return accesos.listar(conn)
 
 
 @router.post("/usuarios")
 def guardar_usuario(body: UsuarioIn, conn=Depends(get_conn), u: Usuario = Depends(requiere("admin"))):
+    """Alta con enlace de acceso o edición. Ver accesos.guardar."""
     if body.rol not in ROLES:
         raise HTTPException(422, f"rol: {', '.join(ROLES)}")
     email = body.email.strip().lower()
+    if "@" not in email or " " in email:
+        raise HTTPException(422, "Email inválido")
     if email == u.email and (body.rol != "admin" or not body.activo):
-        raise HTTPException(422, "No podés quitarte el rol de administrador a vos mismo")
-    r = conn.execute(
-        "INSERT INTO usuario (email, nombre, rol, exportar_contactos, activo) VALUES (%s,%s,%s,%s,%s)"
-        " ON CONFLICT (email) DO UPDATE SET nombre = EXCLUDED.nombre, rol = EXCLUDED.rol,"
-        " exportar_contactos = EXCLUDED.exportar_contactos, activo = EXCLUDED.activo RETURNING *",
-        (email, body.nombre, body.rol, body.exportar_contactos, body.activo)).fetchone()
-    auditoria.registrar(conn, u.email, "usuario.guardar", "usuario", email,
-                        {"rol": body.rol, "exportar_contactos": body.exportar_contactos, "activo": body.activo})
-    return r
+        raise HTTPException(422, "No podés quitarte el rol de administrador ni desactivarte a vos mismo")
+    return accesos.guardar(conn, {**body.model_dump(), "email": email,
+                                  "nombre": (body.nombre or "").strip() or None}, u.email)
+
+
+@router.post("/usuarios/{email}/reenviar-acceso")
+def reenviar_acceso(email: str, conn=Depends(get_conn), u: Usuario = Depends(requiere("admin"))):
+    return accesos.reenviar(conn, email.strip().lower(), u.email)
 
 
 # ── Auditoría ──
@@ -212,6 +214,21 @@ def ver_tarea(tarea_id: int, conn=Depends(get_conn), u: Usuario = Depends(usuari
 def ejecutar_tarea(tarea_id: int, _: str = Depends(requiere_tarea)):
     """Lo llama Cloud Tasks. Devuelve 200 aunque la tarea falle (el error queda en la tarea)."""
     return {"resultado": tareas.ejecutar(tarea_id)}
+
+
+# ── Administradores iniciales (infra/desplegar.sh invitar) ──
+
+class Invitacion(BaseModel):
+    forzar: bool = False
+
+
+@router.post("/jobs/invitar-admins")
+def invitar_admins(body: Invitacion, conn=Depends(get_conn), _: str = Depends(requiere_job)):
+    """Crea la cuenta de cada email de ADMIN_EMAILS y le manda su enlace (R6). Solo actúa sobre
+    ADMIN_EMAILS, así que el token del job no sirve para dar de alta a otras personas."""
+    if not settings.ADMIN_EMAILS:
+        raise HTTPException(422, "ADMIN_EMAILS está vacía en la configuración de la API")
+    return {"resultados": accesos.invitar_admins(conn, body.forzar)}
 
 
 # ── Export diario de auditoría a BigQuery ──

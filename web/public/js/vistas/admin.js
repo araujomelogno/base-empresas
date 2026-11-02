@@ -1,6 +1,6 @@
 // Configuración, naturalezas, no llamar, usuarios y auditoría (R1.4, R1.12, R1.13)
 import * as api from '../api.js';
-import { $, $$, esc, main, toast, num, fechaHora, est, pageHeader, tabla, card, modal, pedirTexto,
+import { $, $$, esc, main, toast, num, fechaHora, est, pageHeader, tabla, card, modal, pedirTexto, confirmar,
   json } from '../ui.js';
 
 const CAMPOS_CSV = ['id_item', 'tel_e164', 'tel_nacional', 'tel_sin_mas', 'rut', 'razon_social', 'fantasia', 'contacto', 'contacto_cargo',
@@ -152,30 +152,77 @@ export async function noLlamar(ctx, params) {
 
 const ROLES = [['admin', 'Administrador/a'], ['steward', 'Data steward'], ['jefe', 'Jefe/a de proyecto'], ['coordinador', 'Coordinador/a de campo'], ['lectura', 'Lectura']];
 
+const CORREO_TIPO = { bienvenida: 'bienvenida', restablecer: 'restablecer' };
+
+// El enlace de acceso se muestra una sola vez, solo cuando el correo no salió (R3)
+async function mostrarEnlace(email, r) {
+  await modal({
+    titulo: 'Enlace de acceso — se muestra una sola vez', ancho: 620, cuerpo: `
+      <div class="alert alert-warn"><span>El correo a <strong>${esc(email)}</strong> no salió: ${esc(r.correo.detalle)}</span></div>
+      <p class="small mb">La cuenta quedó creada. Pasale este enlace a la persona por otro canal (por ejemplo, WhatsApp o Teams)
+      para que cree su contraseña. <strong>Vence en una hora</strong> y no se guarda en ningún lado: si se pierde, usá «Reenviar acceso».</p>
+      <div class="form-group"><label>Enlace</label><input type="text" id="enl" value="${esc(r.enlace)}" readonly /></div>`,
+    acciones: [{ t: 'Copiar enlace', cls: 'btn-orange', fn: async (b) => {
+      const i = $('#enl', b); i.select();
+      try { await navigator.clipboard.writeText(i.value); } catch { document.execCommand('copy'); }
+      toast('Enlace copiado', 'ok'); return false;
+    } }, { t: 'Listo', cls: 'btn-dark' }],
+  });
+}
+
+function avisoResultado(email, r) {
+  if (r.enlace) return mostrarEnlace(email, r);
+  if (r.estado === 'ya_existia') return toast(r.mensaje || 'La cuenta ya existía', 'ok');
+  if (r.correo && r.correo.enviado) return toast(`Le enviamos a ${email} el correo de ${CORREO_TIPO[r.correo.tipo] || 'acceso'}`, 'ok');
+  if (r.estado === 'actualizado') return toast('Usuario actualizado', 'ok');
+  return toast('Guardado', 'ok');
+}
+
 export async function usuarios(ctx) {
   const lista = await api.get('/usuarios');
-  main().innerHTML = pageHeader('Usuarios', '', 'Quién entra y con qué rol. El acceso se valida en la API con el token de Firebase Auth.',
+  const errorCuentas = lista.find(u => u.error_cuentas);
+  main().innerHTML = pageHeader('Usuarios', '', 'Quién entra y con qué rol. Al dar de alta a alguien le llega un correo para crear su contraseña.',
     `<button class="btn btn-orange" id="u-nuevo">+ Usuario</button>`) +
-    card(`${lista.length} usuarios`, tabla([
-      { t: 'Email', f: u => `<span class="td-strong">${esc(u.email)}</span>` }, { t: 'Nombre', k: 'nombre' },
-      { t: 'Rol', f: u => `<span class="badge ${u.rol === 'admin' ? 'badge-admin' : 'badge-user'}">${esc((ROLES.find(r => r[0] === u.rol) || [])[1] || u.rol)}</span>` },
-      { t: 'Exporta contactos', f: u => u.exportar_contactos ? est('ok', 'sí') : '—' }, { t: 'Estado', f: u => u.activo ? '<span class="badge badge-on">activo</span>' : '<span class="badge badge-off">inactivo</span>' },
-      { t: '', f: u => `<button class="btn btn-outline btn-sm" data-u="${esc(u.email)}">Editar</button>` },
-    ], lista), '', true) +
-    `<p class="small muted mt">El usuario tiene que existir también en Firebase Authentication (consola de Firebase → Authentication → Agregar usuario), con el mismo email.</p>`;
+    (errorCuentas ? `<div class="alert alert-warn"><span>${esc(errorCuentas.error_cuentas)}: el último ingreso no está disponible.</span></div>` : '') +
+    card(`${lista.length} usuarios`, '<div class="compacta">' + tabla([
+      { t: 'Usuario', f: u => `<span class="td-strong">${esc(u.nombre || u.email)}</span>${u.nombre ? `<div class="small muted">${esc(u.email)}</div>` : ''}` },
+      { t: 'Rol', f: u => `<span class="badge ${u.rol === 'admin' ? 'badge-admin' : 'badge-user'}">${esc((ROLES.find(r => r[0] === u.rol) || [])[1] || u.rol)}</span>
+        ${u.exportar_contactos ? '<div class="small muted mt" style="margin-top:.35rem">exporta contactos</div>' : ''}` },
+      { t: 'Estado · último ingreso', f: u => `${u.activo ? '<span class="badge badge-on">activo</span>' : '<span class="badge badge-off">inactivo</span>'}
+        <div class="small muted" style="margin-top:.35rem">${!u.cuenta ? 'sin cuenta' : u.cuenta.ultimo_ingreso ? fechaHora(u.cuenta.ultimo_ingreso) : 'nunca ingresó'}</div>` },
+      { t: 'Correo de acceso', f: u => !u.correo_estado ? '<span class="small muted">—</span>'
+        : `${u.correo_estado === 'enviado' ? est('ok', 'enviado') : est('error', 'fallido')} <span class="small muted">${esc(CORREO_TIPO[u.correo_tipo] || '')} · ${fechaHora(u.correo_fecha)}</span>
+          ${u.correo_motivo ? `<div class="small" style="color:var(--red)">${esc(u.correo_motivo)}</div>` : ''}` },
+      { t: '', f: u => `<div class="td-actions"><button class="btn btn-outline btn-sm" data-u="${esc(u.email)}">Editar</button>
+        ${u.activo ? `<button class="btn btn-outline btn-sm" data-reenviar="${esc(u.email)}">Reenviar acceso</button>` : ''}</div>` },
+    ], lista) + '</div>', '', true) +
+    `<p class="small muted mt">«Reenviar acceso» manda un enlace nuevo: de bienvenida si la persona nunca entró, o para restablecer la contraseña si ya entró.
+     Desactivar a alguien también bloquea su ingreso.</p>`;
   const editar = async (u = { activo: true, rol: 'lectura' }) => {
-    const r = await modal({ titulo: u.email ? 'Editar usuario' : 'Nuevo usuario', cuerpo: `
-      <div class="form-group"><label>Email</label><input type="email" id="u-e" value="${esc(u.email || '')}" ${u.email ? 'disabled' : ''} /></div>
+    const nuevo = !u.email;
+    const r = await modal({ titulo: nuevo ? 'Nuevo usuario' : 'Editar usuario', cuerpo: `
+      <div class="form-group"><label>Email</label><input type="email" id="u-e" value="${esc(u.email || '')}" ${nuevo ? '' : 'disabled'} placeholder="nombre@equipos.com.uy" /></div>
       <div class="form-group"><label>Nombre</label><input type="text" id="u-n" value="${esc(u.nombre || '')}" /></div>
       <div class="form-group"><label>Rol</label><select class="fselect" id="u-r">${ROLES.map(([k, t]) => `<option value="${k}" ${k === u.rol ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
       <div><label class="check"><input type="checkbox" id="u-x" ${u.exportar_contactos ? 'checked' : ''} /> Puede exportar contactos personales (queda auditado)</label></div>
-      <div class="mt"><label class="check"><input type="checkbox" id="u-a" ${u.activo ? 'checked' : ''} /> Activo</label></div>`,
-    acciones: [{ t: 'Cancelar' }, { t: 'Guardar', cls: 'btn-orange', fn: (b) => api.post('/usuarios', { email: $('#u-e', b).value, nombre: $('#u-n', b).value || null,
-      rol: $('#u-r', b).value, exportar_contactos: $('#u-x', b).checked, activo: $('#u-a', b).checked }) }] });
-    if (r) usuarios(ctx);
+      <div class="mt"><label class="check"><input type="checkbox" id="u-a" ${u.activo ? 'checked' : ''} /> Activo (desactivarlo también bloquea su ingreso)</label></div>
+      ${nuevo ? '<p class="field-hint mt">La persona recibe un correo para crear su contraseña. No hace falta crear nada en Firebase.</p>' : ''}`,
+    acciones: [{ t: 'Cancelar' }, { t: nuevo ? 'Dar de alta' : 'Guardar', cls: 'btn-orange', fn: (b) => api.post('/usuarios', {
+      email: $('#u-e', b).value.trim(), nombre: $('#u-n', b).value.trim() || null, rol: $('#u-r', b).value,
+      exportar_contactos: $('#u-x', b).checked, activo: $('#u-a', b).checked }) }] });
+    if (r) { await avisoResultado(r.email, r); usuarios(ctx); }
   };
   $('#u-nuevo').onclick = () => editar();
   $$('[data-u]').forEach(b => b.onclick = () => editar(lista.find(u => u.email === b.dataset.u)));
+  $$('[data-reenviar]').forEach(b => b.onclick = async () => {
+    if (!await confirmar('Reenviar acceso', `Se genera un enlace nuevo para <strong>${esc(b.dataset.reenviar)}</strong> y se le manda por correo. Vence en una hora.`, 'Reenviar')) return;
+    b.disabled = true;
+    try {
+      const r = await api.post(`/usuarios/${encodeURIComponent(b.dataset.reenviar)}/reenviar-acceso`);
+      await avisoResultado(b.dataset.reenviar, r);
+      usuarios(ctx);
+    } catch (e) { toast(e.message, 'err'); b.disabled = false; }
+  });
 }
 
 export async function auditoria(ctx, params) {

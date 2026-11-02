@@ -14,6 +14,7 @@ Registro maestro de empresas por RUT del que salen muestras aleatorias y auditab
 | Registro de decisiones | [`docs/decisiones.md`](docs/decisiones.md) |
 | Costos | [`docs/costos.md`](docs/costos.md) |
 | Cambio de Cloud SQL de `db-f1-micro` a `db-g1-small` | [`docs/cambio_a_small.md`](docs/cambio_a_small.md) |
+| Despliegue del alta de usuarios con enlace de acceso | [`docs/despliegue_alta_usuarios.md`](docs/despliegue_alta_usuarios.md) |
 
 ## Estructura
 

@@ -39,6 +39,7 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 | D29 | Catálogo de naturalezas sin exclusiones hasta cargar la hoja "excluidos" | Pendiente |
 | D30 | Meses de enfriamiento por defecto: 6 | Pendiente |
 | D31 | Cloud SQL arranca en `db-f1-micro`; el paso siguiente es `db-g1-small` | Vigente (29/10/2026) |
+| D32 | Alta de usuarios con enlace de acceso: un solo paso, clave aleatoria y correo desde `notificaciones@` | Vigente (02/11/2026) |
 
 ## D01 — Cloud SQL Postgres como núcleo
 
@@ -70,7 +71,9 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 
 **Decisión.** Firebase Auth autentica (email y clave). La API verifica el ID token con `firebase-admin` y busca el email en la tabla `usuario`, que tiene el rol (`admin`, `steward`, `jefe`, `coordinador`, `lectura`) y el permiso `exportar_contactos`. Cada endpoint de escritura declara los roles que acepta; el administrador puede todo. La web oculta lo que el rol no puede hacer, pero quien decide es la API.
 
-**Arranque.** Los emails de la variable `ADMIN_EMAILS` quedan como administradores la primera vez que entran, para no depender de un INSERT manual.
+**Arranque.** Los emails de la variable `ADMIN_EMAILS` quedan como administradores la primera vez que entran, para no depender de un INSERT manual. Desde D32, además, el despliegue les crea la cuenta y les manda su enlace de acceso.
+
+**Cuentas.** Desde D32, las cuentas de Firebase las crea la API al dar de alta en la pantalla Usuarios; nadie las crea a mano en la consola. Desactivar a alguien en Usuarios también deshabilita su cuenta de Firebase.
 
 **Modo dev.** Con `AUTH_MODE=dev` la API confía en el header `X-Dev-User`. Solo para desarrollo local y tests; el script de despliegue fija `AUTH_MODE=firebase`.
 
@@ -261,6 +264,42 @@ La configuración inicial usa 6 meses de enfriamiento desde el último contacto 
 **Contras aceptados.** No tiene SLA de Google ni admite descuento por compromiso, y las cargas grandes y los sorteos son más lentos.
 
 **Paso siguiente.** `db-g1-small` (1,7 GB, 50 conexiones), con `TIER=db-g1-small ./infra/desplegar.sh redimensionar`: unos minutos sin servicio y sin migrar datos. Las señales para hacerlo y el procedimiento están en `docs/cambio_a_small.md`. Cuando se haga, anotar acá la fecha.
+
+## D32 — Alta de usuarios con enlace de acceso
+
+**Contexto.** Para que una persona entrara había que darla de alta dos veces con el mismo email: una cuenta en la consola de Firebase y un registro con su rol en la pantalla Usuarios. Si faltaba uno, o había un error de tipeo, quedaba afuera. Las cuentas creadas a mano quedaban con el email sin verificar y la API las rechazaba. Encima, el login no mostraba el error: al fallar `/me`, la web cerraba la sesión de Firebase y el login se volvía a dibujar sin el mensaje. En el primer despliegue, el administrador inicial no pudo entrar y no vio ningún mensaje. (Spec: `specs/SPEC_alta_usuarios_enlace_acceso.md`.)
+
+**Decisión.** Se adopta el modelo de `plataforma-informes-ec`:
+
+- El administrador escribe email, nombre y rol en la pantalla Usuarios. La API crea la cuenta de Firebase con una clave aleatoria (`secrets.token_urlsafe`) que no se guarda, no se devuelve ni se loguea.
+- La persona recibe un correo desde `notificaciones@equipos.com.uy` (SMTP de Google Workspace) con un enlace de Firebase para fijar su contraseña, que vence en una hora. «Reenviar acceso» manda uno nuevo: de bienvenida si nunca entró, de restablecimiento si ya entró.
+- El correo es una comodidad, no un punto de falla. Si el SMTP falla, la cuenta queda creada y la pantalla muestra el motivo y el enlace una sola vez, para pasarlo por otro canal. El enlace no se guarda en la base, en la auditoría ni en los logs. Cada envío queda en `correo_envio` (sin el enlace), que se purga a los 90 días.
+- Si el email ya tenía cuenta (creada a mano), no se crea otra ni se toca su clave: se registra en Usuarios, se marca verificada y se avisa que use «Reenviar acceso».
+- Desactivar en Usuarios deshabilita la cuenta de Firebase; reactivar la habilita.
+- El despliegue (`./infra/desplegar.sh todo` o `invitar`) les crea la cuenta y les manda el enlace a los administradores iniciales, con la misma lógica, a través de un endpoint protegido con el token del job que solo actúa sobre `ADMIN_EMAILS`.
+- El login guarda el último error antes del `signOut` y lo vuelve a mostrar en el segundo dibujo. Los rechazos de Firebase (clave incorrecta, cuenta deshabilitada, demasiados intentos) también tienen su mensaje.
+
+**Diferencia con `plataforma-informes-ec`.** Las cuentas se crean con `email_verified=True`. Nadie conoce la clave aleatoria, así que la única forma de entrar es el enlace que llega a ese buzón: eso prueba que la persona es dueña del email. Hace falta porque la API de la Base de Empresas exige email verificado.
+
+**Seguridad.**
+
+- La cuenta de servicio de la API suma el rol `roles/firebaseauth.admin` (crear, deshabilitar y generar enlaces).
+- La contraseña SMTP es una contraseña de aplicación **exclusiva de este proyecto** (`empresas-smtp-password`), revocable sin afectar a `paneles` ni a `plataforma-informes-ec`, y nunca aparece en mensajes de error.
+
+**Descartado.**
+
+- **Ingreso con Google u otros proveedores:** fuera del alcance del spec; se mantiene email y contraseña, como en `paneles` y `plataforma-informes-ec`.
+- **Seguir creando las cuentas en la consola de Firebase:** es justamente el doble paso que fallaba, y deja cuentas sin verificar.
+- **Invitaciones propias que duren días:** exigen tokens propios y su gestión. El enlace de Firebase (una hora) más «Reenviar acceso» alcanza para pocos usuarios internos.
+- **Un proveedor transaccional** (SendGrid, Mailgun): el volumen no lo justifica y la cuenta de Workspace ya se paga.
+
+**Desarrollo local.** Con `AUTH_MODE=dev` las cuentas se simulan en memoria y, si no hay `SMTP_PASSWORD`, el correo "falla" con un motivo claro y la pantalla muestra el enlace de prueba. Los tests simulan Firebase y el SMTP.
+
+**Pendiente (P1 del spec).**
+
+- «¿Olvidaste tu contraseña?» con el correo de `notificaciones@` (hoy sale del remitente de Firebase).
+- Plantillas editables desde Configuración.
+- Último ingreso guardado en `usuario`.
 
 ## Preguntas abiertas que heredan del PRD
 
