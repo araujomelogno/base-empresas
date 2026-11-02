@@ -7,7 +7,7 @@ Describe el sistema **tal como está hoy en el repositorio**, incluidos los dos 
 - `specs/SPEC_alta_usuarios_enlace_acceso.md`: los usuarios se dan de alta solo desde la aplicación y reciben un enlace por correo (paso 3).
 - `specs/SPEC_job_cdr_en_cloud.md`: el job del CDR es parte del sistema, corre en Google Cloud y su conexión se configura desde la aplicación (paso 4).
 
-Si ya tenés una instalación anterior a esos cambios, no hace falta empezar de cero: [`docs/despliegue_alta_usuarios.md`](despliegue_alta_usuarios.md) lleva a producción el alta con enlace y [Pasar el job del CDR a Google Cloud](#pasar-el-job-del-cdr-a-google-cloud-instalación-existente) hace lo mismo con el CDR.
+Si ya tenés una instalación anterior a esos cambios, no hace falta empezar de cero: [`docs/despliegue_alta_usuarios.md`](despliegue_alta_usuarios.md) lleva a producción el alta con enlace y [`docs/despliegue_job_cdr.md`](despliegue_job_cdr.md), el job del CDR en Google Cloud.
 
 ---
 
@@ -431,7 +431,7 @@ gcloud run services update-traffic empresas-api --region us-central1 --to-revisi
 
 ### Pasar el job del CDR a Google Cloud (instalación existente)
 
-Para una instalación que ya corría el script anterior (`jobs/cdr/cdr_job.py`, en un servidor, una Mac o un Cloud Run job creado a mano):
+Para una instalación que ya corría el script anterior (`jobs/cdr/cdr_job.py`, en un servidor, una Mac o un Cloud Run job creado a mano). Esto es el resumen; la guía completa, con la verificación, qué hacer si algo sale mal y cómo volver atrás, está en [`docs/despliegue_job_cdr.md`](despliegue_job_cdr.md).
 
 1. Traé el repositorio al día y publicá la API nueva, la migración `0005_cdr_en_cloud.sql` (tablas `cdr_estado` y `cdr_corrida`), el job y la web:
 
