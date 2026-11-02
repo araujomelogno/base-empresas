@@ -28,7 +28,8 @@ SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 SMTP_NOMBRE = os.environ.get("SMTP_NOMBRE", "Equipos Consultores")
 # URL de la web (Firebase Hosting): destino del enlace de acceso y {{url_app}} en los correos.
 APP_URL = os.environ.get("APP_URL", "http://localhost:8080")
-# Token compartido con el job del CDR (servidor Ubuntu) y con Cloud Tasks.
+# Token compartido para los jobs que llaman a la API (export de auditoría, invitación de
+# administradores) y token de Cloud Tasks.
 JOB_TOKEN = os.environ.get("JOB_TOKEN", "")
 TAREA_TOKEN = os.environ.get("TAREA_TOKEN", "")
 # Archivos subidos: bucket de Cloud Storage o carpeta local.
@@ -41,3 +42,12 @@ API_URL = os.environ.get("API_URL", "")
 CORS_ORIGINS = _lista("CORS_ORIGINS")
 BQ_TABLA_AUDITORIA = os.environ.get("BQ_TABLA_AUDITORIA")  # proyecto.dataset.tabla
 TZ = os.environ.get("APP_TZ", "America/Montevideo")
+# Proyecto y región de Google Cloud (Secret Manager y el Cloud Run job del CDR).
+GCP_PROYECTO = os.environ.get("GCP_PROYECTO") or FIREBASE_PROJECT_ID
+GCP_REGION = os.environ.get("GCP_REGION", "us-central1")
+# Secretos: Secret Manager en producción; en memoria en desarrollo local y tests.
+SECRETOS = os.environ.get("SECRETOS", "secretmanager" if AUTH_MODE == "firebase" else "memoria")
+# Contraseña de MySQL del CDR (la conexión se configura en la pantalla Configuración).
+CDR_SECRETO = os.environ.get("CDR_SECRETO", "empresas-cdr-mysql-password")
+# Cloud Run job que lee el CDR. Vacío: "Correr ahora" ejecuta el job en el mismo proceso (desarrollo, tests).
+CDR_JOB = os.environ.get("CDR_JOB", "")

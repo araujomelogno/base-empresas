@@ -63,6 +63,8 @@ La pantalla de **Inicio** resume el estado de la base (empresas activas, disponi
 
 ![Inicio](img/02-inicio.png)
 
+Abajo, la pantalla muestra la **última corrida del job del CDR** y su estado. Si la última corrida programada falló, o si pasaron 26 horas sin ninguna corrida, administradores y coordinadores ven un aviso arriba de todo con el motivo; el administrador tiene un enlace directo a Configuración para resolverlo.
+
 ## Empresas
 
 ### Buscar
@@ -276,11 +278,11 @@ Lo que no se pudo asociar solo espera en **Conciliación**:
 
 ### Actividad
 
-**Actividad** muestra, filtrando por estudio, muestra, encuestador y período: intentos, teléfonos marcados, empresas llamadas, contactos efectivos, completas y qué porcentaje de las llamadas quedó asociado a un ítem; intentos por franja horaria y por día; una tabla por encuestador (intentos, teléfonos, contactos efectivos, completas, intentos por completa); las disposiciones de llamada y los lotes del CDR recibidos.
+**Actividad** muestra, filtrando por estudio, muestra, encuestador y período: intentos, teléfonos marcados, empresas llamadas, contactos efectivos, completas y qué porcentaje de las llamadas quedó asociado a un ítem; intentos por franja horaria y por día; una tabla por encuestador (intentos, teléfonos, contactos efectivos, completas, intentos por completa); las disposiciones de llamada y las **corridas del job del CDR** (cuándo corrió, si fue programada o manual, el período leído, el estado y cuántos intentos nuevos cargó).
 
 ![Tablero de actividad](img/23-actividad.png)
 
-El CDR se procesa cada noche a las 4:00 e incluye las llamadas de campaña **y** las del marcador manual: se reconocen por el número marcado, no por la campaña. Las llamadas a internos y a números que no están en la base se cuentan pero no se guardan.
+El CDR se procesa cada noche a las 4:00 (hora de Montevideo) e incluye las llamadas de campaña **y** las del marcador manual: se reconocen por el número marcado, no por la campaña. Las llamadas a internos y a números que no están en la base se cuentan pero no se guardan.
 
 ## Administrador
 
@@ -304,6 +306,36 @@ Todos los parámetros de negocio están en **Configuración** y se cambian sin p
 | Formato del CSV | Separador y columnas, para que coincida con la importación de uContact |
 
 En el historial, tocá una versión para ver todos sus parámetros.
+
+#### Conexión al CDR
+
+La tarjeta **CDR — conexión a la base de uContact** tiene los datos que usa el job nocturno para leer las llamadas.
+
+![Conexión al CDR](img/32-config-cdr.png)
+
+- **Servidor, puerto, base, usuario y tabla** de la base MySQL de uContact. El usuario conviene que sea de solo lectura.
+- **Cifrado (TLS):** «Preferido» cifra si el servidor lo acepta; «Requerido» no deja conectar sin cifrado; «Desactivado» solo si el servidor no lo soporta.
+- **Zona horaria de calldate** y **llamadas por lote** normalmente no se tocan.
+- **Consulta propia (opcional):** solo si la tabla tiene otros nombres de columna. La ayuda debajo del campo dice qué tiene que devolver.
+- **Job del CDR activo:** mientras no esté marcado, el job no lee nada (las corridas quedan como «omitida»).
+
+Estos datos se guardan con **Guardar nueva versión**, como el resto de la configuración.
+
+**La contraseña va aparte.** Escribila y tocá **Guardar contraseña**: se guarda en un lugar seguro (Secret Manager), fuera de la base y de la auditoría, y **nunca se vuelve a mostrar**. La tarjeta solo dice si está configurada, cuándo y quién la cargó. Para cambiarla, escribí la nueva y guardala.
+
+**Probar conexión** usa los datos del formulario, aunque todavía no los hayas guardado, y la contraseña escrita (o la guardada). En pocos segundos dice si conectó, con qué versión de MySQL, si la conexión va cifrada y cuántas llamadas de las últimas 24 horas encontró. Si falla, dice por qué:
+
+| Mensaje | Qué revisar |
+| --- | --- |
+| No se resuelve el host | El nombre del servidor |
+| No responde el puerto | El puerto. Si está bien, el servidor probablemente acepta solo IPs autorizadas: avisale a quien hizo el despliegue (hace falta la IP fija) |
+| Usuario o contraseña incorrectos | El usuario y la contraseña |
+| La base no existe / La tabla del CDR no existe | Los nombres de base y tabla, o la consulta propia |
+| El usuario no tiene permiso | Que al usuario de MySQL le den permiso de lectura |
+| Error de cifrado (TLS) | Cambiar **Cifrado (TLS)** según lo que diga el mensaje |
+| Faltan columnas en la consulta | La consulta propia: usá `AS` para renombrar columnas |
+
+**Correr el job a mano.** **Correr ahora** lee las llamadas nuevas sin esperar a las 4:00. **Reprocesar desde** (con **Hasta** opcional) vuelve a leer un período, por ejemplo para cargar el histórico la primera vez o recuperar días en que el job falló. Reprocesar no duplica llamadas ni hace que el job nocturno retroceda. Con **Prueba sin guardar intentos (dry-run)** el job cuenta lo que haría sin escribir nada. La tarjeta sigue la corrida y muestra el resultado al terminar; no se puede lanzar otra mientras una está en curso.
 
 ### Naturalezas jurídicas
 
@@ -362,6 +394,8 @@ Registro inalterable de cargas, fusiones, exclusiones, sorteos, exportaciones, i
 **El CSV tiene menos renglones de los que esperaba.** Solo salen teléfonos discables de ítems liberados y pendientes o en curso en esa parte. El resumen arriba del botón dice cuántos ítems no tienen teléfono discable.
 
 **Una llamada manual, ¿cuenta?** Sí. El CDR se analiza por número marcado, venga de una campaña o del marcador manual.
+
+**En Inicio aparece un aviso del CDR.** El job de la noche falló o no corrió. Un administrador ve el motivo en **Actividad** (corridas del job) o en Configuración → **Probar conexión**, lo corrige y toca **Correr ahora**. No se pierden llamadas: la corrida siguiente sigue desde donde quedó.
 
 **Subí el .sav y quedaron filas sin asociar.** Revisá el motivo en los conteos. Lo más común es que la encuesta no tenga la URL variable `EC_ID_ITEM`; en ese caso el sistema intenta por RUT y teléfono usado. Lo que no se resuelve va a Conciliación.
 

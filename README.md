@@ -22,10 +22,9 @@ Registro maestro de empresas por RUT del que salen muestras aleatorias y auditab
 | --- | --- |
 | `fase0/` | Experimentos A–D de la fase 0, bloque estándar de Alchemer, reglas de normalización, carga de la hoja "excluidos" |
 | `db/` | Migraciones numeradas del esquema `empresas` (Postgres 16) y `migrate.py` |
-| `api/` | API FastAPI para Cloud Run (`app/`), tests con Postgres real (`tests/`) y datos de demostración (`demo/`) |
+| `api/` | API FastAPI para Cloud Run (`app/`), job nocturno del CDR (`app/jobs/cdr_job.py`, Cloud Run job), tests con Postgres real (`tests/`) y datos de demostración (`demo/`) |
 | `web/` | Web sin framework para Firebase Hosting (`public/`) y `firebase.json` |
-| `jobs/cdr/` | Job nocturno del CDR: servidor Ubuntu (systemd o cron) o una Mac (launchd) |
-| `infra/` | `desplegar.sh`: infraestructura de GCP, API, migraciones, web y Cloud Scheduler |
+| `infra/` | `desplegar.sh`: infraestructura de GCP, API, migraciones, job del CDR, web y Cloud Scheduler |
 | `docs/` | Documentos, capturas y generador de PDFs |
 
 ## Arranque rápido en una Mac
@@ -65,7 +64,7 @@ createdb empresas_test
 ```
 
 ```bash
-(cd fase0 && python -m pytest -q) && (cd jobs/cdr && python -m pytest -q)
+(cd fase0 && python -m pytest -q)
 ```
 
 ## Despliegue

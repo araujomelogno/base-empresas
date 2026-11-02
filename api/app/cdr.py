@@ -1,7 +1,8 @@
 """Análisis del CDR por número destino (R1.8).
 
-El job nocturno (servidor Ubuntu) lee las llamadas nuevas de la base MySQL de uContact y
-las empuja a POST /intentos/lote. Acá se normaliza el destino, se descartan los destinos
+El job del CDR (app/jobs/cdr_job.py, Cloud Run job `empresas-cdr`) lee las llamadas nuevas de
+la base MySQL de uContact y llama a procesar_lote en el mismo proceso. POST /intentos/lote
+queda para cargar llamadas a mano. Acá se normaliza el destino, se descartan los destinos
 internos y se cruza contra los teléfonos de la base. Lo que no cruza se cuenta pero no se
 guarda. Re-procesar un día no duplica intentos (idempotente por ID de llamada).
 """

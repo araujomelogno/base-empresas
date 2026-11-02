@@ -239,7 +239,7 @@ Web app en Firebase Hosting (mismo estilo que paneles: JS sin framework), API en
 | Actividad (tablero) | Coordinador, jefe | `GET /actividad` | R1.11 |
 | Configuración, naturalezas, no llamar, usuarios | Administrador | `GET/PUT /config`, `/naturalezas`, `/no-llamar`, `/usuarios` | R1.4, R1.12, R1.13 |
 
-El job del CDR no es una pantalla: corre a las 4:00 en el servidor Ubuntu (como el dashboard de productividad) y llama a `POST /intentos/lote`.
+El job del CDR no es una pantalla: corre a las 4:00 en Google Cloud (Cloud Run job `empresas-cdr`, con la misma imagen de la API) y procesa las llamadas con la misma lógica que `POST /intentos/lote`. Su conexión, «Probar conexión», «Correr ahora» y «Reprocesar desde…» están en Configuración (admin), y sus corridas en Actividad (ver `specs/SPEC_job_cdr_en_cloud.md`).
 
 ## Métricas, terminado, riesgos y plan
 
@@ -267,7 +267,7 @@ El job del CDR no es una pantalla: corre a las 4:00 en el servidor Ubuntu (como 
 | Los cuestionarios no incluyen el bloque estándar y el .sav no trae `EC_ID_ITEM` | Plantilla de Alchemer obligatoria desde el piloto; fallback por RUT + teléfono |
 | Un mismo teléfono está en dos muestras activas y la llamada no se puede atribuir | El bloqueo por muestra activa lo evita; si pasa, va a conciliación |
 | Las bases propias traen muchos RUTs inválidos o sin RUT | Se mide en el experimento D; la fase 1 los rechaza con motivo y la fase 2 los recupera |
-| El acceso al CDR desde fuera de la red | El job corre en el servidor Ubuntu y empuja a la API |
+| El servidor MySQL del CDR filtra por IP de origen | El job sale por Cloud NAT con una IP fija que se autoriza en el servidor (`IP_FIJA=1`) |
 
 **Plan de iteraciones** (estimación de 7–8 semanas después de la fase 0):
 

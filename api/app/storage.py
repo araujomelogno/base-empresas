@@ -46,3 +46,14 @@ def leer(archivo: dict) -> bytes:
     if settings.STORAGE_BUCKET:
         return _bucket().blob(archivo["ruta"]).download_as_bytes()
     return (pathlib.Path(settings.STORAGE_DIR) / archivo["ruta"]).read_bytes()
+
+
+def escribir(ruta: str, datos: bytes) -> str:
+    """Escribe un archivo generado por el sistema (p. ej. el payload de un dry-run del CDR)."""
+    if settings.STORAGE_BUCKET:
+        _bucket().blob(ruta).upload_from_string(datos)
+        return f"gs://{settings.STORAGE_BUCKET}/{ruta}"
+    p = pathlib.Path(settings.STORAGE_DIR) / ruta
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(datos)
+    return str(p)

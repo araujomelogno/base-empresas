@@ -36,6 +36,7 @@ export async function config(ctx) {
       <div class="form-group"><label>Franjas horarias</label><div id="c-franjas"></div>${editable ? `<button class="btn btn-outline btn-sm" id="c-franja-mas">+ Franja</button>` : ''}</div>`)}</div>` +
     card('Formato del CSV para uContact', `<div class="form-row"><div class="form-group"><label>Separador</label><input type="text" id="c-sep" value="${esc(p.csv_ucontact.separador)}" maxlength="1" ${dis} /></div><div></div></div>
       <div id="c-cols"></div>${editable ? `<button class="btn btn-outline btn-sm" id="c-col-mas">+ Columna</button>` : ''}`) +
+    tarjetaCdr(p.cdr, c.cdr_password, editable) +
     `<div class="grid-2">${editable ? card('Guardar', `<div class="form-group"><label>Comentario del cambio</label><input type="text" id="c-coment" placeholder="p. ej. enfriamiento a 12 meses (dirección, 30/10)" /></div>
       <button class="btn btn-orange" id="c-guardar">Guardar nueva versión</button>`) : ''}
       ${card('Historial de versiones', tabla([{ t: 'Versión', f: h => `<a class="link" data-ver="${h.version}">v${h.version}</a>` }, { t: 'Autor', k: 'autor' },
@@ -83,10 +84,112 @@ export async function config(ctx) {
       destinos_internos: $('#c-internos').value.split('\n').map(s => s.trim()).filter(Boolean),
       prefijos_salida: $('#c-prefijos').value.split(',').map(s => s.trim()).filter(Boolean),
       franjas, csv_ucontact: { separador: $('#c-sep').value || ';', columnas: cols },
+      cdr: leerCdr(),
     };
     const r = await api.put('/config', { parametros: nuevo, comentario: $('#c-coment').value || null });
     toast(`Guardada la versión ${r.version}`, 'ok');
     config(ctx);
+  };
+  if (editable) activarCdr(ctx);
+}
+
+// ── CDR: conexión a la base MySQL de uContact (SPEC_job_cdr_en_cloud) ──
+const TLS = [['preferido', 'Preferido (cifra si el servidor lo acepta)'], ['requerido', 'Requerido'], ['desactivado', 'Desactivado']];
+
+const textoClave = (clave) => !clave ? '' : clave.configurada
+  ? `${est('ok', 'configurada')} <span class="small muted">el ${fechaHora(clave.fecha)}${clave.por ? ' por ' + esc(clave.por) : ''}</span>`
+  : est('error', 'sin configurar');
+
+function tarjetaCdr(d, clave, editable) {
+  const dis = editable ? '' : 'disabled';
+  const campo = (id, label, valor, tipo = 'text', extra = '') =>
+    `<div class="form-group"><label>${label}</label><input type="${tipo}" id="cd-${id}" value="${esc(valor ?? '')}" ${dis} ${extra} /></div>`;
+  const estadoClave = textoClave(clave);
+  return card('CDR — conexión a la base de uContact', `
+    <p class="small muted mb">El job del CDR corre en Google Cloud todos los días a las 4:00 (hora de Montevideo) y lee las llamadas
+    nuevas de esta base MySQL. Los parámetros se guardan con «Guardar nueva versión»; la contraseña va aparte, a Secret Manager, y no se vuelve a mostrar.</p>
+    <div class="grid-2"><div>
+      <div class="form-row">${campo('host', 'Servidor (host)', d.host, 'text', 'placeholder="mysql.ejemplo.com"')}${campo('puerto', 'Puerto', d.puerto, 'number', 'min="1"')}</div>
+      <div class="form-row">${campo('base', 'Base', d.base, 'text', 'placeholder="uc"')}${campo('usuario', 'Usuario (solo lectura)', d.usuario)}</div>
+      <div class="form-row">${campo('tabla', 'Tabla', d.tabla)}
+        <div class="form-group"><label>Cifrado (TLS)</label><select class="fselect" id="cd-tls" ${dis}>${TLS.map(([k, t]) => `<option value="${k}" ${k === d.tls ? 'selected' : ''}>${t}</option>`).join('')}</select></div></div>
+      <div class="form-row">${campo('zona', 'Zona horaria de calldate', d.zona_horaria)}${campo('lote', 'Llamadas por lote', d.lote_tamano, 'number', 'min="1"')}</div>
+      <div class="form-group"><label>Consulta propia (opcional)</label><textarea class="finput code" id="cd-consulta" rows="3" ${dis}
+        placeholder="Vacío = SELECT uniqueid, calldate, src, dst, duration, billsec, disposition, userfield, peeraccount, accountcode FROM <tabla> WHERE calldate >= %s AND calldate < %s ORDER BY calldate, uniqueid">${esc(d.consulta || '')}</textarea>
+        <div class="field-hint">Un solo SELECT con las columnas de arriba (usá AS si se llaman distinto), ordenado por calldate, con uno (desde) o dos (desde, hasta) %s.</div></div>
+      <label class="check"><input type="checkbox" id="cd-activo" ${d.activo ? 'checked' : ''} ${dis} /> Job del CDR activo</label>
+    </div><div>
+      ${editable ? `<div class="form-group"><label>Contraseña de MySQL</label>
+        <div class="gap"><input type="password" id="cd-clave" autocomplete="new-password" placeholder="••••••••" style="flex:1" />
+        <button class="btn btn-outline btn-sm" id="cd-guardar-clave">Guardar contraseña</button></div>
+        <div class="field-hint" id="cd-clave-estado">${estadoClave}</div></div>
+      <div class="gap mb"><button class="btn btn-dark" id="cd-probar">Probar conexión</button>
+        <span class="small muted">Usa los datos de este formulario y la contraseña escrita (o la guardada).</span></div>
+      <div id="cd-prueba"></div>
+      <div class="card-header-title mt mb">Correr el job</div>
+      <div class="gap mb"><button class="btn btn-orange" id="cd-correr">Correr ahora</button></div>
+      <div class="inline-form">
+        <div class="form-group"><label>Reprocesar desde</label><input type="date" id="cd-desde" /></div>
+        <div class="form-group"><label>Hasta (opcional)</label><input type="date" id="cd-hasta" /></div>
+        <div class="form-group"><button class="btn btn-outline" id="cd-reprocesar">Reprocesar</button></div></div>
+      <label class="check mt"><input type="checkbox" id="cd-dry" /> Prueba sin guardar intentos (dry-run)</label>
+      <div id="cd-corrida" class="mt"></div>` : '<p class="small muted">Solo un administrador puede cambiar la conexión o correr el job.</p>'}
+    </div></div>`);
+}
+
+function leerCdr() {
+  return {
+    host: $('#cd-host').value.trim(), puerto: +$('#cd-puerto').value || 3306, base: $('#cd-base').value.trim(),
+    usuario: $('#cd-usuario').value.trim(), tabla: $('#cd-tabla').value.trim() || 'cdr', tls: $('#cd-tls').value,
+    zona_horaria: $('#cd-zona').value.trim() || 'America/Montevideo', lote_tamano: +$('#cd-lote').value || 2000,
+    consulta: $('#cd-consulta').value.trim() || null, activo: $('#cd-activo').checked,
+  };
+}
+
+function resultadoPrueba(r) {
+  const detalle = [r.version ? `MySQL ${esc(r.version)}` : '', r.tls === null || r.tls === undefined ? '' : r.tls ? 'conexión cifrada (TLS)' : 'conexión SIN cifrar',
+    r.columnas && r.columnas.length ? `columnas: ${esc(r.columnas.join(', '))}` : ''].filter(Boolean).join(' · ');
+  return `<div class="alert ${r.ok ? 'alert-success' : 'alert-error'}"><span><strong>${esc(r.mensaje)}</strong>${detalle ? `<br><span class="small">${detalle}</span>` : ''}</span></div>`;
+}
+
+async function seguirCorrida(id, el) {
+  for (;;) {
+    const c = await api.get(`/cdr/corridas/${id}`);
+    const k = c.conteos || {};
+    el.innerHTML = `<div class="alert ${c.estado === 'error' ? 'alert-error' : c.estado === 'ok' ? 'alert-success' : 'alert-info'}"><span>
+      Corrida #${c.id} ${est(c.estado)} ${c.dry_run ? '(dry-run)' : ''}<br><span class="small">${k.filas_leidas !== undefined ? `${num(k.filas_leidas)} filas leídas · ` : ''}${num(k.intentos_nuevos || 0)} intentos nuevos${c.mensaje ? ' · ' + esc(c.mensaje) : ''}</span></span></div>`;
+    if (c.estado !== 'en_curso') return c;
+    await new Promise(r => setTimeout(r, 2000));
+  }
+}
+
+function activarCdr(ctx) {
+  $('#cd-guardar-clave').onclick = async () => {
+    const v = $('#cd-clave').value;
+    if (!v) return toast('Escribí la contraseña', 'err');
+    const estado = await api.put('/config/cdr/password', { password: v });
+    $('#cd-clave').value = '';
+    $('#cd-clave-estado').innerHTML = textoClave(estado);  // sin redibujar: no se pierden los datos sin guardar
+    toast('Contraseña guardada en Secret Manager', 'ok');
+  };
+  $('#cd-probar').onclick = async () => {
+    const b = $('#cd-probar'); b.disabled = true;
+    $('#cd-prueba').innerHTML = '<div class="small muted">Probando la conexión (hasta 10 segundos)…</div>';
+    try { $('#cd-prueba').innerHTML = resultadoPrueba(await api.post('/config/cdr/probar', { parametros: leerCdr(), password: $('#cd-clave').value || null })); }
+    catch (e) { $('#cd-prueba').innerHTML = `<div class="alert alert-error"><span>${esc(e.message)}</span></div>`; }
+    finally { b.disabled = false; }
+  };
+  const correr = async (cuerpo) => {
+    try {
+      const r = await api.post('/config/cdr/correr', { ...cuerpo, dry_run: $('#cd-dry').checked });
+      toast(`Corrida #${r.corrida_id} lanzada`, 'ok');
+      await seguirCorrida(r.corrida_id, $('#cd-corrida'));
+    } catch (e) { toast(e.message, 'err'); }
+  };
+  $('#cd-correr').onclick = () => correr({});
+  $('#cd-reprocesar').onclick = () => {
+    if (!$('#cd-desde').value) return toast('Indicá la fecha desde', 'err');
+    correr({ desde: $('#cd-desde').value, hasta: $('#cd-hasta').value || null });
   };
 }
 
