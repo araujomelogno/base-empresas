@@ -281,6 +281,7 @@ export async function detalle(ctx, id) {
     c.estado === 'preview' && ctx.puede('steward') ? `<button class="btn btn-green" id="c-confirmar">Confirmar carga</button>` : '',
     ['preview', 'error'].includes(c.estado) && ctx.puede('steward') ? `<button class="btn btn-outline" id="c-descartar">Descartar</button>` : '',
     c.estado === 'confirmada' && ctx.puede('steward') ? `<button class="btn btn-outline btn-del" id="c-deshacer">Deshacer carga</button>` : '',
+    !enCurso && ctx.puede() ? `<button class="btn btn-danger" id="c-borrar">Borrar carga</button>` : '',
   ].join('');
   const fpt = k.filas_por_telefonos;
   const porOrigen = Object.entries(k.telefonos_por_origen || {});
@@ -348,6 +349,27 @@ export async function detalle(ctx, id) {
     if (!await confirmar('Deshacer carga', 'Se anulan los valores y atributos que trajo, se borran sus vínculos de teléfono y sucursales (y el origen que sumó a teléfonos que ya existían), y las empresas que solo venían de esta carga quedan anuladas. La historia se conserva.', 'Deshacer', 'btn-danger')) return;
     const r = await api.del('/cargas/' + id);
     toast(`Carga deshecha: ${r.empresas_anuladas} empresas anuladas, ${r.empresas_recalculadas} recalculadas`, 'ok'); recargar();
+  };
+  if ($('#c-borrar')) $('#c-borrar').onclick = async () => {
+    const txt = `Se elimina la carga y su archivo. Las empresas que solo venían de esta carga se borran del todo: historia, teléfonos,
+      sucursales, atributos, su lugar en las muestras y su actividad de campo (intentos del CDR y respuestas del .sav).
+      Las empresas que también tienen datos de otras fuentes se quedan, sin lo que aportó esta carga. <strong>No se puede deshacer.</strong>
+      Solo queda el registro en Auditoría.<br><br>Escribí <strong>BORRAR</strong> para confirmar.`;
+    const ok = await modal({ titulo: `Borrar carga #${c.id}`, cuerpo: `<p>${txt}</p><div class="form-group"><input type="text" id="m-borrar" autocomplete="off" /></div>`,
+      acciones: [{ t: 'Cancelar' }, { t: 'Borrar definitivamente', cls: 'btn-danger', fn: (b) => {
+        if (b.querySelector('#m-borrar').value.trim().toUpperCase() !== 'BORRAR') { toast('Escribí BORRAR para confirmar', 'err'); return false; }
+        return true;
+      } }] });
+    if (!ok) return;
+    const { tarea_id } = await api.del(`/cargas/${id}/definitivo`);
+    main().innerHTML = pageHeader('Carga', '#' + c.id, 'Borrando…') + card('Borrando la carga', '<div id="c-prog"></div>');
+    try {
+      const t = await seguirTarea(tarea_id, $('#c-prog'), { texto: 'Borrando la carga' });
+      const r = t.resultado || {};
+      toast(`Carga borrada: ${num(r.empresas_borradas || 0)} empresas borradas, ${num(r.empresas_recalculadas || 0)} recalculadas`, 'ok');
+      actualizarContadores && actualizarContadores();
+      ctx.ir('cargas');
+    } catch (e) { toast(e.message, 'err'); recargar(); }
   };
 }
 

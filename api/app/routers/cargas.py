@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from pydantic import BaseModel
 
-from .. import cargas, storage, tareas
+from .. import borrado, cargas, storage, tareas
 from ..auth import Usuario, requiere, usuario_actual
 from ..db import conexion, get_conn
 
@@ -75,6 +75,15 @@ def confirmar(carga_id: int, u: Usuario = Depends(requiere("steward"))):
 @router.delete("/cargas/{carga_id}")
 def deshacer(carga_id: int, conn=Depends(get_conn), u: Usuario = Depends(requiere("steward"))):
     return cargas.deshacer(conn, carga_id, u.email)
+
+
+@router.delete("/cargas/{carga_id}/definitivo")
+def borrar(carga_id: int, u: Usuario = Depends(requiere("admin"))):
+    """Borrado definitivo (solo administrador): corre como tarea porque puede tocar miles de empresas."""
+    with conexion() as conn:
+        tid = borrado.pedir_borrado_carga(conn, carga_id, u.email)
+    tareas.despachar(tid)
+    return {"tarea_id": tid}
 
 
 @router.get("/revision")
