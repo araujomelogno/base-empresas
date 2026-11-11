@@ -110,3 +110,40 @@ def test_textos():
     assert dominio("https://www.Empresa.com.uy/contacto") == "empresa.com.uy"
     assert dominio("ventas@empresa.com.uy") == "empresa.com.uy"
     assert dominio("fulano@gmail.com") == ""
+
+
+def test_url_de_cloud_tasks_apunta_a_una_ruta_existente(monkeypatch):
+    """Cloud Tasks tiene que llamar a una ruta real de la API (con el prefijo /api)."""
+    from app import settings, tareas
+    from app.main import app
+
+    monkeypatch.setattr(settings, "API_URL", "https://empresas-api.example.run.app/")
+    url = tareas.url_ejecutar(42)
+    assert url == "https://empresas-api.example.run.app/api/tareas/42/ejecutar"
+    assert "post" in app.openapi()["paths"]["/api/tareas/{tarea_id}/ejecutar"]
+
+
+def test_encolar_manda_la_url_correcta(monkeypatch):
+    import sys
+    import types
+
+    from app import settings, tareas
+
+    enviadas = []
+
+    class Cliente:
+        def create_task(self, parent, task):
+            enviadas.append((parent, task))
+
+    falso = types.SimpleNamespace(CloudTasksClient=Cliente, HttpMethod=types.SimpleNamespace(POST="POST"))
+    monkeypatch.setitem(sys.modules, "google.cloud.tasks_v2", falso)
+    import google.cloud
+    monkeypatch.setattr(google.cloud, "tasks_v2", falso, raising=False)
+    monkeypatch.setattr(settings, "API_URL", "https://api.example")
+    monkeypatch.setattr(settings, "TASKS_QUEUE", "projects/p/locations/r/queues/q")
+    monkeypatch.setattr(settings, "TAREA_TOKEN", "t")
+    tareas._encolar_cloud_tasks(7)
+    parent, task = enviadas[0]
+    assert parent == "projects/p/locations/r/queues/q"
+    assert task["http_request"]["url"] == "https://api.example/api/tareas/7/ejecutar"
+    assert task["http_request"]["headers"] == {"X-Tarea-Token": "t"}

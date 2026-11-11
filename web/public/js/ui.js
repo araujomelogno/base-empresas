@@ -123,13 +123,21 @@ export async function pedirTexto(titulo, label, { obligatorio = true, placeholde
 }
 
 // ── Tareas diferidas: barra de progreso hasta que terminan ──
+// Si una tarea sigue "pendiente" pasado este tiempo, Cloud Tasks no pudo ejecutarla: se avisa
+// en pantalla (y se sigue esperando, por si arranca).
+const PENDIENTE_AVISO_MS = 90000;
+
 export async function seguirTarea(tareaId, el, { texto = 'Procesando' } = {}) {
+  const inicio = Date.now();
   for (;;) {
     const t = await api.get(`/tareas/${tareaId}`);
+    const trabada = t.estado === 'pendiente' && Date.now() - inicio > PENDIENTE_AVISO_MS;
     const total = t.total || 0;
     const p = total ? Math.min(100, Math.round(100 * t.progreso / total)) : (t.estado === 'ok' ? 100 : 5);
     if (el) el.innerHTML = `<div class="progress"><span style="width:${p}%"></span></div>
-      <div class="progress-label"><span>${esc(texto)}… ${est(t.estado)}</span><span class="mono">${total ? `${num(t.progreso)} / ${num(total)}` : ''}</span></div>`;
+      <div class="progress-label"><span>${esc(texto)}… ${est(t.estado)}</span><span class="mono">${total ? `${num(t.progreso)} / ${num(total)}` : ''}</span></div>` +
+      (trabada ? `<div class="alert alert-warn mt">La tarea #${esc(String(tareaId))} todavía no arrancó. Si sigue así, avisale a un
+        administrador: Cloud Tasks no está pudiendo ejecutarla (ver «Problemas frecuentes» en la guía de despliegue).</div>` : '');
     if (t.estado === 'ok') return t;
     if (t.estado === 'error') throw new Error(t.error || 'La tarea falló');
     await new Promise(r => setTimeout(r, 900));

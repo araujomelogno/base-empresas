@@ -43,6 +43,12 @@ def despachar(tarea_id: int):
         threading.Thread(target=ejecutar, args=(tarea_id,), daemon=True).start()
 
 
+def url_ejecutar(tarea_id: int) -> str:
+    """URL a la que Cloud Tasks llama para ejecutar la tarea. Las rutas de la API cuelgan de /api
+    (main.py), así que sin ese prefijo Cloud Tasks recibe 404 y la tarea queda pendiente."""
+    return f"{settings.API_URL.rstrip('/')}/api/tareas/{tarea_id}/ejecutar"
+
+
 def _encolar_cloud_tasks(tarea_id: int):
     from google.cloud import tasks_v2
 
@@ -50,7 +56,7 @@ def _encolar_cloud_tasks(tarea_id: int):
     tarea = {
         "http_request": {
             "http_method": tasks_v2.HttpMethod.POST,
-            "url": f"{settings.API_URL.rstrip('/')}/tareas/{tarea_id}/ejecutar",
+            "url": url_ejecutar(tarea_id),
             "headers": {"X-Tarea-Token": settings.TAREA_TOKEN},
         },
         "dispatch_deadline": {"seconds": 1800},
