@@ -5,9 +5,9 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from .. import exportacion, muestras
+from .. import borrado, exportacion, muestras, tareas
 from ..auth import Usuario, requiere, usuario_actual
-from ..db import get_conn
+from ..db import conexion, get_conn
 
 router = APIRouter()
 
@@ -58,6 +58,21 @@ def crear(body: NuevoEstudio, conn=Depends(get_conn), u: Usuario = Depends(requi
 @router.get("/estudios/{estudio_id}")
 def detalle(estudio_id: int, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
     return muestras.estudio_detalle(conn, estudio_id)
+
+
+@router.get("/estudios/{estudio_id}/borrado")
+def conteos_borrado_estudio(estudio_id: int, conn=Depends(get_conn), u: Usuario = Depends(requiere("admin"))):
+    """Lo que se borraría con el estudio (para el modal de confirmación)."""
+    return borrado.conteos_estudio(conn, estudio_id)
+
+
+@router.delete("/estudios/{estudio_id}")
+def borrar_estudio(estudio_id: int, u: Usuario = Depends(requiere("admin"))):
+    """Borrado definitivo del estudio con sus partes, muestras e ingestas .sav (corre como tarea)."""
+    with conexion() as conn:
+        tid = borrado.pedir_borrado_estudio(conn, estudio_id, u.email)
+    tareas.despachar(tid)
+    return {"tarea_id": tid}
 
 
 @router.patch("/estudios/{estudio_id}")
@@ -111,6 +126,21 @@ def listar_muestras(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)
 @router.get("/muestras/{muestra_id}")
 def detalle_muestra(muestra_id: int, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
     return muestras.detalle(conn, muestra_id)
+
+
+@router.get("/muestras/{muestra_id}/borrado")
+def conteos_borrado_muestra(muestra_id: int, conn=Depends(get_conn), u: Usuario = Depends(requiere("admin"))):
+    """Lo que se borraría con la muestra (para el modal de confirmación)."""
+    return borrado.conteos_muestra(conn, muestra_id)
+
+
+@router.delete("/muestras/{muestra_id}")
+def borrar_muestra(muestra_id: int, u: Usuario = Depends(requiere("admin"))):
+    """Borrado definitivo de la muestra con sus ítems, intentos del CDR y filas del .sav (corre como tarea)."""
+    with conexion() as conn:
+        tid = borrado.pedir_borrado_muestra(conn, muestra_id, u.email)
+    tareas.despachar(tid)
+    return {"tarea_id": tid}
 
 
 @router.get("/muestras/{muestra_id}/items")

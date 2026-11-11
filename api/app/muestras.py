@@ -362,21 +362,46 @@ def definicion_estratos(criterios: dict, estratos_marco: set[str]) -> dict[str, 
     return {e: (n, r) for e in (estratos_marco or {"Total"})}
 
 
+def items_borrados(conn, muestra_id: int) -> list[dict]:
+    """Ítems que se fueron con un borrado de empresa o de carga después del sorteo (V1)."""
+    return conn.execute(
+        "SELECT b.item_id, b.empresa_id, b.estrato, b.rol, b.orden, b.accion, b.borrado_por, b.fecha, b.auditoria_id,"
+        " CASE WHEN b.accion = 'empresa.borrar' THEN a.objeto_id END AS rut,"
+        " CASE WHEN b.accion = 'carga.borrar' THEN a.objeto_id END AS carga_id"
+        " FROM muestra_item_borrado b LEFT JOIN auditoria a ON a.id = b.auditoria_id"
+        " WHERE b.muestra_id = %s ORDER BY b.estrato, b.orden", (muestra_id,)).fetchall()
+
+
 def verificar(conn, muestra_id: int) -> dict:
-    """Re-ejecuta el sorteo con semilla, snapshot y configuración guardados y lo compara."""
-    m = conn.execute("SELECT * FROM muestra WHERE id = %s", (muestra_id,)).fetchone()
-    if m is None or m["snapshot_id"] is None:
+    """Re-ejecuta el sorteo con semilla, snapshot y configuración guardados y lo compara.
+
+    El marco congelado no se toca nunca, así que el re-sorteo se compara contra los ítems que
+    quedan más los que se borraron después (muestra_item_borrado). Resultados:
+    reproducible · reproducible_con_borrados · no_coincide · no_verificable (el snapshot perdió
+    filas con un borrado anterior a que el sistema los registrara)."""
+    m = conn.execute("SELECT m.*, s.n AS snapshot_n FROM muestra m LEFT JOIN marco_snapshot s ON s.id = m.snapshot_id"
+                     " WHERE m.id = %s", (muestra_id,)).fetchone()
+    if m is None:
+        raise HTTPException(404, "Muestra inexistente")
+    if m["snapshot_id"] is None:
         raise HTTPException(409, "La muestra no está sorteada")
     marco = [(r["empresa_id"], r["estrato"]) for r in conn.execute(
         "SELECT empresa_id, estrato FROM marco_snapshot_item WHERE snapshot_id = %s", (m["snapshot_id"],))]
-    definicion = definicion_estratos(m["criterios"], {e for _, e in marco})
-    nuevo = sortear_snapshot(marco, m["semilla"], definicion)
+    borrados = items_borrados(conn, muestra_id)
+    base = {"semilla": m["semilla"], "snapshot_id": m["snapshot_id"], "config_version": m["config_version"],
+            "items_borrados": borrados, "snapshot_incompleto": len(marco) < m["snapshot_n"]}
     guardado = [(r["empresa_id"], r["estrato"], r["rol"], r["orden"]) for r in conn.execute(
-        "SELECT empresa_id, estrato, rol, orden FROM muestra_item WHERE muestra_id = %s ORDER BY estrato, orden",
-        (muestra_id,))]
-    nuevo_ord = sorted(nuevo, key=lambda x: (x[1], x[3]))
-    return {"reproducible": nuevo_ord == guardado, "items": len(guardado), "semilla": m["semilla"],
-            "snapshot_id": m["snapshot_id"], "config_version": m["config_version"]}
+        "SELECT empresa_id, estrato, rol, orden FROM muestra_item WHERE muestra_id = %s", (muestra_id,))]
+    base["items"] = len(guardado)
+    if base["snapshot_incompleto"]:
+        return {**base, "reproducible": False, "resultado": "no_verificable"}
+    definicion = definicion_estratos(m["criterios"], {e for _, e in marco})
+    nuevo = sorted(sortear_snapshot(marco, m["semilla"], definicion), key=lambda x: (x[1], x[3]))
+    completo = sorted(guardado + [(b["empresa_id"], b["estrato"], b["rol"], b["orden"]) for b in borrados],
+                      key=lambda x: (x[1], x[3]))
+    ok = nuevo == completo
+    resultado = "no_coincide" if not ok else "reproducible_con_borrados" if borrados else "reproducible"
+    return {**base, "reproducible": ok, "resultado": resultado}
 
 
 def _pendientes_partes(conn, muestra_id: int):
@@ -424,6 +449,8 @@ def detalle(conn, muestra_id: int) -> dict:
     if m is None:
         raise HTTPException(404, "Muestra inexistente")
     m["exportacion"] = opciones_exportacion(m)
+    m["n_items_borrados"] = conn.execute("SELECT count(*) AS n FROM muestra_item_borrado WHERE muestra_id = %s",
+                                         (muestra_id,)).fetchone()["n"]
     m["partes"] = conn.execute("SELECT id, nombre FROM parte WHERE estudio_id = %s ORDER BY id", (m["estudio_id"],)).fetchall()
     m["avance"] = conn.execute(
         """

@@ -136,7 +136,9 @@ export async function ficha(ctx, rut, params) {
   } else if (tab === 'historia') {
     el.innerHTML = card('Historia por campo', tabla([
       { t: 'Campo', f: h => `<span class="td-strong">${esc(h.campo)}</span>` }, { t: 'Valor', f: h => esc(h.valor ?? '∅') + (h.vigente ? ' ' + est('ok', 'vigente') : '') },
-      { t: 'Fuente', f: h => `${esc(h.fuente_tipo)}${h.fuente_id ? ' #' + h.fuente_id : ''}` }, { t: 'Confianza', cls: 'num', k: 'confianza' },
+      { t: 'Fuente', f: h => `${esc(h.fuente_tipo)}${h.fuente_id ? ' #' + h.fuente_id : ''}${h.ingesta_borrada ? ' <span class="small muted">(ingesta borrada)</span>' : ''}`
+        + (h.detalle && h.detalle.estudio_id && h.ingesta_borrada ? `<div class="small muted">estudio #${esc(h.detalle.estudio_id)} · parte #${esc(h.detalle.parte_id)}</div>` : '') },
+      { t: 'Confianza', cls: 'num', k: 'confianza' },
       { t: 'Actor', k: 'actor' }, { t: 'Fecha', f: h => fechaHora(h.fecha) },
     ], e.historia.map(h => ({ ...h, __tr: h.anulada ? 'class="anulada" title="Anulada: la carga o fusión fue deshecha"' : h.vigente ? 'class="vigente"' : '' })),
     'Sin historia'), '', true) +

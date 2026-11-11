@@ -127,7 +127,10 @@ export async function savDetalle(ctx, id) {
   const aplicado = Object.entries(k).filter(([c]) => c.startsWith('aplicado_')).map(([c, n]) => [c.replace('aplicado_', ''), n]);
   main().innerHTML = pageHeader('Ingesta', '#' + s.id, `${esc(s.parte_nombre)} · ${esc(s.archivo_nombre)} · ${est(s.estado)} · ${esc(s.actor)} · ${fechaHora(s.fecha)}`,
     s.estado === 'confirmada' && ctx.puede('coordinador') ? `<button class="btn btn-outline" id="sd-remap">Corregir mapeo</button>` : '') +
-    (s.error ? `<div class="alert alert-error">${esc(s.error)}</div>` : '') + `<div id="sd-prog"></div><div id="sd-conteos"></div>` +
+    (s.error ? `<div class="alert alert-error">${esc(s.error)}</div>` : '') +
+    (s.tarea && s.tarea.trabada ? `<div class="alert alert-warn"><span>La tarea #${s.tarea.id} figura corriendo desde el ${fechaHora(s.tarea.creado)}:
+      está <strong>trabada</strong> (la instancia que la corría probablemente se reinició). Volvé a subir el .sav; un administrador puede borrar el estudio de prueba si hace falta.</span></div>` : '') +
+    `<div id="sd-prog"></div><div id="sd-conteos"></div>` +
     `<div class="grid-2">${card('Cambios aplicados a la base', tabla([{ t: 'Cambio', f: x => esc(etiqueta(x[0])) }, { t: 'Filas', cls: 'num', f: x => num(x[1]) }], aplicado, 'Sin cambios'), '', true)}
     ${card('Mapeo confirmado', json(s.mapeo))}</div><div id="sd-editor"></div>`;
   pintarConteos($('#sd-conteos'), k);

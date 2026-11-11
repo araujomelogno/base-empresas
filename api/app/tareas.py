@@ -3,6 +3,11 @@
 En producción cada tarea se encola en Cloud Tasks, que llama a POST /tareas/{id}/ejecutar
 con el header X-Tarea-Token. En desarrollo corre en un hilo (background) y en los tests
 corre en línea (inline), siempre con el mismo código.
+
+Cancelación (al borrar la carga, la muestra o el estudio): cancelar() marca la tarea
+«cancelada» en una conexión con autocommit. Una tarea cancelada no arranca, y una que está
+corriendo lo nota la próxima vez que informa progreso: progreso() lanza Cancelada, que revierte
+toda su transacción. No se aplica nada y la tarea termina «cancelada», no en error.
 """
 import logging
 import threading
@@ -15,6 +20,12 @@ from .db import conexion, pool
 
 log = logging.getLogger(__name__)
 _HANDLERS = {}
+ACTIVAS = ("pendiente", "corriendo")
+TRABADA_MINUTOS = 30   # más que el dispatch_deadline de Cloud Tasks (1800 s)
+
+
+class Cancelada(Exception):
+    """La tarea se canceló mientras corría: su transacción se revierte entera."""
 
 
 def handler(tipo: str):
@@ -65,13 +76,32 @@ def _encolar_cloud_tasks(tarea_id: int):
 
 
 def progreso(tarea_id: int | None, hechos: int, total: int | None = None):
-    """Actualiza el progreso en una conexión aparte (autocommit) para que se vea en vivo."""
+    """Actualiza el progreso en una conexión aparte (autocommit) para que se vea en vivo.
+    Si la tarea fue cancelada (o borrada junto con su carga), lanza Cancelada."""
     if tarea_id is None:
         return
     with pool().connection() as c:
         c.autocommit = True
-        c.execute("UPDATE tarea SET progreso = %s, total = coalesce(%s, total) WHERE id = %s",
-                  (hechos, total, tarea_id))
+        r = c.execute("UPDATE tarea SET progreso = %s, total = coalesce(%s, total) WHERE id = %s"
+                      " AND estado <> 'cancelada' RETURNING id", (hechos, total, tarea_id)).fetchone()
+    if r is None:
+        raise Cancelada(f"La tarea {tarea_id} fue cancelada")
+
+
+def cancelar(condicion: str, args: tuple, motivo: str) -> list[int]:
+    """Cancela las tareas pendientes o corriendo que cumplen la condición (SQL sobre tarea).
+    Usa su propia conexión con autocommit para que la vea enseguida la tarea que está corriendo."""
+    with pool().connection() as c:
+        c.autocommit = True
+        return [r["id"] for r in c.execute(
+            f"UPDATE tarea SET estado = 'cancelada', error = %s, terminado = now()"
+            f" WHERE estado IN ('pendiente', 'corriendo') AND ({condicion}) RETURNING id", (motivo, *args))]
+
+
+def _estado(tarea_id: int) -> str | None:
+    with pool().connection() as c:
+        r = c.execute("SELECT estado FROM tarea WHERE id = %s", (tarea_id,)).fetchone()
+    return r["estado"] if r else None
 
 
 def ejecutar(tarea_id: int) -> dict | None:
@@ -91,7 +121,13 @@ def ejecutar(tarea_id: int) -> dict | None:
             c.execute("UPDATE tarea SET estado='ok', resultado=%s, terminado=now() WHERE id=%s",
                       (Jsonb(resultado), tarea_id))
         return resultado
-    except Exception as e:  # se registra y se muestra en la UI
+    except Exception as e:
+        if isinstance(e, Cancelada) or _estado(tarea_id) in ("cancelada", None):
+            # Cancelada (o borrada con su carga) mientras corría: la transacción ya se revirtió.
+            # No es un error y no marca la carga ni la ingesta como «error».
+            log.info("Tarea %s cancelada: no se aplicó nada", tarea_id)
+            return None
+        # se registra y se muestra en la UI
         log.error("Tarea %s falló: %s", tarea_id, traceback.format_exc())
         with pool().connection() as c:
             c.autocommit = True

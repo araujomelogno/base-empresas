@@ -463,8 +463,10 @@ def obtener(conn, ingesta_id: int) -> dict:
                 "SELECT valores->>%s AS v, count(*) AS n FROM sav_fila WHERE ingesta_id = %s AND valores->>%s IS NOT NULL"
                 " GROUP BY 1 ORDER BY 2 DESC", (var, ingesta_id, var))]
     ing["tarea"] = conn.execute(
-        "SELECT id, estado, progreso, total, error FROM tarea WHERE tipo LIKE 'sav.%%'"
-        " AND (payload->>'ingesta_id')::int = %s ORDER BY id DESC LIMIT 1", (ingesta_id,)).fetchone()
+        "SELECT id, tipo, estado, progreso, total, error, creado,"
+        " (estado = 'corriendo' AND creado < now() - make_interval(mins => %s)) AS trabada"
+        " FROM tarea WHERE tipo LIKE 'sav.%%'"
+        " AND (payload->>'ingesta_id')::int = %s ORDER BY id DESC LIMIT 1", (tareas.TRABADA_MINUTOS, ingesta_id)).fetchone()
     return ing
 
 

@@ -1,7 +1,16 @@
 // Estudios, partes, muestras, reemplazos y CSV para uContact (R1.5, R1.6, R1.7)
 import * as api from '../api.js';
-import { $, $$, esc, main, toast, num, pct, fecha, fechaHora, est, etiqueta, pageHeader, stats, tabla, card, modal,
-  confirmar, chips, activarChips, chipsSel } from '../ui.js';
+import { $, $$, esc, main, toast, num, pct, fecha, fechaHora, rutFmt, est, etiqueta, pageHeader, stats, tabla, card, modal,
+  confirmar, confirmarEscrito, seguirTarea, chips, activarChips, chipsSel } from '../ui.js';
+
+const pl = (n, uno, varios) => `${num(n)} ${n === 1 ? uno : varios}`;
+
+// Borrado definitivo (solo administrador): corre como tarea y se sigue en pantalla
+async function borrarConTarea(url, titulo, texto) {
+  const { tarea_id } = await api.del(url);
+  main().innerHTML = pageHeader(titulo, '', 'Borrando…') + card(titulo, '<div id="b-prog"></div>');
+  return (await seguirTarea(tarea_id, $('#b-prog'), { texto })).resultado || {};
+}
 
 const ESTRATIF = [['tamano', 'Tamaño'], ['departamento', 'Departamento'], ['naturaleza', 'Naturaleza'], ['ciiu2', 'CIIU 2 dígitos'], ['ciiu1', 'CIIU 1 dígito']];
 
@@ -46,7 +55,8 @@ export async function detalle(ctx, id) {
   const e = await api.get('/estudios/' + id);
   main().innerHTML = pageHeader(e.nombre, '', `${esc(e.cliente || 'Sin cliente')} · campo del ${fecha(e.campo_desde)} al ${fecha(e.campo_hasta)}`,
     (ctx.puede('jefe') ? `<button class="btn btn-outline" id="es-editar">Editar</button>` : '') +
-    (ctx.puede('jefe') ? `<button class="btn btn-orange" id="es-muestra">+ Nueva muestra</button>` : '')) +
+    (ctx.puede('jefe') ? `<button class="btn btn-orange" id="es-muestra">+ Nueva muestra</button>` : '') +
+    (ctx.puede() ? `<button class="btn btn-danger" id="es-borrar">Borrar estudio</button>` : '')) +
     card('Partes', tabla([
       { t: 'Parte', f: p => `<span class="td-strong">${esc(p.nombre)}</span>` }, { t: 'Survey ID', k: 'survey_id' },
       { t: 'Respondente objetivo', k: 'respondente_objetivo' },
@@ -61,6 +71,23 @@ export async function detalle(ctx, id) {
       { t: 'Config.', f: m => m.config_version ? 'v' + m.config_version : '—' }, { t: 'Sorteada', f: m => fechaHora(m.sorteada) },
     ], e.muestras, 'Sin muestras'), '', true);
   const recargar = () => detalle(ctx, id);
+  if ($('#es-borrar')) $('#es-borrar').onclick = async () => {
+    const n = await api.get(`/estudios/${id}/borrado`);
+    const ok = await confirmarEscrito({ titulo: 'Borrar estudio', palabra: e.nombre, normalizar: (s) => s.trim(),
+      ayuda: `Escribí el nombre del estudio, <strong>${esc(e.nombre)}</strong>, para confirmar.`,
+      cuerpo: `<p>Se elimina el estudio <strong>${esc(e.nombre)}</strong> con:</p><ul class="modal-conteos">
+        <li>${pl(n.partes, 'parte', 'partes')} y ${pl(n.muestras, 'muestra', 'muestras')} con ${pl(n.items, 'ítem', 'ítems')};</li>
+        <li>${pl(n.ingestas_sav, 'ingesta .sav', 'ingestas .sav')} con ${pl(n.filas_sav, 'fila', 'filas')}, y sus archivos;</li>
+        <li>${pl(n.intentos, 'intento', 'intentos')} del CDR asociados a sus ítems.</li></ul>
+        <p>Lo que la base aprendió de las empresas <strong>se conserva</strong>: contactos y teléfonos nuevos, calidad de los números,
+        historia de valores y último contacto efectivo (enfriamiento). <strong>No se puede deshacer.</strong> Queda el registro en Auditoría.</p>` });
+    if (!ok) return;
+    try {
+      const r = await borrarConTarea(`/estudios/${id}`, 'Borrar estudio', 'Borrando el estudio');
+      toast(`Estudio borrado: ${num(r.muestras.length)} muestras, ${num(r.items)} ítems, ${num(r.ingestas_sav)} ingestas .sav`, 'ok');
+      ctx.ir('estudios');
+    } catch (err) { toast(err.message, 'err'); recargar(); }
+  };
   if ($('#es-muestra')) $('#es-muestra').onclick = () => ctx.ir(`estudios/${id}/nueva-muestra`);
   if ($('#es-parte')) $('#es-parte').onclick = async () => {
     const r = await modal({ titulo: 'Nueva parte', ancho: 620, cuerpo: `<div id="pp">${formParte()}</div>`,
@@ -193,7 +220,10 @@ export async function muestra(ctx, id) {
   const tot = (k) => m.avance.reduce((a, x) => a + (x[k] || 0), 0);
   main().innerHTML = pageHeader(m.nombre, '', `<a class="link" href="#/estudios/${m.estudio_id}">${esc(m.estudio_nombre)}</a> · ${est(m.estado)} · semilla <span class="mono">${m.semilla ?? '—'}</span> · configuración v${m.config_version ?? '—'} · snapshot #${m.snapshot_id ?? '—'}`,
     `<button class="btn btn-outline" id="mu-verificar">Verificar reproducibilidad</button>` +
-    (m.estado === 'activa' && ctx.puede('jefe') ? `<button class="btn btn-outline btn-del" id="mu-cerrar">Cerrar muestra</button>` : '')) +
+    (m.estado === 'activa' && ctx.puede('jefe') ? `<button class="btn btn-outline btn-del" id="mu-cerrar">Cerrar muestra</button>` : '') +
+    (ctx.puede() ? `<button class="btn btn-danger" id="mu-borrar">Borrar muestra</button>` : '')) +
+    (m.n_items_borrados ? `<div class="alert alert-warn"><span><strong>${num(m.n_items_borrados)} empresa${m.n_items_borrados > 1 ? 's' : ''}
+      borrada${m.n_items_borrados > 1 ? 's' : ''} después del sorteo.</strong> El marco congelado no cambia: «Verificar reproducibilidad» las tiene en cuenta.</span></div>` : '') +
     (r.avisos && r.avisos.length ? `<div class="alert alert-warn"><div><strong>Avisos del sorteo</strong><ul class="aviso-lista">${r.avisos.map(a => `<li>${esc(a)}</li>`).join('')}</ul></div></div>` : '') +
     stats([[tot('titulares'), 'Titulares', 's-total'], [tot('liberados'), 'Liberados', 's-free'], [tot('llamados'), 'Con llamadas', ''],
       [tot('completas'), 'Con alguna completa', 's-ok'], [tot('rechazos'), 'Rechazos', 's-bad'], [r.marco, 'Marco congelado', '']]) +
@@ -238,8 +268,38 @@ export async function muestra(ctx, id) {
   const recargar = () => muestra(ctx, id);
   $('#mu-verificar').onclick = async () => {
     const v = await api.post(`/muestras/${id}/verificar`);
-    v.reproducible ? toast(`Reproducible: el re-sorteo con la semilla ${v.semilla} y el snapshot #${v.snapshot_id} da los mismos ${v.items} ítems en el mismo orden`, 'ok')
-      : toast('¡El re-sorteo no coincide! Revisar auditoría', 'err');
+    if (v.resultado === 'reproducible') {
+      toast(`Reproducible ✓: el re-sorteo con la semilla ${v.semilla} y el snapshot #${v.snapshot_id} da los mismos ${v.items} ítems en el mismo orden`, 'ok');
+    } else if (v.resultado === 'reproducible_con_borrados') {
+      const n = v.items_borrados.length;
+      await modal({ titulo: 'Reproducible ✓', ancho: 720, cuerpo: `<p>El re-sorteo con la semilla <span class="mono">${v.semilla}</span> y el snapshot
+        #${v.snapshot_id} coincide con la muestra. <strong>${num(n)} empresa${n > 1 ? 's se borraron' : ' se borró'} después del sorteo</strong>
+        (ver Auditoría):</p>` + tabla([
+          { t: 'Estrato', k: 'estrato' }, { t: 'Orden', cls: 'num', k: 'orden' }, { t: 'Rol', f: b => est(b.rol) },
+          { t: 'Empresa', f: b => b.rut ? `<span class="mono">${rutFmt(b.rut)}</span> <span class="small muted">(ya no existe)</span>` : '<span class="muted">RUT no disponible</span>' },
+          { t: 'Borrado', f: b => `${b.accion === 'empresa.borrar' ? 'empresa borrada' : `carga #${esc(b.carga_id || '—')} borrada`}<div class="small muted">${fechaHora(b.fecha)} · ${esc(b.borrado_por)}</div>` },
+        ], v.items_borrados), acciones: [{ t: 'Cerrar', cls: 'btn-orange' }] });
+    } else if (v.resultado === 'no_verificable') {
+      toast('No verificable: se borraron empresas de esta muestra antes de que el sistema guardara los borrados (versión anterior). Ver Auditoría.', 'err');
+    } else {
+      toast('¡El re-sorteo no coincide! Revisar auditoría', 'err');
+    }
+  };
+  if ($('#mu-borrar')) $('#mu-borrar').onclick = async () => {
+    const n = await api.get(`/muestras/${id}/borrado`);
+    const ok = await confirmarEscrito({ titulo: `Borrar muestra «${m.nombre}»`, palabra: 'BORRAR',
+      cuerpo: `<p>Se elimina la muestra (${etiqueta(m.estado)}) con:</p><ul class="modal-conteos">
+        <li>${pl(n.items, 'ítem', 'ítems')}${m.estado === 'activa' ? ', que dejan de bloquear a sus empresas para otras muestras' : ''};</li>
+        <li>${pl(n.intentos, 'intento', 'intentos')} del CDR y ${pl(n.filas_sav, 'fila', 'filas')} del .sav asociados a esos ítems;</li>
+        <li>su marco congelado.</li></ul>
+        <p>Lo que la base aprendió de las empresas <strong>se conserva</strong>: contactos y teléfonos nuevos, calidad de los números,
+        historia de valores y último contacto efectivo (enfriamiento). <strong>No se puede deshacer.</strong> Queda el registro en Auditoría.</p>` });
+    if (!ok) return;
+    try {
+      const r = await borrarConTarea(`/muestras/${id}`, 'Borrar muestra', 'Borrando la muestra');
+      toast(`Muestra borrada: ${num(r.items)} ítems, ${num(r.intentos)} intentos del CDR y ${num(r.filas_sav)} filas del .sav`, 'ok');
+      ctx.ir('estudios/' + m.estudio_id);
+    } catch (err) { toast(err.message, 'err'); recargar(); }
   };
   if ($('#mu-cerrar')) $('#mu-cerrar').onclick = async () => {
     if (!await confirmar('Cerrar muestra', 'Las empresas dejan de estar bloqueadas por esta muestra y ya no se puede exportar ni liberar reemplazos.', 'Cerrar', 'btn-danger')) return;

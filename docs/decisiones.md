@@ -43,6 +43,8 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 | D33 | El job del CDR corre en Google Cloud, con la API; conexión en Configuración y contraseña en Secret Manager | Vigente (02/11/2026) |
 | D34 | Carga v2: atributos administrables, origen del teléfono como evidencia, traducción de valores y estado «descartada» | Vigente (11/11/2026) |
 | D35 | Llamada atendida: disposición ANSWERED del CDR o, si la disposición no lo dice, duración facturada > 0 | Provisoria (11/11/2026) |
+| D36 | Borrado definitivo de empresas y cargas, solo administrador | Vigente (11/11/2026; ajustada por D37) |
+| D37 | Borrar estudios y muestras, cancelar tareas al borrar y verificar la reproducibilidad con borrados (marco inmutable) | Vigente (11/11/2026) |
 
 ## D01 — Cloud SQL Postgres como núcleo
 
@@ -363,11 +365,33 @@ La configuración inicial usa 6 meses de enfriamiento desde el último contacto 
 
 **Contexto.** Deshacer una carga anula y conserva la historia, y no se puede si alguna empresa ya entró a una muestra. Hacía falta poder limpiar pruebas y atender pedidos de supresión (Ley 18.331).
 
-**Decisión.** Solo el administrador puede **Borrar empresa** (ficha) y **Borrar carga** (detalle de la carga), en cualquier estado salvo mientras se procesa. Es definitivo y arrastra todo: historia, teléfonos vinculados (el teléfono se borra si no le queda otra empresa ni rastro), contactos, sucursales, atributos, empresas fusionadas dentro de la que se borra, su lugar en muestras y snapshots, e intentos del CDR y filas del .sav de esos ítems. Borrar una carga borra las empresas que solo venían de ella y recalcula las demás sin lo que aportó; elimina también su archivo. Se confirma escribiendo el RUT o «BORRAR». Queda un registro en Auditoría (`empresa.borrar`, `carga.borrar`) con los conteos.
+**Decisión.** Solo el administrador puede **Borrar empresa** (ficha) y **Borrar carga** (detalle de la carga), en cualquier estado (desde D37 también mientras se procesa: la tarea se cancela). Es definitivo y arrastra todo: historia, teléfonos vinculados (el teléfono se borra si no le queda otra empresa ni rastro), contactos, sucursales, atributos, empresas fusionadas dentro de la que se borra, su lugar en las muestras, e intentos del CDR y filas del .sav de esos ítems. **El marco congelado de los sorteos no se toca** (ajuste de D37): los ítems que se van se copian a `muestra_item_borrado`. Borrar una carga borra las empresas que solo venían de ella y recalcula las demás sin lo que aportó; elimina también su archivo. Se confirma escribiendo el RUT o «BORRAR». Queda un registro en Auditoría (`empresa.borrar`, `carga.borrar`) con los conteos.
 
 **Cómo convive con el append-only.** La migración `0007_borrado_definitivo.sql` deja borrar filas de las historias solo dentro de una transacción marcada con `SET LOCAL empresas.purga = 'on'`, que usa únicamente `api/app/borrado.py`. La auditoría no tiene excepción.
 
-**Consecuencias.** Las muestras que tenían esas empresas pierden esos ítems: sus conteos y la verificación de reproducibilidad dejan de coincidir. Los «no llamar» por número se conservan (y con ellos el teléfono). Sin costo de infraestructura.
+**Consecuencias.** Las muestras que tenían esas empresas pierden esos ítems y sus conteos bajan. La verificación de reproducibilidad los sigue contando (D37); solo las muestras dañadas con la primera versión de este borrado, que sí borraba filas del marco congelado, quedan «no verificables». Los «no llamar» por número se conservan (y con ellos el teléfono). Sin costo de infraestructura.
+
+## D37 — Borrado de estudios y muestras, cancelación de tareas y verificación con borrados
+
+**Contexto.** No se podían borrar estudios ni muestras: las pruebas de sorteo quedaban para siempre y una muestra activa seguía bloqueando a sus empresas. Las cargas trabadas («analizando» o «en proceso» porque Cloud Tasks no ejecutó la tarea o porque se reinició la instancia) no se podían borrar. Y después de borrar empresas, «Verificar reproducibilidad» daba una falsa alarma porque el borrado quitaba filas del marco congelado. (Spec: `specs/SPEC_borrado_estudios_muestras_y_cargas_en_curso.md`; decisiones de Germán Araújo del 11/11/2026.)
+
+**Decisión.**
+
+- **Borrar muestra y borrar estudio, solo administrador**, con confirmación escrita (BORRAR para la muestra, el nombre para el estudio), como tareas (`muestra.borrar`, `estudio.borrar`) y con registro en Auditoría (`muestra.borrar`, `estudio.borrar`) con los conteos. Antes de confirmar, el modal muestra lo que se va a borrar (`GET …/borrado`).
+- **Qué se borra:** la muestra, sus ítems y estados por parte, sus intentos del CDR, sus filas del .sav, la conciliación que apunta a ellos y su marco congelado (si ninguna otra muestra lo usa). Un estudio borra además sus partes, sus ingestas .sav (con las filas que no se asociaron) y los archivos .sav que nadie más usa. Los intentos del CDR sin ítem no se tocan.
+- **Lo que el campo dejó en la base se conserva:** empresas, historia (incluida la de la sala), vínculos y su estado, contactos, teléfonos y último contacto efectivo. Una empresa que tuvo un contacto efectivo sigue en enfriamiento. La ficha marca «ingesta borrada» cuando el linaje apunta a una ingesta que ya no existe; el estudio y la parte siguen en el detalle de la historia.
+- **Cancelación de tareas.** La tarea admite el estado `cancelada`. Borrar una carga cancela su preview o su confirmación; borrar un estudio, sus ingestas .sav en curso. La marca se hace con autocommit; una tarea cancelada no arranca, y una que está corriendo lo detecta al informar progreso y **revierte toda su transacción**: no aplica nada y no deja la carga ni la ingesta en «error». El borrado espera a que la tarea suelte los locks, con `lock_timeout` de 2 minutos; si se agota, falla con un mensaje claro y se reintenta. Una tarea huérfana (figura corriendo pero su proceso murió) no tiene locks: el borrado sigue de inmediato. Las tareas canceladas quedan como registro.
+- **El marco congelado es inmutable.** Borrar una empresa ya no toca `marco_snapshot_item` (la migración quita su FK a `empresa`: el `empresa_id` queda como número, que sin la fila borrada no identifica a nadie). Los ítems que se van se copian a `muestra_item_borrado` con la acción y el registro de Auditoría. «Verificar reproducibilidad» re-sortea sobre el marco completo y compara contra los ítems que quedan más los borrados: **reproducible**, **reproducible con N empresas borradas después del sorteo**, **no coincide** (una alteración real) o **no verificable** (el marco perdió filas con la versión anterior del borrado).
+- **Detalle de carga e ingesta:** una tarea que figura corriendo hace más de 30 minutos (más que el plazo de Cloud Tasks) se muestra como «trabada».
+
+**Descartado.**
+
+- **Revertir lo aprendido por el campo** al borrar una muestra: borraría información verdadera sobre las empresas (un número que no corresponde sigue sin corresponder).
+- **Esperar a que termine la tarea antes de borrar** (lo que hacía D36): una tarea trabada no termina nunca.
+- **Volver a sortear para «arreglar» la verificación:** ocultaría una alteración real; el marco inmutable más los ítems borrados permiten distinguirlas.
+- **Borrar una parte suelta:** queda para más adelante (P2).
+
+**Consecuencias.** Migración `0008_borrado_estudios_muestras.sql`. Sin costo de infraestructura.
 
 ## Preguntas abiertas que heredan del PRD
 

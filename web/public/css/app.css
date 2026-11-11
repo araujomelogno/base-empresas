@@ -364,3 +364,8 @@ tr.fila-total td { font-weight: 700; border-top: 2px solid var(--border); backgr
 .estado-explica { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 1rem; font-size: 0.85rem; }
 .estado-explica dt { font-weight: 700; color: var(--gray); }
 .no-usadas { font-size: 0.8rem; color: var(--gray); margin-top: 0.5rem; }
+
+/* Borrados: tarea cancelada o trabada */
+.est-cancelada, .est-trabada { background: var(--gray-light); color: var(--gray); }
+.modal-conteos { margin: 0.6rem 0 0.9rem; padding-left: 1.2rem; }
+.modal-conteos li { margin: 0.15rem 0; }

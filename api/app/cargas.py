@@ -683,9 +683,13 @@ def obtener(conn, carga_id: int) -> dict:
         "SELECT fila, motivo, datos FROM carga_rechazo WHERE carga_id = %s ORDER BY fila LIMIT 200", (carga_id,)).fetchall()
     carga["revision_pendiente"] = conn.execute(
         "SELECT count(*) AS n FROM revision_fusion WHERE carga_id = %s AND estado = 'pendiente'", (carga_id,)).fetchone()["n"]
+    # La última tarea de la carga (preview o confirmación). «trabada»: figura corriendo hace más de
+    # 30 minutos (más que el plazo de Cloud Tasks): la instancia que la corría probablemente murió.
     carga["tarea"] = conn.execute(
-        "SELECT id, estado, progreso, total, error FROM tarea WHERE tipo = 'carga.confirmar'"
-        " AND (payload->>'carga_id')::int = %s ORDER BY id DESC LIMIT 1", (carga_id,)).fetchone()
+        "SELECT id, tipo, estado, progreso, total, error, creado,"
+        " (estado = 'corriendo' AND creado < now() - make_interval(mins => %s)) AS trabada"
+        " FROM tarea WHERE tipo IN ('carga.preview', 'carga.confirmar')"
+        " AND (payload->>'carga_id')::int = %s ORDER BY id DESC LIMIT 1", (tareas.TRABADA_MINUTOS, carga_id)).fetchone()
     return carga
 
 
