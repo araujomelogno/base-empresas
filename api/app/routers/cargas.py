@@ -77,6 +77,12 @@ def deshacer(carga_id: int, conn=Depends(get_conn), u: Usuario = Depends(requier
     return cargas.deshacer(conn, carga_id, u.email)
 
 
+@router.get("/cargas/{carga_id}/borrado")
+def conteos_borrado(carga_id: int, conn=Depends(get_conn), u: Usuario = Depends(requiere("admin"))):
+    """Lo que se borraría con la carga y qué tareas se cancelarían (para el modal de confirmación)."""
+    return borrado.conteos_carga(conn, carga_id)
+
+
 @router.delete("/cargas/{carga_id}/definitivo")
 def borrar(carga_id: int, u: Usuario = Depends(requiere("admin"))):
     """Borrado definitivo (solo administrador): corre como tarea porque puede tocar miles de empresas."""

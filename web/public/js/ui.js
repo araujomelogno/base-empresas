@@ -47,7 +47,7 @@ const ETIQUETAS = {
   calidad_sin_telefono: 'calidad informada sin teléfono usado', intermediario_confirmado: 'intermediario confirmado por la sala',
   ultimo_contacto_efectivo: 'último contacto efectivo actualizado', total_excluidas: 'total excluidas (sin repetir)',
   baja: 'dada de baja', cerrada: 'empresa cerrada', filtro_origen: 'filtro de origen del teléfono',
-  descartada: 'descartada', deshecha: 'deshecha', sin_dato: 'sin dato',
+  descartada: 'descartada', deshecha: 'deshecha', sin_dato: 'sin dato', cancelada: 'cancelada', trabada: 'trabada',
 };
 export const etiqueta = (s) => ETIQUETAS[s] || String(s ?? '').replace(/_/g, ' ');
 export const est = (s, texto) => `<span class="est est-${esc(s)}">${esc(texto ?? etiqueta(s))}</span>`;
@@ -106,6 +106,17 @@ export function modal({ titulo, cuerpo, acciones = [], ancho }) {
   });
 }
 
+// Confirmación de un borrado definitivo: hay que escribir una palabra (BORRAR, el nombre, el RUT).
+// normalizar: cómo se compara lo escrito (por defecto, sin espacios en los extremos y sin mayúsculas).
+export async function confirmarEscrito({ titulo, cuerpo, palabra, ayuda, normalizar = (s) => s.trim().toUpperCase() }) {
+  return modal({ titulo, cuerpo: `${cuerpo}<p class="mt">${ayuda || `Escribí <strong>${esc(palabra)}</strong> para confirmar.`}</p>
+      <div class="form-group"><input type="text" id="m-borrar" autocomplete="off" /></div>`,
+    acciones: [{ t: 'Cancelar' }, { t: 'Borrar definitivamente', cls: 'btn-danger', fn: (b) => {
+      if (normalizar(b.querySelector('#m-borrar').value) !== normalizar(palabra)) { toast('Lo que escribiste no coincide', 'err'); return false; }
+      return true;
+    } }] });
+}
+
 export async function confirmar(titulo, texto, boton = 'Confirmar', cls = 'btn-orange') {
   return modal({ titulo, cuerpo: `<p>${texto}</p>`, acciones: [{ t: 'Cancelar' }, { t: boton, cls, valor: true }] });
 }
@@ -141,6 +152,7 @@ export async function seguirTarea(tareaId, el, { texto = 'Procesando' } = {}) {
         administrador: Cloud Tasks no está pudiendo ejecutarla (ver «Problemas frecuentes» en la guía de despliegue).</div>` : '');
     if (t.estado === 'ok') return t;
     if (t.estado === 'error') throw new Error(t.error || 'La tarea falló');
+    if (t.estado === 'cancelada') throw new Error(t.error || 'La tarea se canceló');
     await new Promise(r => setTimeout(r, 900));
   }
 }

@@ -1,7 +1,7 @@
 // Cargas de bases, intermediarios y revisión de fusiones (R1.2, R1.3)
 import * as api from '../api.js';
 import { $, $$, esc, main, toast, num, fecha, fechaHora, rutFmt, est, etiqueta, pageHeader, stats, tabla, card, modal,
-  pedirTexto, confirmar, seguirTarea, archivoDrop, activarDrop, tabs } from '../ui.js';
+  pedirTexto, confirmar, confirmarEscrito, seguirTarea, archivoDrop, activarDrop, tabs } from '../ui.js';
 import { actualizarContadores } from '../app.js';
 
 const CAMPOS = {
@@ -281,7 +281,7 @@ export async function detalle(ctx, id) {
     c.estado === 'preview' && ctx.puede('steward') ? `<button class="btn btn-green" id="c-confirmar">Confirmar carga</button>` : '',
     ['preview', 'error'].includes(c.estado) && ctx.puede('steward') ? `<button class="btn btn-outline" id="c-descartar">Descartar</button>` : '',
     c.estado === 'confirmada' && ctx.puede('steward') ? `<button class="btn btn-outline btn-del" id="c-deshacer">Deshacer carga</button>` : '',
-    !enCurso && ctx.puede() ? `<button class="btn btn-danger" id="c-borrar">Borrar carga</button>` : '',
+    ctx.puede() ? `<button class="btn btn-danger" id="c-borrar">Borrar carga</button>` : '',
   ].join('');
   const fpt = k.filas_por_telefonos;
   const porOrigen = Object.entries(k.telefonos_por_origen || {});
@@ -291,6 +291,9 @@ export async function detalle(ctx, id) {
     `<div class="card mb"><div class="card-body"><dl class="estado-explica"><dt>Estado</dt><dd>${est(c.estado)}</dd>
       <dt>Qué significa</dt><dd>${esc(significa)}</dd><dt>Qué sigue</dt><dd>${esc(sigue)}</dd></dl></div></div>` +
     (c.error ? `<div class="alert alert-error">${esc(c.error)}</div>` : '') +
+    (enCurso && c.tarea && c.tarea.trabada ? `<div class="alert alert-warn"><span>La tarea #${c.tarea.id} figura corriendo desde el
+      ${fechaHora(c.tarea.creado)}: está <strong>trabada</strong> (la instancia que la corría probablemente se reinició).
+      ${ctx.puede() ? 'Podés usar «Borrar carga» y volver a cargar el archivo.' : 'Un administrador puede borrar la carga.'}</span></div>` : '') +
     (enCurso ? card('Procesando', `<div id="c-prog"></div>`) : '') +
     (c.estado === 'preview' ? `<div class="alert alert-info"><span>Esto es un preview: la base todavía no cambió. Los conteos son exactamente los que se aplican al confirmar.</span></div>` : '') +
     stats([[k.filas || 0, 'Filas', 's-total'], [k.altas || 0, 'Altas', 's-ok'], [k.actualizaciones || 0, 'Actualizaciones', 's-free'],
@@ -331,10 +334,11 @@ export async function detalle(ctx, id) {
       { t: 'Datos', f: r => `<span class="small muted">${esc(Object.entries(r.datos).filter(([, v]) => v !== null && v !== '').slice(0, 4).map(([kk, v]) => `${kk}: ${v}`).join(' · '))}</span>` },
     ], c.rechazos, 'Sin filas rechazadas'), '', true);
 
+  let borrando = false;   // al borrar se cancela la tarea que se está siguiendo: no recargar una carga que ya no existe
   const recargar = () => detalle(ctx, id);
   if (enCurso && c.tarea) {
     seguirTarea(c.tarea.id, $('#c-prog'), { texto: c.estado === 'analizando' ? 'Calculando el preview' : 'Aplicando la carga' })
-      .then(recargar).catch(e => { toast(e.message, 'err'); recargar(); });
+      .then(() => borrando || recargar()).catch(e => { if (borrando) return; toast(e.message, 'err'); recargar(); });
   }
   if ($('#c-confirmar')) $('#c-confirmar').onclick = async () => {
     if (!await confirmar('Confirmar carga', `Se aplican ${num(k.altas || 0)} altas y ${num(k.actualizaciones || 0)} actualizaciones. La carga se puede deshacer mientras ninguna de sus empresas entre a una muestra.`, 'Confirmar', 'btn-green')) return;
@@ -351,16 +355,17 @@ export async function detalle(ctx, id) {
     toast(`Carga deshecha: ${r.empresas_anuladas} empresas anuladas, ${r.empresas_recalculadas} recalculadas`, 'ok'); recargar();
   };
   if ($('#c-borrar')) $('#c-borrar').onclick = async () => {
-    const txt = `Se elimina la carga y su archivo. Las empresas que solo venían de esta carga se borran del todo: historia, teléfonos,
-      sucursales, atributos, su lugar en las muestras y su actividad de campo (intentos del CDR y respuestas del .sav).
-      Las empresas que también tienen datos de otras fuentes se quedan, sin lo que aportó esta carga. <strong>No se puede deshacer.</strong>
-      Solo queda el registro en Auditoría.<br><br>Escribí <strong>BORRAR</strong> para confirmar.`;
-    const ok = await modal({ titulo: `Borrar carga #${c.id}`, cuerpo: `<p>${txt}</p><div class="form-group"><input type="text" id="m-borrar" autocomplete="off" /></div>`,
-      acciones: [{ t: 'Cancelar' }, { t: 'Borrar definitivamente', cls: 'btn-danger', fn: (b) => {
-        if (b.querySelector('#m-borrar').value.trim().toUpperCase() !== 'BORRAR') { toast('Escribí BORRAR para confirmar', 'err'); return false; }
-        return true;
-      } }] });
+    const n = await api.get(`/cargas/${id}/borrado`);
+    const cancelar = n.tareas_a_cancelar.length ? `<li>Se cancela${n.tareas_a_cancelar.length > 1 ? 'n' : ''} ${n.tareas_a_cancelar.map(t =>
+      `la tarea #${t.id} (${t.tipo === 'carga.confirmar' ? 'aplicando la carga' : 'calculando el preview'}, ${etiqueta(t.estado)})`).join(' y ')}: no se aplica nada.</li>` : '';
+    const ok = await confirmarEscrito({ titulo: `Borrar carga #${c.id}`, palabra: 'BORRAR', cuerpo: `<p>Se elimina la carga y su archivo.</p>
+      <ul class="modal-conteos">${cancelar}
+        <li><strong>${num(n.solo_de_esta_carga)}</strong> empresas que solo venían de esta carga se borran del todo (historia, teléfonos, sucursales,
+          atributos, su lugar en las muestras y su actividad de campo)${n.en_muestras ? `; ${num(n.en_muestras)} de la carga están en muestras` : ''}.</li>
+        <li>Las otras ${num(Math.max(0, n.empresas - n.solo_de_esta_carga))} empresas se quedan, sin lo que aportó esta carga.</li></ul>
+      <p><strong>No se puede deshacer.</strong> Solo queda el registro en Auditoría.</p>` });
     if (!ok) return;
+    borrando = true;
     const { tarea_id } = await api.del(`/cargas/${id}/definitivo`);
     main().innerHTML = pageHeader('Carga', '#' + c.id, 'Borrando…') + card('Borrando la carga', '<div id="c-prog"></div>');
     try {

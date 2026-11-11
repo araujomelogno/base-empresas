@@ -163,6 +163,8 @@ Los contactos no se cargan desde una base: se generan en el campo, con el .sav.
 > **Deshacer una carga.** Desde el detalle de una carga confirmada, **Deshacer carga** anula todo lo que trajo (valores, atributos, vínculos y el origen que sumó a teléfonos que ya existían), mientras ninguna de sus empresas haya entrado a una muestra. La historia no se borra: queda tachada.
 >
 > **Borrar una carga (administrador).** Si la carga no se puede deshacer (porque sus empresas ya están en una muestra) o se quiere eliminar del todo, **Borrar carga** la elimina con su archivo: las empresas que solo venían de esa carga se borran por completo, incluido su lugar en las muestras y su actividad de campo, y las demás se recalculan sin lo que aportó. Se confirma escribiendo BORRAR y no se puede deshacer. De la misma forma, **Borrar empresa** en la ficha elimina una empresa (se confirma escribiendo su RUT). Ambos quedan en Auditoría.
+>
+> **Borrar una carga trabada.** Una carga puede quedar «analizando» o «en proceso» para siempre si su tarea no arrancó o si se cortó a mitad de camino; el detalle avisa cuando la tarea está **trabada** (figura corriendo hace más de 30 minutos). **Borrar carga** funciona en cualquier estado: el modal dice qué tarea se cancela, la tarea se detiene **sin aplicar nada** y queda «cancelada», y después se borra la carga.
 
 Las filas con RUT inválido o sin RUT se rechazan siempre (en la fase 1 toda empresa entra con RUT válido). El motivo queda en el detalle de la carga.
 
@@ -199,6 +201,8 @@ Cada **parte** es una encuesta de Alchemer con su survey ID, su link base y su r
 
 ![Detalle de un estudio](img/15-estudio.png)
 
+> **Borrar un estudio (administrador).** **Borrar estudio** elimina el estudio con sus partes, sus muestras (ítems, intentos del CDR y filas del .sav) y sus ingestas .sav con sus archivos. El modal muestra cuántos de cada uno se van a borrar y hay que escribir el nombre del estudio para confirmar. Lo que la base aprendió de las empresas **se conserva**: contactos y teléfonos nuevos, calidad de los números, historia y último contacto efectivo (las empresas con un contacto efectivo siguen en enfriamiento). Si una ingesta del estudio se estaba procesando, se cancela. No se puede deshacer; queda en Auditoría.
+
 ### Sortear una muestra
 
 Desde el estudio, **Nueva muestra**:
@@ -217,6 +221,15 @@ Al tocar **Crear y sortear** el sistema congela el marco (snapshot), aplica las 
 
 > **Muestras auditables.** Con la misma semilla, el mismo snapshot y la misma configuración, el sorteo da exactamente la misma lista en el mismo orden. El botón **Verificar reproducibilidad** lo comprueba en cualquier momento.
 
+**Qué responde «Verificar reproducibilidad».** El marco congelado no cambia nunca, aunque después se borren empresas o cargas. Por eso hay cuatro respuestas posibles:
+
+| Respuesta | Qué significa |
+| --- | --- |
+| Reproducible ✓ | El re-sorteo da la misma lista en el mismo orden |
+| Reproducible ✓ — N empresas se borraron después del sorteo | Coincide contando las empresas que se borraron (por «Borrar empresa» o «Borrar carga»). La lista dice el estrato, el orden, el rol, el RUT si se conoce, y cuándo y quién las borró. La pantalla de la muestra también avisa «N empresas borradas después del sorteo» |
+| ¡El re-sorteo no coincide! | La muestra se alteró de verdad: revisar la Auditoría |
+| No verificable | Se borraron empresas de esta muestra con una versión anterior del sistema, que no guardaba los borrados. Ver Auditoría |
+
 ### Seguir la muestra
 
 La pantalla de la muestra muestra los totales, las exclusiones del sorteo, los avisos (por ejemplo, "el estrato Grande no alcanza: pidió 10 y hay 8 disponibles"), el **avance por estrato** (llamados, contactabilidad, completas, tasa de respuesta, rechazos, fuera de marco) y la lista de ítems con su estado en cada parte.
@@ -224,6 +237,8 @@ La pantalla de la muestra muestra los totales, las exclusiones del sorteo, los a
 ![Muestra](img/17-muestra.png)
 
 Mientras la muestra está activa, sus empresas no pueden salir en otra muestra. **Cerrar muestra** las libera y deja de permitir exportaciones.
+
+> **Borrar una muestra (administrador).** **Borrar muestra** (en cualquier estado) elimina la muestra con sus ítems, sus intentos del CDR, sus filas del .sav y su marco congelado; el modal muestra cuántos y se confirma escribiendo BORRAR. Sus empresas vuelven a estar disponibles, salvo las que quedaron en enfriamiento por un contacto efectivo: lo que la base aprendió en el campo se conserva. No se puede deshacer; queda en Auditoría.
 
 ### Liberar reemplazos
 

@@ -17,6 +17,7 @@ Registro maestro de empresas por RUT del que salen muestras aleatorias y auditab
 | Despliegue del alta de usuarios con enlace de acceso | [`docs/despliegue_alta_usuarios.md`](docs/despliegue_alta_usuarios.md) |
 | Despliegue del job del CDR en Google Cloud | [`docs/despliegue_job_cdr.md`](docs/despliegue_job_cdr.md) |
 | Despliegue de la carga v2 (atributos y origen del teléfono) | [`docs/despliegue_carga_v2.md`](docs/despliegue_carga_v2.md) |
+| Despliegue del borrado de estudios, muestras y cargas en curso | [`docs/despliegue_borrado_estudios.md`](docs/despliegue_borrado_estudios.md) |
 
 ## Estructura
 

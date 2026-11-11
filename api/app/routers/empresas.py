@@ -83,7 +83,9 @@ def ficha(rut: str, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)
                                        (eid,)).fetchone()
     e["historia"] = conn.execute(
         "SELECT h.id, h.campo, h.valor, h.fuente_tipo, h.fuente_id, h.confianza, h.actor, h.fecha, h.detalle,"
-        " (c.estado = 'deshecha' OR f.deshecha IS NOT NULL) AS anulada"
+        " (c.estado = 'deshecha' OR f.deshecha IS NOT NULL) AS anulada,"
+        " (h.fuente_tipo IN ('sav', 'sala') AND h.fuente_id IS NOT NULL"
+        "  AND NOT EXISTS (SELECT 1 FROM sav_ingesta s WHERE s.id = h.fuente_id)) AS ingesta_borrada"
         " FROM empresa_campo_historia h LEFT JOIN carga c ON h.fuente_tipo = 'carga' AND c.id = h.fuente_id"
         " LEFT JOIN empresa_fusion f ON h.fuente_tipo = 'fusion' AND f.id = h.fuente_id"
         " WHERE h.empresa_id = %s ORDER BY h.campo, h.fecha DESC, h.id DESC", (eid,)).fetchall()
