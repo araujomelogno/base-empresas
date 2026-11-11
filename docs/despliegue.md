@@ -667,6 +667,7 @@ El job del CDR (Cloud Run job `empresas-cdr`) usa la misma imagen y las mismas v
 | "El enlace venció" o "ya se usó" al abrir el correo | Los enlaces vencen en una hora | En el login, «¿Olvidaste tu contraseña?», o «Reenviar acceso» en **Usuarios** |
 | "Token inválido" | Reloj del equipo desfasado o sesión vencida | Cerrar sesión y volver a entrar; verificar la hora del equipo |
 | Pantalla "Falta configurar Firebase" | `config.js` tiene los valores de ejemplo | Completar `firebaseConfig` (paso 1) y correr `./infra/desplegar.sh web` |
+| Una carga, ingesta o preview queda "pendiente" y la pantalla avisa que la tarea no arrancó | Cloud Tasks no puede llamar a la API (dirección o token incorrectos, cola pausada) | Buscar en los registros de Cloud Run pedidos a `/api/tareas/` con error (`gcloud logging read 'httpRequest.requestUrl:"/tareas/"' --limit 10`). Corregido el problema, la tarea se ejecuta a mano: `curl -X POST "$URL/api/tareas/NUMERO/ejecutar" -H "X-Tarea-Token: $(gcloud secrets versions access latest --secret empresas-tarea-token)"` |
 | Una carga queda "analizando" mucho tiempo | La tarea falló o la cola está pausada | Ver **Cloud Tasks** y los registros de Cloud Run; la pantalla muestra el error |
 | El CSV sale con menos renglones de lo esperado | Ítems sin teléfono discable o ya completos en la parte | El resumen de la exportación lo detalla |
 | CDR: "No se resuelve el host" | Nombre del servidor mal escrito | Corregir **Servidor (host)** en Configuración → CDR |
