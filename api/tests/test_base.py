@@ -142,8 +142,10 @@ def test_mapeo_sugerido_y_plantilla(api):
     assert a["mapeo"]["rut"] == "Nro RUT" and a["mapeo"]["razon_social"] == "Denominación"
     assert a["mapeo"]["telefonos"] == ["Tel 1", "Celular"]
     a["mapeo"]["razon_social"] = None
-    api.post("/cargas", rol="steward", json={"archivo_id": a["archivo_id"], "fuente": "Dir", "tipo_fuente": "directorio",
-                                            "licencia": "uso interno", "mapeo": a["mapeo"]})
+    a["mapeo"]["origen_defecto"] = "sin_dato"
+    r = api.post("/cargas", rol="steward", json={"archivo_id": a["archivo_id"], "fuente": "Dir", "tipo_fuente": "directorio",
+                                                "licencia": "uso interno", "mapeo": a["mapeo"]})
+    assert r.status_code == 200, r.text
     b = api.subir("/cargas/analizar", "y.csv", contenido, rol="steward", tipo_fuente="directorio").json()
     assert b["origen_mapeo"] == "plantilla" and "razon_social" not in b["mapeo"]
 
@@ -272,7 +274,10 @@ def test_auditoria(api):
     assert {"carga.crear", "carga.confirmar"} <= acciones
 
 
-def test_contactos_ocultos_para_lectura(api):
-    cargar(api, [fila(0, Contacto="Ana Pérez", Cargo="Gerente")])
+def test_contactos_ocultos_para_lectura(api, sql):
+    # Los contactos no vienen en las bases (se generan con el .sav): se crea uno directo en la base
+    cargar(api, [fila(0)])
+    sql.execute("INSERT INTO contacto (empresa_id, nombre, cargo, fuente_tipo) SELECT id, 'Ana Pérez', 'Gerente', 'sav'"
+                " FROM empresa WHERE rut = %s", (rut_valido(0),))
     assert api.get(f"/empresas/{rut_valido(0)}", rol="steward").json()["contactos"][0]["nombre"] == "Ana Pérez"
     assert api.get(f"/empresas/{rut_valido(0)}", rol="lectura").json()["contactos"][0]["nombre"] == "(dato personal oculto)"

@@ -8,7 +8,7 @@ La historia es append-only: deshacer una carga o una fusión no borra filas, las
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
-from . import auditoria, rut as rutmod, telefonos as telmod
+from . import auditoria, catalogos, rut as rutmod, telefonos as telmod
 from .util import razon_normalizada
 
 CAMPOS = ("razon_social", "fantasia", "naturaleza", "ciiu", "tamano", "departamento",
@@ -67,6 +67,7 @@ def vigentes(conn, empresa_id: int, campos=None) -> dict:
 
 def recalcular(conn, empresa_id: int, campos=None) -> dict:
     """Recalcula y guarda los valores vigentes; devuelve {campo: (antes, después)} de lo que cambió."""
+    todos = campos is None
     campos = tuple(campos or CAMPOS)
     emp = conn.execute("SELECT e.*, n.codigo AS naturaleza FROM empresa e "
                        "LEFT JOIN naturaleza_juridica n ON n.id = e.naturaleza_id WHERE e.id = %s",
@@ -89,7 +90,60 @@ def recalcular(conn, empresa_id: int, campos=None) -> dict:
     if sets:
         conn.execute(f"UPDATE empresa SET {', '.join(sets)}, actualizado = now() WHERE id = %s",
                      (*args, empresa_id))
+    if todos:  # también los atributos (deshacer una carga, fusionar)
+        recalcular_atributos(conn, empresa_id)
     return cambios
+
+
+def recalcular_atributos(conn, empresa_id: int, claves=None) -> dict:
+    """Recalcula el valor vigente de los atributos (todos o los indicados). Devuelve los cambios."""
+    pref = catalogos.PREFIJO
+    if claves is None:
+        campos = [r["campo"] for r in conn.execute(
+            "SELECT DISTINCT campo FROM empresa_campo_historia WHERE empresa_id = %s AND campo LIKE 'atributo.%%'"
+            " UNION SELECT 'atributo.' || a.clave FROM empresa_atributo ea JOIN atributo a ON a.id = ea.atributo_id"
+            " WHERE ea.empresa_id = %s", (empresa_id, empresa_id))]
+    else:
+        campos = [pref + c for c in claves]
+    if not campos:
+        return {}
+    antes = {r["clave"]: r["valor_crudo"] for r in conn.execute(
+        "SELECT a.clave, ea.valor_crudo FROM empresa_atributo ea JOIN atributo a ON a.id = ea.atributo_id"
+        " WHERE ea.empresa_id = %s", (empresa_id,))}
+    vig = vigentes(conn, empresa_id, tuple(campos))
+    ganadores = {c: vig.get(c) for c in campos}
+    catalogos.recalcular_atributos(conn, empresa_id, ganadores)
+    cambios = {}
+    for c, g in ganadores.items():
+        clave = c[len(pref):]
+        nuevo = g["valor"] if g else None
+        if antes.get(clave) != nuevo:
+            cambios[c] = (antes.get(clave), nuevo)
+    return cambios
+
+
+def aplicar_atributos(conn, empresa_id: int, valores: dict, fuente_tipo: str, fuente_id, confianza: int,
+                      actor: str) -> tuple[dict, dict]:
+    """Como aplicar_valores, para atributos. valores: {clave: {"valor": str, "invalido": bool}}."""
+    limpios = {k: v for k, v in valores.items() if v and v.get("valor") not in (None, "")}
+    if not limpios:
+        return {}, {}
+    pref = catalogos.PREFIJO
+    antes = vigentes(conn, empresa_id, tuple(pref + k for k in limpios))
+    with conn.cursor() as cur:
+        cur.executemany(
+            "INSERT INTO empresa_campo_historia (empresa_id, campo, valor, fuente_tipo, fuente_id, confianza, actor, detalle)"
+            " VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+            [(empresa_id, pref + k, str(v["valor"]), fuente_tipo, fuente_id, confianza, actor,
+              Jsonb({"invalido": True}) if v.get("invalido") else None) for k, v in limpios.items()])
+    cambios = recalcular_atributos(conn, empresa_id, list(limpios))
+    conflictos = {}
+    for k, v in limpios.items():
+        previo = antes.get(pref + k)
+        if previo is not None and previo["valor"] != str(v["valor"]) and pref + k not in cambios:
+            conflictos[pref + k] = {"vigente": previo["valor"], "fuente_vigente": previo["fuente_tipo"],
+                                    "llego": str(v["valor"])}
+    return cambios, conflictos
 
 
 def aplicar_valores(conn, empresa_id: int, valores: dict, fuente_tipo: str, fuente_id, confianza: int,
@@ -165,8 +219,23 @@ def telefono(conn, valor, prefijos=()) -> tuple[dict | None, telmod.Telefono, bo
     return conn.execute("SELECT * FROM telefono WHERE crudo = %s AND e164 IS NULL", (n.crudo,)).fetchone(), n, False
 
 
+ORIGEN_POR_FUENTE = {"sala": "sala", "sav": "sala", "manual": "manual"}
+
+
 def vincular(conn, telefono_id: int, empresa_id: int, fuente_tipo: str, fuente_id, actor: str,
-             contacto_id=None, sucursal_id=None, estado="sin_verificar", detalle=None) -> tuple[dict, bool]:
+             contacto_id=None, sucursal_id=None, estado="sin_verificar", detalle=None,
+             origen: str | None = None) -> tuple[dict, bool]:
+    """Crea el vínculo (o devuelve el existente) y registra el origen del teléfono como evidencia.
+    Sin origen explícito: 'sala' para la sala, 'manual' para la ficha y 'sin_dato' para el resto."""
+    v, nuevo = _vincular(conn, telefono_id, empresa_id, fuente_tipo, fuente_id, actor, contacto_id, sucursal_id,
+                         estado, detalle)
+    catalogos.registrar_origen(conn, v["id"], origen or ORIGEN_POR_FUENTE.get(fuente_tipo, catalogos.SIN_DATO),
+                               fuente_tipo, fuente_id)
+    return v, nuevo
+
+
+def _vincular(conn, telefono_id, empresa_id, fuente_tipo, fuente_id, actor, contacto_id, sucursal_id, estado,
+              detalle) -> tuple[dict, bool]:
     v = conn.execute(
         "INSERT INTO telefono_vinculo (telefono_id, empresa_id, contacto_id, sucursal_id, estado, fuente_tipo, fuente_id)"
         " VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (telefono_id, empresa_id) DO NOTHING RETURNING *",
@@ -242,7 +311,17 @@ def fusionar(conn, absorbente: dict, absorbida: dict, actor: str, motivo: str | 
         ya = conn.execute("SELECT 1 FROM telefono_vinculo WHERE empresa_id = %s AND telefono_id = %s",
                           (a, v["telefono_id"])).fetchone()
         if ya:
-            movidos["vinculos_borrados"].append(dict(v))
+            # El vínculo que sobrevive hereda los orígenes del que se borra (se guardan para deshacer)
+            origenes = conn.execute("SELECT origen_id, fuente_tipo, fuente_id, fecha FROM telefono_vinculo_origen"
+                                    " WHERE vinculo_id = %s", (v["id"],)).fetchall()
+            ya_id = conn.execute("SELECT id FROM telefono_vinculo WHERE empresa_id = %s AND telefono_id = %s",
+                                 (a, v["telefono_id"])).fetchone()["id"]
+            copiados = [r["origen_id"] for r in conn.execute(
+                "INSERT INTO telefono_vinculo_origen (vinculo_id, origen_id, fuente_tipo, fuente_id, fecha)"
+                " SELECT %s, origen_id, fuente_tipo, fuente_id, fecha FROM telefono_vinculo_origen WHERE vinculo_id = %s"
+                " ON CONFLICT DO NOTHING RETURNING origen_id", (ya_id, v["id"]))]
+            movidos["vinculos_borrados"].append({**dict(v), "origenes": origenes, "origenes_copiados": copiados,
+                                                 "copiados_a": ya_id})
             conn.execute("DELETE FROM telefono_vinculo WHERE id = %s", (v["id"],))
         else:
             movidos["vinculos"].append(v["id"])
@@ -298,6 +377,13 @@ def deshacer_fusion(conn, fusion_id: int, actor: str):
             (v["id"], v["telefono_id"], b, v["contacto_id"], v["sucursal_id"], v["estado"], v["fuente_tipo"],
              v["fuente_id"], v["fecha"]),
         )
+        for o in v.get("origenes") or []:
+            conn.execute("INSERT INTO telefono_vinculo_origen (vinculo_id, origen_id, fuente_tipo, fuente_id, fecha)"
+                         " VALUES (%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+                         (v["id"], o["origen_id"], o["fuente_tipo"], o["fuente_id"], o["fecha"]))
+        if v.get("origenes_copiados"):
+            conn.execute("DELETE FROM telefono_vinculo_origen WHERE vinculo_id = %s AND origen_id = ANY(%s)",
+                         (v["copiados_a"], v["origenes_copiados"]))
     if m["contactos"]:
         conn.execute("UPDATE contacto SET empresa_id = %s WHERE id = ANY(%s)", (b, m["contactos"]))
     if m["sucursales"]:

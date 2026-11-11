@@ -4,7 +4,7 @@ import { $, $$, esc, main, toast, num, fechaHora, est, pageHeader, tabla, card, 
   json } from '../ui.js';
 
 const CAMPOS_CSV = ['id_item', 'tel_e164', 'tel_nacional', 'tel_sin_mas', 'rut', 'razon_social', 'fantasia', 'contacto', 'contacto_cargo',
-  'departamento', 'localidad', 'estrato', 'link', 'parte', 'muestra'];
+  'departamento', 'localidad', 'estrato', 'link', 'parte', 'muestra', 'origen_telefono'];
 const DIAS = ['', 'L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
 export async function config(ctx) {
@@ -191,6 +191,126 @@ function activarCdr(ctx) {
     if (!$('#cd-desde').value) return toast('Indicá la fecha desde', 'err');
     correr({ desde: $('#cd-desde').value, hasta: $('#cd-hasta').value || null });
   };
+}
+
+// ── Atributos (C1) ──
+const TIPOS_ATRIBUTO = { texto: 'Texto', numero: 'Número', fecha: 'Fecha', lista: 'Lista de opciones' };
+const NUCLEO = [['rut', 'RUT (obligatorio)'], ['razon_social', 'Razón social'], ['fantasia', 'Nombre de fantasía'],
+  ['naturaleza', 'Naturaleza jurídica'], ['ciiu', 'CIIU / rubro'], ['tamano', 'Tamaño'], ['departamento', 'Departamento'],
+  ['localidad', 'Localidad'], ['direccion', 'Dirección'], ['web', 'Web'], ['estado', 'Estado (activa / cerrada)']];
+
+function formAtributo(a = {}) {
+  const nuevo = !a.id;
+  return `<div class="form-row"><div class="form-group"><label>Nombre visible</label><input type="text" id="at-nombre" value="${esc(a.nombre || '')}" placeholder="p. ej. Cantidad de empleados" /></div>
+    <div class="form-group"><label>Clave</label><input type="text" id="at-clave" value="${esc(a.clave || '')}" ${nuevo ? '' : 'disabled'} placeholder="cantidad_empleados" />
+    <div class="field-hint">${nuevo ? 'En minúsculas, sin espacios ni tildes. No se puede cambiar después.' : 'La clave no se puede cambiar.'}</div></div></div>
+    <div class="form-row"><div class="form-group"><label>Tipo</label><select class="fselect" id="at-tipo" ${nuevo || !a.n_valores ? '' : 'disabled'}>${
+      Object.entries(TIPOS_ATRIBUTO).map(([k, t]) => `<option value="${k}" ${k === (a.tipo || 'texto') ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+    <div class="form-group" id="at-opciones-g"><label>Opciones (una por línea)</label><textarea id="at-opciones" rows="3">${esc((a.opciones || []).join('\n'))}</textarea></div></div>
+    <div class="form-group"><label>Sinónimos para el mapeo automático (separados por coma)</label><input type="text" id="at-sinonimos" value="${esc((a.sinonimos || []).join(', '))}" placeholder="p. ej. empleados, personal, cant. empleados" />
+    <div class="field-hint">Si una columna del archivo se llama así, la carga la reconoce sola. También se reconocen el nombre y la clave.</div></div>
+    <label class="check"><input type="checkbox" id="at-filtro" ${a.filtrable ? 'checked' : ''} /> Sirve como filtro del sorteo</label>
+    <label class="check" id="at-estrato-g"><input type="checkbox" id="at-estrato" ${a.estratificable ? 'checked' : ''} /> Sirve como estrato (solo listas)</label>
+    ${nuevo ? '' : `<label class="check"><input type="checkbox" id="at-activo" ${a.activo ? 'checked' : ''} /> Activo</label>`}`;
+}
+
+function leerAtributo(b) {
+  return {
+    clave: $('#at-clave', b).value.trim() || null, nombre: $('#at-nombre', b).value.trim(), tipo: $('#at-tipo', b).value,
+    opciones: $('#at-opciones', b).value.split('\n').map(s => s.trim()).filter(Boolean),
+    sinonimos: $('#at-sinonimos', b).value.split(',').map(s => s.trim()).filter(Boolean),
+    filtrable: $('#at-filtro', b).checked, estratificable: $('#at-estrato', b).checked,
+    ...($('#at-activo', b) ? { activo: $('#at-activo', b).checked } : {}),
+  };
+}
+
+function activarFormAtributo() {
+  const ver = () => {
+    const lista = $('#at-tipo').value === 'lista';
+    $('#at-opciones-g').style.display = lista ? '' : 'none';
+    $('#at-estrato-g').style.display = lista ? '' : 'none';
+    if (!lista) $('#at-estrato').checked = false;
+  };
+  $('#at-tipo').onchange = ver;
+  ver();
+}
+
+export async function atributos(ctx) {
+  const lista = await api.get('/atributos');
+  const editable = ctx.puede('admin');
+  main().innerHTML = pageHeader('Atributos', 'de empresa', 'Datos que traen las bases y que no son campos del sistema: cantidad de empleados, exporta sí/no, cámara a la que pertenece… Un atributo nuevo se puede mapear en la próxima carga y usar para filtrar y estratificar.',
+    editable ? `<button class="btn btn-orange" id="at-nuevo">+ Nuevo atributo</button>` : '') +
+    card('Atributos', tabla([
+      { t: 'Nombre', f: a => `<span class="td-strong">${esc(a.nombre)}</span><div class="small muted mono">${esc(a.clave)}</div>` },
+      { t: 'Tipo', f: a => esc(TIPOS_ATRIBUTO[a.tipo]) + (a.opciones.length ? `<div class="small muted">${a.opciones.map(esc).join(' · ')}</div>` : '') },
+      { t: 'Sinónimos', f: a => `<span class="small">${a.sinonimos.map(esc).join(', ') || '—'}</span>` },
+      { t: 'Filtro', f: a => a.filtrable ? est('ok', 'sí') : '—' }, { t: 'Estrato', f: a => a.estratificable ? est('ok', 'sí') : '—' },
+      { t: 'Empresas con valor', cls: 'num', f: a => num(a.n_valores) }, { t: 'Estado', f: a => a.activo ? est('activa', 'activo') : est('pendiente', 'inactivo') },
+      { t: '', f: a => editable ? `<div class="td-actions"><button class="btn btn-outline btn-sm" data-at-editar="${a.id}">Editar</button>
+        ${a.n_valores ? '' : `<button class="btn btn-outline btn-sm btn-del" data-at-borrar="${a.id}">Borrar</button>`}</div>` : '' },
+    ], lista, 'Todavía no hay atributos'), '', true) +
+    card('Campos del sistema (no editables)', `<p class="small muted mb">Las reglas de disponibilidad, los estratos, la fusión y las exclusiones dependen de estos campos, por eso no se pueden borrar ni renombrar. Las cargas también aceptan teléfonos (con su origen) y los datos de una sucursal.</p>
+      <div class="chips">${NUCLEO.map(([k, t]) => `<span class="chip" title="${esc(k)}">${esc(t)}</span>`).join('')}</div>`) +
+    `<p class="small muted mt">Desactivar un atributo lo saca del mapeo y de los filtros pero conserva sus valores. Solo se borra un atributo sin valores y que no se use en una muestra activa.</p>`;
+  const guardar = async (a) => {
+    const r = await modal({ titulo: a ? 'Editar atributo' : 'Nuevo atributo', ancho: 640, cuerpo: formAtributo(a || {}),
+      acciones: [{ t: 'Cancelar' }, { t: 'Guardar', cls: 'btn-orange', fn: (b) => a ? api.put('/atributos/' + a.id, leerAtributo(b)) : api.post('/atributos', leerAtributo(b)) }] });
+    if (r) { toast('Atributo guardado', 'ok'); atributos(ctx); }
+  };
+  if ($('#at-nuevo')) $('#at-nuevo').onclick = () => { guardar(null); activarFormAtributo(); };
+  $$('[data-at-editar]').forEach(b => b.onclick = () => { guardar(lista.find(a => a.id === +b.dataset.atEditar)); activarFormAtributo(); });
+  $$('[data-at-borrar]').forEach(b => b.onclick = async () => {
+    const a = lista.find(x => x.id === +b.dataset.atBorrar);
+    if (!await confirmar('Borrar atributo', `Se borra «${a.nombre}». No tiene valores cargados.`, 'Borrar', 'btn-danger')) return;
+    try { await api.del('/atributos/' + a.id); atributos(ctx); } catch (e) { toast(e.message, 'err'); }
+  });
+}
+
+// ── Orígenes de teléfono (C4) ──
+export async function origenes(ctx) {
+  const lista = await api.get('/origenes-telefono');
+  const editable = ctx.puede('admin');
+  main().innerHTML = pageHeader('Orígenes', 'de teléfono', 'De dónde salió cada teléfono (guía, DGI, web, estudio anterior…). El orden es la prioridad: el CSV para uContact pone primero los teléfonos de los orígenes de arriba.',
+    editable ? `<button class="btn btn-orange" id="or-nuevo">+ Nuevo origen</button>` : '') +
+    card('Orígenes en orden de prioridad', tabla([
+      { t: '#', cls: 'num', f: (o, i) => i + 1 },
+      { t: 'Origen', f: o => `<span class="td-strong">${esc(o.nombre)}</span><div class="small muted mono">${esc(o.codigo)}</div>` },
+      { t: 'Tipo', f: o => o.sistema ? est('pendiente', 'de sistema') : '—' },
+      { t: 'Teléfonos', cls: 'num', f: o => num(o.n_vinculos) }, { t: 'Estado', f: o => o.activo ? est('activa', 'activo') : est('pendiente', 'inactivo') },
+      { t: '', f: (o, i) => editable ? `<div class="td-actions">
+        ${o.codigo !== 'sin_dato' && i > 0 ? `<button class="btn btn-outline btn-sm" data-or-subir="${i}" title="Subir prioridad">↑</button>` : ''}
+        ${o.codigo !== 'sin_dato' && i < lista.length - 2 ? `<button class="btn btn-outline btn-sm" data-or-bajar="${i}" title="Bajar prioridad">↓</button>` : ''}
+        <button class="btn btn-outline btn-sm" data-or-editar="${o.id}">Editar</button>
+        ${!o.sistema && !o.n_vinculos ? `<button class="btn btn-outline btn-sm btn-del" data-or-borrar="${o.id}">Borrar</button>` : ''}</div>` : '' },
+    ], lista), '', true) +
+    `<p class="small muted mt"><strong>Sala</strong> (teléfonos alternativos que llegan en el .sav), <strong>Manual</strong> (agregados en la ficha) y <strong>Sin dato</strong> (teléfonos cargados antes de que existiera el origen) son de sistema: no se borran. Un origen con teléfonos no se borra: se desactiva.</p>`;
+  const mover = async (i, d) => {
+    const cods = lista.map(o => o.codigo);
+    [cods[i], cods[i + d]] = [cods[i + d], cods[i]];
+    await api.put('/origenes-telefono/orden', { codigos: cods }); origenes(ctx);
+  };
+  $$('[data-or-subir]').forEach(b => b.onclick = () => mover(+b.dataset.orSubir, -1));
+  $$('[data-or-bajar]').forEach(b => b.onclick = () => mover(+b.dataset.orBajar, 1));
+  const form = (o = {}) => `<div class="form-row"><div class="form-group"><label>Nombre</label><input type="text" id="or-nombre" value="${esc(o.nombre || '')}" placeholder="p. ej. Guía telefónica" /></div>
+    <div class="form-group"><label>Código</label><input type="text" id="or-codigo" value="${esc(o.codigo || '')}" ${o.id ? 'disabled' : ''} placeholder="se genera del nombre" /></div></div>
+    ${o.id && !o.sistema ? `<label class="check"><input type="checkbox" id="or-activo" ${o.activo ? 'checked' : ''} /> Activo</label>` : ''}`;
+  if ($('#or-nuevo')) $('#or-nuevo').onclick = async () => {
+    const r = await modal({ titulo: 'Nuevo origen de teléfono', cuerpo: form() + `<p class="field-hint">Se agrega al final de la lista (antes de «Sin dato»); después se puede subir.</p>`,
+      acciones: [{ t: 'Cancelar' }, { t: 'Guardar', cls: 'btn-orange', fn: (b) => api.post('/origenes-telefono', { nombre: $('#or-nombre', b).value, codigo: $('#or-codigo', b).value.trim() || null }) }] });
+    if (r) origenes(ctx);
+  };
+  $$('[data-or-editar]').forEach(b => b.onclick = async () => {
+    const o = lista.find(x => x.id === +b.dataset.orEditar);
+    const r = await modal({ titulo: 'Editar origen', cuerpo: form(o),
+      acciones: [{ t: 'Cancelar' }, { t: 'Guardar', cls: 'btn-orange', fn: (x) => api.put('/origenes-telefono/' + o.id, {
+        nombre: $('#or-nombre', x).value, ...($('#or-activo', x) ? { activo: $('#or-activo', x).checked } : {}) }) }] });
+    if (r) origenes(ctx);
+  });
+  $$('[data-or-borrar]').forEach(b => b.onclick = async () => {
+    const o = lista.find(x => x.id === +b.dataset.orBorrar);
+    if (!await confirmar('Borrar origen', `Se borra «${o.nombre}». No tiene teléfonos.`, 'Borrar', 'btn-danger')) return;
+    try { await api.del('/origenes-telefono/' + o.id); origenes(ctx); } catch (e) { toast(e.message, 'err'); }
+  });
 }
 
 export async function naturalezas(ctx) {

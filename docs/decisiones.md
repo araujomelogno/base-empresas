@@ -41,6 +41,8 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 | D31 | Cloud SQL arranca en `db-f1-micro`; el paso siguiente es `db-g1-small` | Vigente (29/10/2026) |
 | D32 | Alta de usuarios con enlace de acceso: un solo paso, clave aleatoria y correo desde `notificaciones@` | Vigente (02/11/2026) |
 | D33 | El job del CDR corre en Google Cloud, con la API; conexión en Configuración y contraseña en Secret Manager | Vigente (02/11/2026) |
+| D34 | Carga v2: atributos administrables, origen del teléfono como evidencia, traducción de valores y estado «descartada» | Vigente (11/11/2026) |
+| D35 | Llamada atendida: disposición ANSWERED del CDR o, si la disposición no lo dice, duración facturada > 0 | Provisoria (11/11/2026) |
 
 ## D01 — Cloud SQL Postgres como núcleo
 
@@ -323,6 +325,39 @@ La configuración inicial usa 6 meses de enfriamiento desde el último contacto 
 - **Validar el certificado TLS del MySQL:** el servidor usa un certificado propio; se cifra sin validar la CA. Con «requerido», el job se niega a seguir si la conexión no quedó cifrada.
 
 **Consecuencias.** El job escribe directo en la base, así que deja de usar `JOB_TOKEN` (D26). La migración 0005 agrega `cdr_estado`, `cdr_corrida` y la columna `cdr_lote.corrida_id`. La carpeta `jobs/cdr/` se elimina; sus tests pasan a `api/tests/test_cdr_job.py`. La fase 0 puede seguir corriendo en una laptop.
+
+## D34 — Carga v2: atributos administrables y origen del teléfono
+
+**Contexto.** En la primera prueba en producción la carga resultó difícil de usar y dejaba afuera información de negocio: los campos cargables estaban fijos en el código, el mapeo mostraba 21 campos juntos (incluidos contactos, que las bases no traen), no se guardaba de dónde salió cada teléfono y el estado de la carga no explicaba nada. (Spec: `specs/SPEC_carga_v2_atributos_y_origen_telefono.md`.)
+
+**Decisión.**
+
+- **Núcleo fijo, atributos administrables.** RUT, razón social, fantasía, naturaleza, CIIU, tamaño, departamento, localidad, dirección, web y estado siguen en el código: de ellos dependen la disponibilidad, los estratos, la fusión y las exclusiones. Todo lo demás es un **atributo** (`atributo`: clave inmutable, tipo texto/número/fecha/lista, sinónimos, filtro, estrato, activo) que crea un administrador.
+- **Mismo linaje para los atributos.** La historia va a `empresa_campo_historia` con `campo = 'atributo.<clave>'` y la misma regla de supervivencia (D07). `empresa_atributo` guarda el ganador **tipado** (texto, número o fecha) para filtrar y estratificar en SQL. Un número o una fecha que no se puede interpretar no rechaza la fila: queda como crudo, se cuenta como inválido y no entra a los filtros.
+- **El origen del teléfono es evidencia del vínculo**, no un atributo del teléfono: `telefono_vinculo_origen` (vínculo, origen, carga, fecha), único por vínculo y origen. Un número que llega de dos orígenes queda con los dos; un teléfono cuenta en cada origen y los totales lo cuentan una vez. El catálogo `origen_telefono` tiene prioridad (el orden del CSV) y tres orígenes de sistema: **Sala** (`EC_TEL_ALT`), **Manual** (ficha) y **Sin dato** (vínculos anteriores al cambio, que la migración deja así).
+- **Origen por columna o fijo, con origen por defecto obligatorio.** El mapeo guarda `origenes_telefono` ({columna de teléfono: {columna} | {fijo}}) y `origen_defecto`; `telefonos` sigue siendo la lista de columnas, así las plantillas viejas siguen abriendo.
+- **Traducción de valores confirmada, nunca automática.** Los valores de origen y de atributos de lista que no coinciden exactamente con el catálogo se listan con su cantidad de filas; se sugiere sin mayúsculas, tildes ni espacios, pero la API rechaza la carga mientras quede alguno sin traducir. Es el criterio de la ingesta del .sav (D23). La traducción queda en la plantilla del tipo de fuente.
+- **Sin contactos en las cargas.** Se generan en el campo (`EC_RESP_*` del .sav). Una plantilla vieja con campos de contacto se abre y esos campos se ignoran con un aviso.
+- **«Descartada» ≠ «deshecha».** Descartar una carga en preview o en error la deja `descartada`; `deshecha` queda solo para una carga confirmada que se anuló. La migración 0006 pasa a `descartada` las deshechas que nunca se confirmaron. Deshacer también borra el origen que la carga sumó a vínculos que ya existían.
+- **Sorteo y CSV.** Los filtros por atributo y por origen quedan en `muestra.criterios` y entran al snapshot (D18), así la muestra se reproduce con su semilla. El filtro de origen es una regla más del cuadro de exclusiones (`filtro_origen`). La exportación guarda en `muestra.exportacion` los orígenes elegidos y el orden (por prioridad de origen y después verificados, por defecto), y suma la columna `origen_telefono`.
+- **Fusiones.** El vínculo que sobrevive hereda los orígenes del que se borra; deshacer la fusión los devuelve.
+
+**Descartado.**
+
+- **Volver administrables los campos del núcleo:** se podría romper el sorteo y las reglas de disponibilidad.
+- **Columnas dinámicas en `empresa`** (una por atributo): exigen DDL desde la aplicación y migraciones por cada atributo.
+- **Aplicar las traducciones sugeridas solas:** «GUIA TEL.» puede no ser la guía; un error de traducción contamina el análisis por origen sin que nadie lo note.
+- **Recalcular el origen de los teléfonos viejos:** no hay de dónde sacarlo; quedan con «Sin dato».
+
+**Consecuencias.** Migración `0006_carga_v2.sql` (compatible hacia atrás). Sin costo de infraestructura: son tablas y pantallas sobre la misma base y la misma API.
+
+## D35 — Llamada atendida (contactabilidad por origen)
+
+**Contexto.** La tarjeta de rendimiento por origen (C9) necesita saber si una llamada fue atendida. El spec lo dejó como pregunta abierta para coordinación de campo: disposición del CDR (`ANSWERED`) o `userfield`.
+
+**Decisión provisoria.** Una llamada está atendida si la disposición del CDR empieza con `ANSWER` o, cuando la disposición no es una de las de Asterisk (por ejemplo, porque vino del `userfield` del marcador), si la duración facturada (`billsec`) es mayor a 0. BUSY, NO ANSWER, FAILED, CONGESTION y CANCEL nunca cuentan como atendidas aunque tengan duración. Está en un solo lugar (`ATENDIDA` en `api/app/actividad.py`) y la pantalla la explica.
+
+**Pendiente.** Que coordinación de campo la confirme con un estudio real.
 
 ## Preguntas abiertas que heredan del PRD
 

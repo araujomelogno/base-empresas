@@ -7,7 +7,7 @@ Describe el sistema **tal como está hoy en el repositorio**, incluidos los dos 
 - `specs/SPEC_alta_usuarios_enlace_acceso.md`: los usuarios se dan de alta solo desde la aplicación y reciben un enlace por correo (paso 3).
 - `specs/SPEC_job_cdr_en_cloud.md`: el job del CDR es parte del sistema, corre en Google Cloud y su conexión se configura desde la aplicación (paso 4).
 
-Si ya tenés una instalación anterior a esos cambios, no hace falta empezar de cero: [`docs/despliegue_alta_usuarios.md`](despliegue_alta_usuarios.md) lleva a producción el alta con enlace y [`docs/despliegue_job_cdr.md`](despliegue_job_cdr.md), el job del CDR en Google Cloud.
+Si ya tenés una instalación anterior a esos cambios, no hace falta empezar de cero: [`docs/despliegue_alta_usuarios.md`](despliegue_alta_usuarios.md) lleva a producción el alta con enlace, [`docs/despliegue_job_cdr.md`](despliegue_job_cdr.md), el job del CDR en Google Cloud, y [`docs/despliegue_carga_v2.md`](despliegue_carga_v2.md), la carga v2 con atributos y origen del teléfono.
 
 ---
 

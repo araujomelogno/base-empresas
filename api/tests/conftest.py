@@ -126,16 +126,21 @@ def csv_bytes(filas: list[dict], sep=";") -> bytes:
 
 
 def cargar(api, filas, rol="steward", regla="rut", fuente="Base de prueba", tipo_fuente=None, confianza=None,
-           confirmar=True, nombre="base.csv", contenido=None):
+           confirmar=True, nombre="base.csv", contenido=None, origen_defecto="sin_dato", mapeo=None):
     """Sube, crea el preview y (opcional) confirma una carga. Devuelve el detalle de la carga.
-    Por defecto la plantilla de mapeo se comparte entre archivos con las mismas columnas."""
+    Por defecto la plantilla de mapeo se comparte entre archivos con las mismas columnas.
+    mapeo: cambios sobre el mapeo sugerido (origen de teléfonos, atributos, traducciones…)."""
     if tipo_fuente is None:
         tipo_fuente = "prueba:" + "|".join(sorted(filas[0])) if filas else "prueba"
     r = api.subir("/cargas/analizar", nombre, contenido or csv_bytes(filas), rol=rol, tipo_fuente=tipo_fuente)
     assert r.status_code == 200, r.text
     a = r.json()
+    m = dict(a["mapeo"])
+    if m.get("telefonos"):
+        m.setdefault("origen_defecto", origen_defecto)
+    m.update(mapeo or {})
     body = {"archivo_id": a["archivo_id"], "fuente": fuente, "tipo_fuente": tipo_fuente, "licencia": "uso interno",
-            "regla_fusion": regla, "mapeo": a["mapeo"]}
+            "regla_fusion": regla, "mapeo": m}
     if confianza is not None:
         body["confianza"] = confianza
     r = api.post("/cargas", rol=rol, json=body)

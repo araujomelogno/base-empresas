@@ -87,16 +87,46 @@ export async function detalle(ctx, id) {
 }
 
 // ── Armado de la muestra ──
+function filtroAtributo(a) {
+  const id = `ma-${a.clave}`;
+  if (a.tipo === 'lista') return `<div class="form-group"><label>${esc(a.nombre)}</label>${chips('attr:' + a.clave, a.opciones)}</div>`;
+  if (a.tipo === 'texto') return `<div class="form-group"><label>${esc(a.nombre)} (contiene)</label><input type="text" id="${id}-contiene" /></div>`;
+  const tipo = a.tipo === 'fecha' ? 'date' : 'number';
+  return `<div class="form-group"><label>${esc(a.nombre)}</label><div class="form-row">
+    <input type="${tipo}" id="${id}-desde" placeholder="desde" /><input type="${tipo}" id="${id}-hasta" placeholder="hasta" /></div></div>`;
+}
+
+function leerFiltrosAtributo(atributos) {
+  const salida = {};
+  for (const a of atributos) {
+    let f = null;
+    if (a.tipo === 'lista') { const s = chipsSel(main(), 'attr:' + a.clave); if (s.length) f = { valores: s }; }
+    else if (a.tipo === 'texto') { const t = $(`#ma-${a.clave}-contiene`).value.trim(); if (t) f = { contiene: t }; }
+    else {
+      const d = $(`#ma-${a.clave}-desde`).value, h = $(`#ma-${a.clave}-hasta`).value;
+      if (d || h) { f = {}; if (d) f.desde = d; if (h) f.hasta = h; }
+    }
+    if (f) salida[a.clave] = f;
+  }
+  return salida;
+}
+
 export async function nuevaMuestra(ctx, estudioId) {
-  const [e, v] = await Promise.all([api.get('/estudios/' + estudioId), api.get('/empresas/valores')]);
+  const [e, v, atributos, origenes] = await Promise.all([api.get('/estudios/' + estudioId), api.get('/empresas/valores'),
+    api.get('/atributos', { activos: true }), api.get('/origenes-telefono', { activos: true })]);
+  const filtrables = atributos.filter(a => a.filtrable);
+  const estratif = [...ESTRATIF, ...atributos.filter(a => a.estratificable).map(a => ['atributo.' + a.clave, a.nombre])];
   main().innerHTML = pageHeader('Nueva muestra', '— ' + e.nombre, 'Definí filtros y estratos, mirá el marco disponible y después sorteá. El sorteo congela el marco y guarda la semilla y la versión de configuración.') +
     `<div class="grid-2">${card('1 · Filtros', `
       <div class="form-group"><label>Tamaño</label>${chips('tamano', v.tamano)}</div>
       <div class="form-group"><label>Departamento</label>${chips('departamento', v.departamento)}</div>
       <div class="form-group"><label>Naturaleza jurídica</label>${chips('naturaleza', v.naturaleza.filter(n => !n.excluida).map(n => [n.codigo, n.nombre]))}</div>
       <div class="form-group"><label>CIIU (prefijos)</label><input type="text" id="m-ciiu" placeholder="p. ej. 47, 56, 1071" />
-        <div class="field-hint">Vacío = todos. Sin filtros, entra toda la base disponible.</div></div>`)}
-    ${card('2 · Estratos', `<div class="form-group"><label>Estratificar por</label>${chips('por', ESTRATIF)}</div>
+        <div class="field-hint">Vacío = todos. Sin filtros, entra toda la base disponible.</div></div>
+      ${filtrables.length ? `<div class="card-header-title mb mt">Atributos</div>${filtrables.map(filtroAtributo).join('')}` : ''}
+      <div class="form-group mt"><label>Origen de los teléfonos</label>${chips('origenes', origenes.map(o => [o.codigo, o.nombre]))}
+        <div class="field-hint">Solo empresas con al menos un teléfono discable de estos orígenes. Sin selección, no filtra.</div></div>`)}
+    ${card('2 · Estratos', `<div class="form-group"><label>Estratificar por</label>${chips('por', estratif)}</div>
       <button class="btn btn-dark" id="m-marco">Ver marco disponible</button><div id="m-marco-res" class="mt"></div>`)}</div>
     <div id="m-estratos"></div>`;
   activarChips(main());
@@ -105,7 +135,8 @@ export async function nuevaMuestra(ctx, estudioId) {
     ['tamano', 'departamento', 'naturaleza'].forEach(k => { const s = chipsSel(main(), k); if (s.length) f[k] = s; });
     const ciiu = $('#m-ciiu').value.split(/[,\s]+/).filter(Boolean);
     if (ciiu.length) f.ciiu = ciiu;
-    return { filtros: f, estratificar_por: chipsSel(main(), 'por') };
+    return { filtros: f, atributos: leerFiltrosAtributo(filtrables), origenes: chipsSel(main(), 'origenes'),
+      estratificar_por: chipsSel(main(), 'por') };
   };
   $('#m-marco').onclick = async () => {
     const c = criteriosBase();
@@ -144,8 +175,20 @@ export async function nuevaMuestra(ctx, estudioId) {
 }
 
 // ── Muestra ──
+function criteriosTexto(c, atributos, origenes) {
+  const nombreA = Object.fromEntries(atributos.map(a => [a.clave, a.nombre]));
+  const nombreO = Object.fromEntries(origenes.map(o => [o.codigo, o.nombre]));
+  const partes = Object.entries(c.filtros || {}).map(([k, v]) => `${etiqueta(k)}: ${[].concat(v).join(', ')}`);
+  Object.entries(c.atributos || {}).forEach(([k, f]) => partes.push(`${nombreA[k] || k}: ${f.valores ? f.valores.join(', ')
+    : f.contiene ? 'contiene «' + f.contiene + '»' : [f.desde ? 'desde ' + f.desde : '', f.hasta ? 'hasta ' + f.hasta : ''].filter(Boolean).join(' ')}`));
+  if ((c.origenes || []).length) partes.push(`teléfonos de: ${c.origenes.map(o => nombreO[o] || o).join(', ')}`);
+  if ((c.estratificar_por || []).length) partes.push(`estratos: ${c.estratificar_por.map(k => k.startsWith('atributo.') ? (nombreA[k.slice(9)] || k) : (Object.fromEntries(ESTRATIF)[k] || etiqueta(k))).join(' × ')}`);
+  return partes.length ? partes.map(esc).join(' · ') : 'Sin filtros: toda la base disponible';
+}
+
 export async function muestra(ctx, id) {
-  const m = await api.get('/muestras/' + id);
+  const [m, atributos, origenes] = await Promise.all([api.get('/muestras/' + id), api.get('/atributos'), api.get('/origenes-telefono')]);
+  const exp = m.exportacion || { origenes: [], orden: 'prioridad' };
   const r = m.resultado || {};
   const tot = (k) => m.avance.reduce((a, x) => a + (x[k] || 0), 0);
   main().innerHTML = pageHeader(m.nombre, '', `<a class="link" href="#/estudios/${m.estudio_id}">${esc(m.estudio_nombre)}</a> · ${est(m.estado)} · semilla <span class="mono">${m.semilla ?? '—'}</span> · configuración v${m.config_version ?? '—'} · snapshot #${m.snapshot_id ?? '—'}`,
@@ -155,9 +198,14 @@ export async function muestra(ctx, id) {
     stats([[tot('titulares'), 'Titulares', 's-total'], [tot('liberados'), 'Liberados', 's-free'], [tot('llamados'), 'Con llamadas', ''],
       [tot('completas'), 'Con alguna completa', 's-ok'], [tot('rechazos'), 'Rechazos', 's-bad'], [r.marco, 'Marco congelado', '']]) +
     `<div class="grid-2">${card('Exclusiones al sortear', tabla([{ t: 'Regla', f: x => esc(etiqueta(x[0])) }, { t: 'Empresas', cls: 'num', f: x => num(x[1]) }],
-      Object.entries(r.exclusiones || {}).sort((a, b) => b[1] - a[1]), 'Ninguna') + `<div class="card-body small muted">Universo que cumplía los filtros: <strong>${num(r.universo)}</strong> · marco disponible: <strong>${num(r.marco)}</strong></div>`, '', true)}
+      Object.entries(r.exclusiones || {}).sort((a, b) => b[1] - a[1]), 'Ninguna') + `<div class="card-body small muted">Universo que cumplía los filtros: <strong>${num(r.universo)}</strong> · marco disponible: <strong>${num(r.marco)}</strong><br>Criterios: ${criteriosTexto(m.criterios || {}, atributos, origenes)}</div>`, '', true)}
     ${card('Exportar a uContact', m.estado === 'activa' && ctx.puede('coordinador', 'jefe') ? `
       <div class="form-group"><label>Parte</label><select class="fselect" id="mu-parte">${m.partes.map(p => `<option value="${p.id}">${esc(p.nombre)}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Orígenes a exportar</label>${chips('exp-origenes', origenes.filter(o => o.activo || exp.origenes.includes(o.codigo)).map(o => [o.codigo, o.nombre]), exp.origenes)}
+        <div class="field-hint">Sin selección se exportan todos. Un teléfono con varios orígenes pasa si alguno está elegido.</div></div>
+      <div class="form-group"><label>Orden de los teléfonos</label><select class="fselect" id="mu-orden">
+        <option value="prioridad" ${exp.orden === 'prioridad' ? 'selected' : ''}>Prioridad de origen y, dentro de cada origen, verificados primero</option>
+        <option value="verificados" ${exp.orden === 'verificados' ? 'selected' : ''}>Verificados primero, sin mirar el origen</option></select></div>
       <div id="mu-csv-res" class="small muted mb"></div>
       <button class="btn btn-orange" id="mu-csv">Descargar CSV</button>
       <p class="field-hint mt">Un renglón por teléfono discable de cada ítem liberado y pendiente en la parte. Nunca incluye intermediarios, inexistentes, "no corresponde" ni no llamar.${ctx.me.exportar_contactos ? '' : ' Tu usuario no tiene permiso para exportar contactos personales: la columna de contacto sale vacía.'}</p>`
@@ -200,8 +248,17 @@ export async function muestra(ctx, id) {
   if ($('#mu-csv')) {
     const resumen = async () => {
       const s = await api.get(`/muestras/${id}/csv/resumen`, { parte_id: $('#mu-parte').value });
-      $('#mu-csv-res').innerHTML = `${num(s.renglones)} renglones para ${num(s.items)} de ${num(s.items_pendientes)} ítems pendientes en la parte · ${s.items_sin_telefono ? `<strong>${num(s.items_sin_telefono)} sin teléfono discable</strong>` : "todos tienen teléfono"}`;
+      $('#mu-csv-res').innerHTML = `${num(s.renglones)} renglones para ${num(s.items)} de ${num(s.items_pendientes)} ítems pendientes en la parte · ${s.items_sin_telefono ? `<strong>${num(s.items_sin_telefono)} sin teléfono discable</strong>` : "todos tienen teléfono"}` +
+        (s.items_sin_telefono_por_origen ? ` · <strong>${num(s.items_sin_telefono_por_origen)} sin teléfono exportable por el filtro de origen</strong>` : '');
     };
+    const guardarExportacion = async () => {
+      try {
+        await api.put(`/muestras/${id}/exportacion`, { origenes: chipsSel(main(), 'exp-origenes'), orden: $('#mu-orden').value });
+      } catch (e) { toast(e.message, 'err'); }
+      resumen();
+    };
+    activarChips($('#mu-csv').closest('.card'), guardarExportacion);
+    $('#mu-orden').onchange = guardarExportacion;
     $('#mu-parte').onchange = resumen;
     resumen();
     $('#mu-csv').onclick = async () => {

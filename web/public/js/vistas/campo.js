@@ -213,7 +213,40 @@ export async function actividad(ctx) {
         { t: 'Origen', f: c => esc(c.origen) + (c.dry_run ? ' · dry-run' : '') }, { t: 'Estado', f: c => est(c.estado) },
         { t: 'Llamadas', cls: 'num', f: c => num((c.conteos || {}).filas_leidas) }, { t: 'Nuevos', cls: 'num', f: c => num((c.conteos || {}).intentos_nuevos) },
         { t: 'Detalle', f: c => `<span class="small">${esc(c.mensaje || (c.pedido_desde ? `reproceso desde ${c.pedido_desde}` : ''))}</span>` }],
-        corridas.slice(0, 15), 'Todavía no corrió el job del CDR'), '', true)}</div>`;
+        corridas.slice(0, 15), 'Todavía no corrió el job del CDR'), '', true)}</div>` +
+      `<div id="a-origenes"></div>`;
+    rendimientoOrigen();
+  };
+  const rendimientoOrigen = async () => {
+    const r = await api.get('/actividad/origenes', _act);
+    const pc = (v) => v === null || v === undefined ? '—' : v.toLocaleString('es-UY', { maximumFractionDigits: 1 }) + '%';
+    const dec = (v) => v === null || v === undefined ? '—' : v.toLocaleString('es-UY', { maximumFractionDigits: 1 });
+    const cols = [
+      ['Origen', o => o.nombre], ['Discables', o => o.discables], ['Llamados', o => o.llamados],
+      ['Intentos', o => o.intentos], ['Contactab.', o => pc(o.contactabilidad)], ['Efectivos', o => o.contactos_efectivos],
+      ['% no corr.', o => pc(o.pct_no_corresponde)], ['% inexist.', o => pc(o.pct_inexistente)],
+      ['% interm.', o => pc(o.pct_intermediario)], ['Int. por efectivo', o => dec(o.intentos_por_efectivo)],
+    ];
+    const filas = [...r.origenes, { ...r.total, __tr: 'class="fila-total"' }];
+    $('#a-origenes').innerHTML = card('Rendimiento por origen', (r.origenes.length ? tabla(cols.map(([t, f], i) => ({
+      t, cls: i ? 'num' : '', f: o => i ? (typeof f(o) === 'number' ? num(f(o)) : f(o)) : `<span class="td-strong">${esc(f(o))}</span>` })), filas)
+      : `<div class="empty-state"><span class="ei">☎️</span>Sin teléfonos con origen para estos filtros</div>`) +
+      `<div class="card-body small muted">Discables y llamados son teléfonos; efectivos son ítems con contacto efectivo cuyo teléfono usado tiene ese origen. Un teléfono con varios orígenes cuenta en cada uno; la fila Total cuenta cada teléfono una sola vez.
+       Contactabilidad: teléfonos con al menos una llamada atendida (${esc(r.definicion_atendida)}) sobre teléfonos llamados.
+       Los porcentajes de no corresponde, inexistente e intermediario son vínculos marcados por la sala sobre teléfonos llamados.</div>`,
+      r.origenes.length ? `<button class="btn btn-outline btn-sm" id="a-origenes-csv">Descargar CSV</button>` : '', true);
+    if ($('#a-origenes-csv')) $('#a-origenes-csv').onclick = () => {
+      const celda = (v) => { const s = v === null || v === undefined ? '' : String(v); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+      const crudo = [['Origen', o => o.nombre], ['Teléfonos discables', o => o.discables], ['Teléfonos llamados', o => o.llamados],
+        ['Intentos', o => o.intentos], ['Teléfonos atendidos', o => o.atendidos], ['Contactabilidad %', o => o.contactabilidad],
+        ['Contactos efectivos', o => o.contactos_efectivos], ['% no corresponde', o => o.pct_no_corresponde],
+        ['% inexistente', o => o.pct_inexistente], ['% intermediario', o => o.pct_intermediario],
+        ['Intentos por contacto efectivo', o => o.intentos_por_efectivo]];
+      const lineas = [crudo.map(c => c[0]), ...[...r.origenes, r.total].map(o => crudo.map(c => c[1](o)))].map(l => l.map(celda).join(';'));
+      const url = URL.createObjectURL(new Blob(['\ufeff' + lineas.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+      const a = document.createElement('a'); a.href = url; a.download = 'rendimiento_por_origen.csv'; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
   };
   $$('.inline-form select, .inline-form input').forEach(i => i.onchange = cargar);
   await cargar();

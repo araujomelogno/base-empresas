@@ -46,7 +46,8 @@ const ETIQUETAS = {
   tel_usado_nuevo: 'teléfono usado nuevo', contacto_nuevo: 'contacto nuevo', empresa_cerrada: 'empresa marcada cerrada',
   calidad_sin_telefono: 'calidad informada sin teléfono usado', intermediario_confirmado: 'intermediario confirmado por la sala',
   ultimo_contacto_efectivo: 'último contacto efectivo actualizado', total_excluidas: 'total excluidas (sin repetir)',
-  baja: 'dada de baja', cerrada: 'empresa cerrada',
+  baja: 'dada de baja', cerrada: 'empresa cerrada', filtro_origen: 'filtro de origen del teléfono',
+  descartada: 'descartada', deshecha: 'deshecha', sin_dato: 'sin dato',
 };
 export const etiqueta = (s) => ETIQUETAS[s] || String(s ?? '').replace(/_/g, ' ');
 export const est = (s, texto) => `<span class="est est-${esc(s)}">${esc(texto ?? etiqueta(s))}</span>`;

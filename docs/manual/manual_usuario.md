@@ -126,21 +126,41 @@ Las bases (estudios anteriores, padrones, directorios) entran por **Cargas → N
 
 ![Nueva carga: archivo](img/09-carga-archivo.png)
 
-**Paso 2 — Mapeo.** El sistema propone qué columna del archivo va a cada campo de la base (por el nombre de la columna, o por la plantilla si ya existe). Revisalo: el RUT es obligatorio; las columnas de teléfono se marcan con los botones de la derecha (una celda puede traer varios números separados por / ; o ,). Completá además:
+**Paso 2 — Mapeo.** El sistema muestra solo los campos que reconoció en el archivo (por el nombre de la columna, por los sinónimos de los atributos o por la plantilla del tipo de fuente), en cuatro bloques. **Todo es opcional salvo el RUT.**
 
-- **Nombre de la fuente** y **licencia de uso** (obligatoria: de dónde salió la base y para qué se puede usar).
-- **Regla de fusión:** RUT por defecto. Con teléfono, razón social normalizada o dominio web, las filas cuyo RUT no existe pero que coinciden con una empresa por ese criterio no se dan de alta: van a **Revisión de fusiones**.
-- **Confianza** de la fuente (0 a 100): decide qué dato gana cuando dos fuentes no coinciden.
+![Nueva carga: mapeo de columnas](img/35-carga-mapeo.png)
 
-![Nueva carga: mapeo de columnas](img/10-carga-mapeo.png)
+1. **Empresa:** los campos del sistema. «+ Agregar campo» suma otro y la × lo quita; un campo sin columna no se guarda.
+2. **Atributos:** otros datos de la empresa definidos en **Administración → Atributos** (cantidad de empleados, exporta, cámara…).
+3. **Teléfonos:** cada columna de teléfono con su **origen**: una columna del archivo que lo dice («Origen 1» para «Tel 1», o una sola para todas) o un origen fijo. El sistema sugiere el emparejamiento por nombre.
+4. **Origen por defecto** (obligatorio): para las columnas sin origen propio y cuando la columna de origen viene vacía.
+5. **Sucursal** (plegado): un local con dirección distinta de la fiscal.
+6. **Columnas que no se van a cargar:** revisá que no quede afuera nada que importe.
+7. Licencia de uso (obligatoria), regla de fusión y confianza, como siempre. 8. **Siguiente.**
 
-**Paso 3 — Preview.** Tocá **Ver preview**. El sistema procesa el archivo completo sin guardar nada y muestra los conteos reales: altas, actualizaciones, sin cambios, conflictos, rechazos, filas a revisión, nuevos teléfonos sospechosos de intermediario, teléfonos y contactos nuevos. Abajo están los rechazos por motivo (RUT inválido, sin RUT…), ejemplos de conflictos (el dato vigente, de qué fuente es y lo que llegó) y la lista de filas rechazadas.
+Los contactos no se cargan desde una base: se generan en el campo, con el .sav.
 
-![Preview de una carga](img/11-carga-preview.png)
+**Paso 2b — Traducción de valores.** Si la columna de origen o un atributo de lista trae valores que no coinciden exactamente con el catálogo («guia», «GUIA TEL.»), cada valor distinto aparece con cuántas filas tiene. Elegí un valor del catálogo, «Sin dato» o (administrador) «+ Crear uno nuevo». Las sugerencias no se aplican solas: «Usar sugerencias» las confirma. La traducción queda en la plantilla del tipo de fuente.
 
-**Paso 4 — Confirmar o descartar.** **Confirmar carga** aplica exactamente lo que mostró el preview (en diferido, con una barra de avance). **Descartar** deja la base como estaba.
+![Traducción de valores](img/36-carga-traduccion.png)
 
-> **Deshacer una carga.** Desde el detalle de una carga confirmada, **Deshacer carga** anula todo lo que trajo, mientras ninguna de sus empresas haya entrado a una muestra. La historia no se borra: queda tachada.
+**Paso 3 — Preview.** El sistema procesa el archivo completo sin guardar nada y muestra los conteos reales: altas, actualizaciones, sin cambios, conflictos, rechazos, filas a revisión, nuevos sospechosos y teléfonos nuevos; además, **filas sin teléfono, con 1, 2 y 3 o más**, **teléfonos por origen** (nuevos y ya existentes) y **atributos** cargados, inválidos y sin dato. Las filas sin teléfono no se rechazan: la empresa queda no disponible por «sin teléfono discable». Un número o una fecha que no se puede interpretar queda como vino y se cuenta como inválido.
+
+![Preview de una carga](img/37-carga-preview.png)
+
+**Paso 4 — Confirmar o descartar.** **Confirmar carga** aplica exactamente lo que mostró el preview. **Descartar** la deja «descartada»: no se aplica y queda como registro. Cada estado explica qué significa y qué sigue:
+
+| Estado | Qué significa | Qué sigue |
+| --- | --- | --- |
+| Analizando | Se lee el archivo y se calcula el preview | Esperar |
+| Preview | Conteos listos; todavía no se escribió nada | Confirmar o Descartar |
+| En proceso | Se está aplicando a la base | Esperar |
+| Confirmada | Aplicada a la base | Se puede Deshacer mientras ninguna empresa haya entrado a una muestra |
+| Descartada | Se revisó y no se aplicó | Nada |
+| Deshecha | Se aplicó y después se anuló; la historia queda tachada | Nada |
+| Error | Falló el análisis o la aplicación | Corregir y hacer una carga nueva |
+
+> **Deshacer una carga.** Desde el detalle de una carga confirmada, **Deshacer carga** anula todo lo que trajo (valores, atributos, vínculos y el origen que sumó a teléfonos que ya existían), mientras ninguna de sus empresas haya entrado a una muestra. La historia no se borra: queda tachada.
 
 Las filas con RUT inválido o sin RUT se rechazan siempre (en la fase 1 toda empresa entra con RUT válido). El motivo queda en el detalle de la carga.
 
@@ -189,6 +209,10 @@ Desde el estudio, **Nueva muestra**:
 
 Al tocar **Crear y sortear** el sistema congela el marco (snapshot), aplica las reglas de la configuración vigente, sortea dentro de cada estrato y guarda la semilla y la versión de configuración. Los titulares quedan liberados; los reemplazos, en reserva y en orden.
 
+**Filtros por atributo y por origen.** Los atributos marcados como filtro aparecen en el bloque Filtros (listas con botones, números y fechas con desde/hasta, textos con «contiene»), y los de lista marcados como estrato, en «Estratificar por». **Origen de los teléfonos** deja solo las empresas con al menos un teléfono discable de los orígenes elegidos; el cuadro de exclusiones dice cuántas dejó afuera.
+
+![Filtros por atributo y por origen](img/38-muestra-filtros.png)
+
 > **Muestras auditables.** Con la misma semilla, el mismo snapshot y la misma configuración, el sorteo da exactamente la misma lista en el mismo orden. El botón **Verificar reproducibilidad** lo comprueba en cualquier momento.
 
 ### Seguir la muestra
@@ -215,6 +239,9 @@ En la muestra, en **Exportar a uContact**, elegí la parte y tocá **Descargar C
 - Nunca salen intermediarios, números inexistentes o que no corresponden, ni nada en no llamar, aunque el pedido haya llegado después del sorteo.
 - El link de Alchemer ya trae `EC_ID_ITEM`, `EC_RUT` y `EC_TEL_USADO`.
 - La columna de contacto sugerido solo se completa si tu usuario tiene permiso para exportar contactos personales. Toda exportación queda auditada.
+- **Orígenes a exportar:** todos (por defecto) o solo los elegidos; un teléfono con varios orígenes pasa si alguno está elegido. **Orden de los teléfonos:** por prioridad de origen y, dentro de cada origen, primero los verificados (por defecto). Las dos opciones quedan guardadas en la muestra y el resumen dice cuántos ítems quedan sin teléfono exportable por el filtro de origen.
+
+![Exportar por origen](img/39-muestra-exportar.png)
 
 ### Bloque estándar en Alchemer
 
@@ -282,6 +309,10 @@ Lo que no se pudo asociar solo espera en **Conciliación**:
 
 ![Tablero de actividad](img/23-actividad.png)
 
+**Rendimiento por origen.** Por cada origen de teléfono: teléfonos discables, llamados, intentos, contactabilidad (teléfonos con al menos una llamada atendida sobre llamados; atendida = disposición ANSWERED o, si la disposición no lo dice, duración facturada mayor a 0), contactos efectivos, % que la sala marcó como no corresponde, inexistente o intermediario, e intentos por contacto efectivo. Un teléfono con varios orígenes cuenta en cada uno; la fila Total, una sola vez. Se descarga como CSV.
+
+![Rendimiento por origen](img/40-rendimiento-origen.png)
+
 El CDR se procesa cada noche a las 4:00 (hora de Montevideo) e incluye las llamadas de campaña **y** las del marcador manual: se reconocen por el número marcado, no por la campaña. Las llamadas a internos y a números que no están en la base se cuentan pero no se guardan.
 
 ## Administrador
@@ -336,6 +367,18 @@ Estos datos se guardan con **Guardar nueva versión**, como el resto de la confi
 | Faltan columnas en la consulta | La consulta propia: usá `AS` para renombrar columnas |
 
 **Correr el job a mano.** **Correr ahora** lee las llamadas nuevas sin esperar a las 4:00. **Reprocesar desde** (con **Hasta** opcional) vuelve a leer un período, por ejemplo para cargar el histórico la primera vez o recuperar días en que el job falló. Reprocesar no duplica llamadas ni hace que el job nocturno retroceda. Con **Prueba sin guardar intentos (dry-run)** el job cuenta lo que haría sin escribir nada. La tarjeta sigue la corrida y muestra el resultado al terminar; no se puede lanzar otra mientras una está en curso.
+
+### Atributos de empresa
+
+En **Administración → Atributos** se definen los datos que traen las bases y que no son campos del sistema (cantidad de empleados, exporta, cámara…): nombre, clave (no se cambia después), tipo (texto, número, fecha o lista), sinónimos para el mapeo automático, si sirve como filtro y si sirve como estrato (solo listas). Desactivar un atributo lo saca del mapeo y de los filtros pero conserva sus valores; solo se borra uno sin valores y que no se use en una muestra activa. Los campos del sistema (RUT, razón social, naturaleza, CIIU, tamaño…) no se pueden borrar ni renombrar.
+
+![Atributos de empresa](img/33-atributos.png)
+
+### Orígenes de teléfono
+
+En **Administración → Orígenes de teléfono** está el catálogo de dónde sale cada número. El orden es la prioridad que usa el CSV. **Sala**, **Manual** y **Sin dato** son de sistema y no se borran; un origen con teléfonos se desactiva en lugar de borrarse.
+
+![Orígenes de teléfono](img/34-origenes.png)
 
 ### Naturalezas jurídicas
 

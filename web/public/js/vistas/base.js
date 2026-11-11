@@ -126,7 +126,12 @@ export async function ficha(ctx, rut, params) {
       if (c === 'estado') val = est(e.estado);
       return `<dt>${t}</dt><dd>${val}${h ? `<span class="fuente">· ${esc(h.fuente_tipo)}${h.fuente_id ? ' #' + h.fuente_id : ''} · conf. ${h.confianza} · ${fecha(h.fecha)}</span>` : ''}</dd>`;
     }).join('')}</dl>`) + (e.sucursales.length ? card('Sucursales', tabla([{ t: 'Dirección', k: 'direccion' },
-      { t: 'Departamento', k: 'departamento' }, { t: 'Localidad', k: 'localidad' }, { t: 'Fuente', k: 'fuente_tipo' }], e.sucursales), '', true) : '');
+      { t: 'Departamento', k: 'departamento' }, { t: 'Localidad', k: 'localidad' }, { t: 'Fuente', k: 'fuente_tipo' }], e.sucursales), '', true) : '') +
+      card('Atributos', e.atributos.length ? `<dl class="kv">${e.atributos.map(a => {
+        const val = a.invalido ? `${esc(a.valor_crudo)} ${est('preview', 'valor inválido')}`
+          : a.tipo === 'fecha' ? fecha(a.valor_fecha) : a.tipo === 'numero' ? num(a.valor_numero) : esc(a.valor_texto);
+        return `<dt>${esc(a.nombre)}${a.activo ? '' : ' <span class="small muted">(inactivo)</span>'}</dt><dd>${val}<span class="fuente">· ${esc(a.fuente_tipo)}${a.fuente_id ? ' #' + a.fuente_id : ''} · conf. ${a.confianza} · ${fecha(a.fecha)}</span></dd>`;
+      }).join('')}</dl>` : `<div class="small muted">Sin atributos cargados. Los atributos (cantidad de empleados, exporta, cámara…) se definen en Administración → Atributos y llegan con las cargas.</div>`);
   } else if (tab === 'historia') {
     el.innerHTML = card('Historia por campo', tabla([
       { t: 'Campo', f: h => `<span class="td-strong">${esc(h.campo)}</span>` }, { t: 'Valor', f: h => esc(h.valor ?? '∅') + (h.vigente ? ' ' + est('ok', 'vigente') : '') },
@@ -144,7 +149,9 @@ export async function ficha(ctx, rut, params) {
       { t: 'Alertas', f: t => [t.intermediario ? est(t.intermediario, 'intermediario ' + t.intermediario) : '', t.no_llamar ? est('error', 'no llamar') : '',
         t.estado_telefono !== 'valido' ? est('error', t.estado_telefono) : ''].join(' ') },
       { t: 'RUTs', cls: 'num', k: 'n_empresas' }, { t: 'Intentos', cls: 'num', f: t => num(t.intentos) },
-      { t: 'Último intento', f: t => fechaHora(t.ultimo_intento) }, { t: 'Fuente', k: 'fuente_tipo' }, { t: 'Contacto', k: 'contacto' },
+      { t: 'Último intento', f: t => fechaHora(t.ultimo_intento) },
+      { t: 'Origen', f: t => (t.origenes || []).map(o => `<div class="small" title="${esc(o.fuente_tipo)}${o.fuente_id ? ' #' + o.fuente_id : ''} · ${esc(fecha(o.fecha))}">${esc(o.nombre)}</div>`).join('') || '—' },
+      { t: 'Contacto', k: 'contacto' },
     ], e.telefonos, 'Sin teléfonos'), ctx.puede('steward') ? `<button class="btn btn-orange btn-sm" id="t-agregar">+ Teléfono</button>` : '', true);
     $$('[data-vinc]').forEach(s => s.onchange = async () => {
       const motivo = await pedirTexto('Cambiar estado del vínculo', 'Motivo', { obligatorio: false });

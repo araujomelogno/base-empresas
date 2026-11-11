@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import settings
 from .db import cerrar
-from .routers import admin, campo, cargas, empresas, estudios
+from .routers import admin, campo, cargas, catalogos, empresas, estudios
 
 logging.basicConfig(level=logging.INFO)
 
@@ -33,7 +33,7 @@ if settings.CORS_ORIGINS:
     app.add_middleware(CORSMiddleware, allow_origins=settings.CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"],
                        expose_headers=["X-Renglones", "X-Items-Sin-Telefono", "X-Contactos-Incluidos", "Content-Disposition"])
 
-for r in (empresas.router, cargas.router, estudios.router, campo.router, admin.router):
+for r in (empresas.router, cargas.router, catalogos.router, estudios.router, campo.router, admin.router):
     app.include_router(r, prefix="/api")
 
 

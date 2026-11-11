@@ -68,3 +68,17 @@ BASE=http://localhost:8080 node docs/build/capturas_usuarios.js docs/manual/img
 ```bash
 BASE=http://localhost:8080 node docs/build/capturas_cdr.js docs/manual/img
 ```
+
+## Capturas de la carga v2 (atributos y origen del teléfono)
+
+`capturas_carga_v2.js` saca las figuras 33 a 40 (atributos, orígenes, mapeo, traducción de valores, preview, filtros de la muestra, exportación por origen y rendimiento por origen), con los números de las referencias del manual. Necesita la demo recién sembrada (la plantilla «directorio de prueba» no tiene que existir, para que aparezca la traducción) y un CSV con columnas `RUT;Razón social;Tel 1;Origen 1;Tel 2;Origen 2;Cant. empleados;Exporta;Cámara`, con valores de origen escritos distinto del catálogo (por ejemplo «guia», «GUIA TEL.», «PAGINAS BLANCAS») y «si», «No», «s/d» en Exporta:
+
+```bash
+BASE=http://localhost:8080 node docs/build/capturas_carga_v2.js docs/manual/img base_prueba.csv
+```
+
+Las figuras se insertaron en `docs/Manual_de_usuario_Base_de_Empresas.docx` (guías 1, 3, 7, 10, 11 y 15) y el PDF se regeneró con LibreOffice:
+
+```bash
+soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
+```

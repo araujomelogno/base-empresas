@@ -97,6 +97,14 @@ def conciliacion_resolver(conciliacion_id: int, body: Resolucion, conn=Depends(g
     return conciliacion.resolver(conn, conciliacion_id, body.accion, body.item_id, u.email)
 
 
+@router.get("/actividad/origenes")
+def rendimiento_origen(estudio_id: int | None = None, muestra_id: int | None = None, encuestador: str | None = None,
+                       desde: str | None = None, hasta: str | None = None, conn=Depends(get_conn),
+                       u: Usuario = Depends(usuario_actual)):
+    return actividad.rendimiento_origen(conn, {"estudio_id": estudio_id, "muestra_id": muestra_id,
+                                               "encuestador": encuestador, "desde": desde, "hasta": hasta})
+
+
 @router.get("/actividad")
 def tablero(estudio_id: int | None = None, muestra_id: int | None = None, encuestador: str | None = None,
             desde: str | None = None, hasta: str | None = None, conn=Depends(get_conn),
