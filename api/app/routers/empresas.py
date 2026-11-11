@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .. import actividad, auditoria, catalogos, config, empresas, intermediarios, rut as rutmod
+from .. import actividad, auditoria, borrado, catalogos, config, empresas, intermediarios, rut as rutmod
 from ..auth import Usuario, requiere, usuario_actual
 from ..db import get_conn
 
@@ -63,6 +63,12 @@ def valores_filtro(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual))
             "ciiu2": [r["v"] for r in conn.execute(
                 "SELECT DISTINCT left(ciiu, 2) AS v FROM empresa WHERE baja IS NULL AND ciiu IS NOT NULL ORDER BY 1")],
             "naturaleza": conn.execute("SELECT codigo, nombre, excluida FROM naturaleza_juridica ORDER BY nombre").fetchall()}
+
+
+@router.delete("/empresas/{rut}")
+def borrar(rut: str, conn=Depends(get_conn), u: Usuario = Depends(requiere("admin"))):
+    """Borrado definitivo (solo administrador). Queda solo el registro en Auditoría."""
+    return borrado.borrar_empresa(conn, rut, u.email)
 
 
 @router.get("/empresas/{rut}")

@@ -214,4 +214,12 @@ async function rutear() {
   ctx.ir('inicio');
 }
 
+// Cualquier error de un botón que no se manejó en la vista se muestra (antes quedaba solo en la consola
+// y parecía que el botón no hacía nada, p. ej. «Deshacer carga» bloqueada por una muestra).
+window.addEventListener('unhandledrejection', (ev) => {
+  const e = ev.reason || {};
+  console.error(e);
+  toast(e.message || String(e), 'err');
+});
+
 iniciar().catch(e => { console.error(e); toast(e.message, 'err'); });

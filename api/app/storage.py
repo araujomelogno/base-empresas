@@ -57,3 +57,11 @@ def escribir(ruta: str, datos: bytes) -> str:
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_bytes(datos)
     return str(p)
+
+
+def borrar(archivo: dict):
+    """Elimina el archivo subido (borrado definitivo de una carga)."""
+    if settings.STORAGE_BUCKET:
+        _bucket().blob(archivo["ruta"]).delete()
+    else:
+        (pathlib.Path(settings.STORAGE_DIR) / archivo["ruta"]).unlink(missing_ok=True)

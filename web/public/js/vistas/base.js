@@ -104,6 +104,7 @@ export async function ficha(ctx, rut, params) {
     ctx.puede('steward') && !e.baja ? `<button class="btn btn-outline btn-sm" id="a-editar">Editar datos</button>` : '',
     ctx.puede('steward') && !e.baja ? `<button class="btn btn-outline btn-sm" id="a-fusionar">Fusionar otra empresa</button>` : '',
     ctx.puede('admin', 'steward') && !e.baja ? `<button class="btn btn-outline btn-sm btn-del" id="a-nollamar">No llamar</button>` : '',
+    ctx.puede() ? `<button class="btn btn-danger btn-sm" id="a-borrar">Borrar empresa</button>` : '',
   ].join('');
   main().innerHTML = pageHeader(e.razon_social || 'Empresa sin razón social', '', `RUT <strong class="mono">${rutFmt(e.rut)}</strong>
     ${e.fantasia ? ' · ' + esc(e.fantasia) : ''} · ${est(e.estado)} ${e.baja ? est('error', e.baja) : ''}`, acciones) +
@@ -235,6 +236,21 @@ export async function ficha(ctx, rut, params) {
         rut_absorbida: $('#fu-rut', b).value, motivo: $('#fu-motivo', b).value || null }) }],
     });
     if (r) { toast('Empresas fusionadas', 'ok'); recargar(); }
+  };
+  if ($('#a-borrar')) $('#a-borrar').onclick = async () => {
+    const txt = `Se elimina <strong>${esc(e.razon_social || rutFmt(e.rut))}</strong> con toda su historia, teléfonos, contactos, sucursales
+      y atributos, su lugar en las muestras (${e.muestras.length}) y su actividad de campo (intentos del CDR y respuestas del .sav).
+      Si otras empresas se fusionaron dentro de esta, se borran también. <strong>No se puede deshacer.</strong> Solo queda el registro
+      en Auditoría.<br><br>Escribí el RUT <strong class="mono">${e.rut}</strong> para confirmar.`;
+    const ok = await modal({ titulo: 'Borrar empresa', cuerpo: `<p>${txt}</p><div class="form-group"><input type="text" id="m-borrar" autocomplete="off" /></div>`,
+      acciones: [{ t: 'Cancelar' }, { t: 'Borrar definitivamente', cls: 'btn-danger', fn: (b) => {
+        if (b.querySelector('#m-borrar').value.replace(/\D/g, '') !== e.rut) { toast('El RUT no coincide', 'err'); return false; }
+        return true;
+      } }] });
+    if (!ok) return;
+    const r = await api.del('/empresas/' + e.rut);
+    toast(`Empresa borrada${r.empresas > 1 ? ` (con ${r.empresas - 1} fusionadas)` : ''}`, 'ok');
+    ctx.ir('empresas');
   };
   if ($('#a-nollamar')) $('#a-nollamar').onclick = async () => {
     const r = await modal({

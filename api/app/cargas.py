@@ -641,7 +641,8 @@ def deshacer(conn, carga_id: int, actor: str) -> dict:
     en_muestra = conn.execute(
         "SELECT count(DISTINCT empresa_id) AS n FROM muestra_item WHERE empresa_id = ANY(%s)", (ids,)).fetchone()["n"]
     if en_muestra:
-        raise HTTPException(409, f"No se puede deshacer: {en_muestra} empresas de esta carga ya entraron a una muestra")
+        raise HTTPException(409, f"No se puede deshacer: {en_muestra} empresas de esta carga ya entraron a una muestra."
+                                 " Un administrador puede usar «Borrar carga», que la elimina junto con su paso por las muestras.")
     conn.execute("UPDATE carga SET estado = 'deshecha', deshecha = now() WHERE id = %s", (carga_id,))
     # El origen que esta carga sumó a vínculos que ya existían
     conn.execute("DELETE FROM telefono_vinculo_origen WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))

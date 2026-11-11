@@ -359,6 +359,16 @@ La configuración inicial usa 6 meses de enfriamiento desde el último contacto 
 
 **Pendiente.** Que coordinación de campo la confirme con un estudio real.
 
+## D36 — Borrado definitivo de empresas y cargas
+
+**Contexto.** Deshacer una carga anula y conserva la historia, y no se puede si alguna empresa ya entró a una muestra. Hacía falta poder limpiar pruebas y atender pedidos de supresión (Ley 18.331).
+
+**Decisión.** Solo el administrador puede **Borrar empresa** (ficha) y **Borrar carga** (detalle de la carga), en cualquier estado salvo mientras se procesa. Es definitivo y arrastra todo: historia, teléfonos vinculados (el teléfono se borra si no le queda otra empresa ni rastro), contactos, sucursales, atributos, empresas fusionadas dentro de la que se borra, su lugar en muestras y snapshots, e intentos del CDR y filas del .sav de esos ítems. Borrar una carga borra las empresas que solo venían de ella y recalcula las demás sin lo que aportó; elimina también su archivo. Se confirma escribiendo el RUT o «BORRAR». Queda un registro en Auditoría (`empresa.borrar`, `carga.borrar`) con los conteos.
+
+**Cómo convive con el append-only.** La migración `0007_borrado_definitivo.sql` deja borrar filas de las historias solo dentro de una transacción marcada con `SET LOCAL empresas.purga = 'on'`, que usa únicamente `api/app/borrado.py`. La auditoría no tiene excepción.
+
+**Consecuencias.** Las muestras que tenían esas empresas pierden esos ítems: sus conteos y la verificación de reproducibilidad dejan de coincidir. Los «no llamar» por número se conservan (y con ellos el teléfono). Sin costo de infraestructura.
+
 ## Preguntas abiertas que heredan del PRD
 
 | Pregunta | Quién | Impacto en lo construido |
