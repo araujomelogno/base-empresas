@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .. import actividad, auditoria, config, empresas, intermediarios, rut as rutmod
+from .. import actividad, auditoria, catalogos, config, empresas, intermediarios, rut as rutmod
 from ..auth import Usuario, requiere, usuario_actual
 from ..db import get_conn
 
@@ -91,7 +91,10 @@ def ficha(rut: str, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)
         " (SELECT count(*) FROM intento i WHERE i.telefono_id = t.id) AS intentos,"
         " (SELECT max(inicio) FROM intento i WHERE i.telefono_id = t.id) AS ultimo_intento,"
         " EXISTS (SELECT 1 FROM v_vinculo_discable d WHERE d.vinculo_id = v.id) AS discable,"
-        " EXISTS (SELECT 1 FROM no_llamar n WHERE n.activo AND n.alcance = 'telefono' AND n.objeto_id = t.id) AS no_llamar"
+        " EXISTS (SELECT 1 FROM no_llamar n WHERE n.activo AND n.alcance = 'telefono' AND n.objeto_id = t.id) AS no_llamar,"
+        " (SELECT coalesce(json_agg(json_build_object('codigo', o.codigo, 'nombre', o.nombre, 'fuente_tipo', x.fuente_tipo,"
+        "   'fuente_id', x.fuente_id, 'fecha', x.fecha) ORDER BY o.prioridad), '[]'::json)"
+        "   FROM telefono_vinculo_origen x JOIN origen_telefono o ON o.id = x.origen_id WHERE x.vinculo_id = v.id) AS origenes"
         " FROM telefono_vinculo v JOIN telefono t ON t.id = v.telefono_id LEFT JOIN contacto c ON c.id = v.contacto_id"
         " WHERE v.empresa_id = %s ORDER BY discable DESC, t.e164", (eid,)).fetchall()
     if u.rol == "lectura":
@@ -101,6 +104,7 @@ def ficha(rut: str, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)
         e["contactos"] = conn.execute(
             "SELECT c.*, EXISTS (SELECT 1 FROM no_llamar n WHERE n.activo AND n.alcance = 'contacto' AND n.objeto_id = c.id)"
             " AS no_llamar FROM contacto c WHERE c.empresa_id = %s ORDER BY c.actualizado DESC", (eid,)).fetchall()
+    e["atributos"] = catalogos.atributos_de_empresa(conn, eid)
     e["sucursales"] = conn.execute("SELECT * FROM sucursal WHERE empresa_id = %s ORDER BY id", (eid,)).fetchall()
     e["muestras"] = conn.execute(
         "SELECT mi.id AS item_id, m.id AS muestra_id, m.nombre, m.estado, mi.estrato, mi.rol, mi.liberado, s.nombre AS estudio"

@@ -73,18 +73,19 @@ def bases():
             tels.append(f"09{R.randint(1, 9)} {R.randint(100, 999)} {R.randint(100, 999)}")
         if k % 13 == 0:
             tels.append(contables[k % 3])  # el número del estudio contable compartido
-        p, (cargo, area) = R.choice(PERSONAS), R.choice(CARGOS)
         filas_a.append({"RUT": r, "Razón social": f"{nombre} {forma if forma in ('SA', 'SRL', 'SAS') else ''}".strip(),
                         "Nombre fantasía": nombre, "Naturaleza": forma, "CIIU": ciiu, "Tamaño": R.choice(TAMANOS),
                         "Departamento": depto, "Dirección": f"Calle {R.randint(1, 3000)}", "Teléfono": " / ".join(tels),
-                        "Contacto": p if R.random() < 0.6 else "", "Cargo": cargo, "Área": area,
+                        "Origen teléfono": R.choice(["Estudio anterior", "Estudio anterior", "Guía telefónica", "DGI", ""]),
+                        "Empleados": str(R.choice([3, 8, 15, 30, 60, 120, 400])), "Exporta": R.choice(["Sí", "No", "No"]),
                         "Web": f"www.{nombre.lower().replace(' ', '')}.com.uy" if R.random() < 0.3 else ""})
     filas_a.append({**filas_a[0], "RUT": "210000000000"})  # RUT inválido
     filas_a.append({**filas_a[1], "RUT": ""})
     for r in rr[200:260]:  # segunda base: se solapa con la primera y trae algunas nuevas
         ciiu, rubro = R.choice(RUBROS)
         filas_b.append({"rut": r, "razon_social": f"{rubro} {R.choice(NOMBRES)} SRL", "telefono": f"2{R.randint(1000000, 9999999)}",
-                        "departamento": R.choice(DEPTOS), "tramo": R.choice(TAMANOS)})
+                        "departamento": R.choice(DEPTOS), "tramo": R.choice(TAMANOS),
+                        "camara": R.choice(["CIU", "Cámara de Comercio", "CIU", ""]), "exporta": R.choice(["si", "no", "NO", ""])})
     return filas_a, filas_b
 
 
@@ -117,16 +118,27 @@ def main():
             raise SystemExit(f"{resp.request.method} {resp.request.url}: {resp.status_code} {resp.text}")
         return resp.json()
 
-    def cargar(nombre, contenido, tipo, fuente, licencia, confianza):
+    # Catálogos de la carga v2: orígenes de teléfono (en orden de prioridad) y atributos
+    for nombre_o in ("Estudio anterior", "Guía telefónica", "DGI", "Directorio de cámara", "Web de la empresa"):
+        ok(api.post("/api/origenes-telefono", headers=H["admin"], json={"nombre": nombre_o}))
+    ok(api.post("/api/atributos", headers=H["admin"], json={"clave": "empleados", "nombre": "Cantidad de empleados", "tipo": "numero",
+                                                            "sinonimos": ["empleados", "personal"], "filtrable": True}))
+    ok(api.post("/api/atributos", headers=H["admin"], json={"clave": "exporta", "nombre": "Exporta", "tipo": "lista",
+                                                            "opciones": ["Sí", "No"], "filtrable": True, "estratificable": True}))
+    ok(api.post("/api/atributos", headers=H["admin"], json={"clave": "camara", "nombre": "Cámara a la que pertenece", "tipo": "texto",
+                                                            "sinonimos": ["camara"], "filtrable": True}))
+
+    def cargar(nombre, contenido, tipo, fuente, licencia, confianza, origen="sin_dato"):
         a = ok(api.post("/api/cargas/analizar", headers=H["steward"], files={"archivo": (nombre, contenido)}, data={"tipo_fuente": tipo}))
         c = ok(api.post("/api/cargas", headers=H["steward"], json={"archivo_id": a["archivo_id"], "fuente": fuente, "tipo_fuente": tipo,
-                                                                   "licencia": licencia, "confianza": confianza, "mapeo": a["mapeo"]}))
+                                                                   "licencia": licencia, "confianza": confianza,
+                                                                   "mapeo": {**a["mapeo"], "origen_defecto": origen}}))
         ok(api.post(f"/api/cargas/{c['carga_id']}/confirmar", headers=H["steward"]))
         return c["carga_id"]
 
     filas_a, filas_b = bases()
     cargar("base_estudios_2025.xlsx", xlsx_bytes(filas_a), "base propia de estudios", "Estudios a empresas 2025",
-           "Base propia de Equipos, uso interno", 60)
+           "Base propia de Equipos, uso interno", 60, origen="estudio_anterior")
     # Padrón con razón social igual a una empresa existente y otro RUT: va a la bandeja de revisión
     otro = ruts(300)[290:293]
     padron = [{"RUT": otro[0], "Razón social": filas_a[10]["Razón social"].upper().replace(" SA", " S.A."), "Teléfono": "2604 1111"},
@@ -135,14 +147,17 @@ def main():
     a = ok(api.post("/api/cargas/analizar", headers=H["steward"], files={"archivo": ("padron_parcial.csv", csv_bytes(padron))},
                     data={"tipo_fuente": "padrón"}))
     c = ok(api.post("/api/cargas", headers=H["steward"], json={"archivo_id": a["archivo_id"], "fuente": "Padrón parcial 2026", "tipo_fuente": "padrón",
-                                                              "licencia": "Datos públicos", "regla_fusion": "razon_social", "confianza": 70, "mapeo": a["mapeo"]}))
+                                                              "licencia": "Datos públicos", "regla_fusion": "razon_social", "confianza": 70,
+                                                              "mapeo": {**a["mapeo"], "origen_defecto": "dgi"}}))
     ok(api.post(f"/api/cargas/{c['carga_id']}/confirmar", headers=H["steward"]))
     # Segunda base: queda en preview para mostrar la pantalla de confirmación
     a = ok(api.post("/api/cargas/analizar", headers=H["steward"], files={"archivo": ("directorio_camaras.csv", csv_bytes(filas_b))},
                     data={"tipo_fuente": "directorio de cámaras"}))
     ok(api.post("/api/cargas", headers=H["steward"], json={"archivo_id": a["archivo_id"], "fuente": "Directorio de cámaras empresariales",
                                                           "tipo_fuente": "directorio de cámaras", "licencia": "Convenio 2026, uso para investigación",
-                                                          "regla_fusion": "telefono", "confianza": 40, "mapeo": a["mapeo"]}))
+                                                          "regla_fusion": "telefono", "confianza": 40,
+                                                          "mapeo": {**a["mapeo"], "origen_defecto": "directorio_de_camara",
+                                                                    "traducciones": {"atributo.exporta": {"si": "Sí", "no": "No", "NO": "No"}}}}))
     ok(api.post("/api/naturalezas", headers=H["admin"], json={"codigo": "PUB", "nombre": "Organismo público o ente estatal", "excluida": True}))
     p = ok(api.get("/api/config", headers=H["admin"]))["parametros"]
     p["meses_enfriamiento"] = 12

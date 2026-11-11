@@ -38,6 +38,17 @@ def crear(body: NuevaCarga, u: Usuario = Depends(requiere("steward"))):
     return r
 
 
+class Valores(BaseModel):
+    archivo_id: int
+    mapeo: dict
+
+
+@router.post("/cargas/valores")
+def valores(body: Valores, conn=Depends(get_conn), u: Usuario = Depends(requiere("steward"))):
+    """Valores de origen y de atributos de lista que hay que traducir al catálogo antes del preview."""
+    return cargas.valores(conn, body.archivo_id, body.mapeo)
+
+
 @router.get("/cargas")
 def listar(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
     return cargas.listar(conn)

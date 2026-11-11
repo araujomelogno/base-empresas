@@ -12,7 +12,7 @@ from urllib.parse import urlencode, urlsplit
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
-from . import auditoria, config, telefonos as telmod
+from . import auditoria, config, muestras, telefonos as telmod
 from .auth import Usuario
 
 ESTADOS_EXPORTABLES = ("pendiente", "en_curso")
@@ -36,6 +36,10 @@ def filas_csv(conn, muestra_id: int, parte_id: int, con_contactos: bool) -> tupl
     if p is None:
         raise HTTPException(404, "La parte no pertenece al estudio de la muestra")
     _, cfg = config.vigente(conn)
+    opciones = muestras.opciones_exportacion(m)
+    origenes = opciones["origenes"] or None
+    orden_tel = ("coalesce(og.prioridad, 1000), (d.estado = 'verificado') DESC, d.e164" if opciones["orden"] == "prioridad"
+                 else "(d.estado = 'verificado') DESC, d.e164")
     rows = conn.execute(
         """
         WITH excluidas AS (
@@ -43,17 +47,24 @@ def filas_csv(conn, muestra_id: int, parte_id: int, con_contactos: bool) -> tupl
           WHERE regla IN ('naturaleza_excluida','no_llamar','baja','cerrada')
         )
         SELECT i.id AS id_item, i.estrato, e.id AS empresa_id, e.rut, e.razon_social, e.fantasia, e.departamento,
-               e.localidad, d.e164, d.estado AS estado_vinculo, d.contacto_id
+               e.localidad, d.e164, d.estado AS estado_vinculo, d.contacto_id, og.origen_nombre, og.prioridad
         FROM muestra_item i
         JOIN empresa e ON e.id = i.empresa_id
         LEFT JOIN item_parte_estado ps ON ps.item_id = i.id AND ps.parte_id = %(parte)s
         JOIN v_vinculo_discable d ON d.empresa_id = e.id
+        LEFT JOIN LATERAL (
+          -- un teléfono con varios orígenes ordena por el de mayor prioridad y pasa el filtro con cualquiera
+          SELECT min(o.prioridad) AS prioridad, (array_agg(o.nombre ORDER BY o.prioridad, o.id))[1] AS origen_nombre,
+                 array_agg(o.codigo) AS codigos
+          FROM telefono_vinculo_origen x JOIN origen_telefono o ON o.id = x.origen_id WHERE x.vinculo_id = d.vinculo_id
+        ) og ON true
         WHERE i.muestra_id = %(muestra)s AND i.liberado
           AND coalesce(ps.estado, 'pendiente') = ANY(%(estados)s)
           AND NOT EXISTS (SELECT 1 FROM excluidas x WHERE x.empresa_id = e.id)
-        ORDER BY i.estrato, i.orden, (d.estado = 'verificado') DESC, d.e164
-        """,
-        {"cfg": Jsonb(cfg), "parte": parte_id, "muestra": muestra_id, "estados": list(ESTADOS_EXPORTABLES)},
+          AND (%(origenes)s::text[] IS NULL OR og.codigos && %(origenes)s::text[])
+        ORDER BY i.estrato, i.orden, """ + orden_tel,
+        {"cfg": Jsonb(cfg), "parte": parte_id, "muestra": muestra_id, "estados": list(ESTADOS_EXPORTABLES),
+         "origenes": origenes},
     ).fetchall()
     contactos = _contactos_sugeridos(conn, {r["empresa_id"] for r in rows}, p["respondente_objetivo"]) if con_contactos else {}
     salida = []
@@ -65,17 +76,24 @@ def filas_csv(conn, muestra_id: int, parte_id: int, con_contactos: bool) -> tupl
             "fantasia": r["fantasia"] or "", "contacto": c.get("nombre", ""), "contacto_cargo": c.get("cargo", ""),
             "departamento": r["departamento"] or "", "localidad": r["localidad"] or "", "estrato": r["estrato"],
             "link": link_alchemer(p["link_base"], r["id_item"], r["rut"], r["e164"]), "parte": p["nombre"],
-            "muestra": m["nombre"],
+            "muestra": m["nombre"], "origen_telefono": r["origen_nombre"] or "",
         })
     # Ítems que deberían ir a campo en esta parte (liberados y pendientes o en curso) sin ningún teléfono discable
     exportables = conn.execute(
         """
-        SELECT count(*) AS n, count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM v_vinculo_discable d WHERE d.empresa_id = i.empresa_id)) AS sin_tel
-        FROM muestra_item i LEFT JOIN item_parte_estado ps ON ps.item_id = i.id AND ps.parte_id = %s
-        WHERE i.muestra_id = %s AND i.liberado AND coalesce(ps.estado, 'pendiente') = ANY(%s)
-        """, (parte_id, muestra_id, list(ESTADOS_EXPORTABLES))).fetchone()
+        SELECT count(*) AS n,
+               count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM v_vinculo_discable d WHERE d.empresa_id = i.empresa_id)) AS sin_tel,
+               count(*) FILTER (WHERE %(origenes)s::text[] IS NOT NULL
+                 AND EXISTS (SELECT 1 FROM v_vinculo_discable d WHERE d.empresa_id = i.empresa_id)
+                 AND NOT EXISTS (SELECT 1 FROM v_vinculo_discable d JOIN telefono_vinculo_origen x ON x.vinculo_id = d.vinculo_id
+                                 JOIN origen_telefono o ON o.id = x.origen_id
+                                 WHERE d.empresa_id = i.empresa_id AND o.codigo = ANY(%(origenes)s::text[]))) AS sin_tel_origen
+        FROM muestra_item i LEFT JOIN item_parte_estado ps ON ps.item_id = i.id AND ps.parte_id = %(parte)s
+        WHERE i.muestra_id = %(muestra)s AND i.liberado AND coalesce(ps.estado, 'pendiente') = ANY(%(estados)s)
+        """, {"parte": parte_id, "muestra": muestra_id, "estados": list(ESTADOS_EXPORTABLES), "origenes": origenes}).fetchone()
     resumen = {"renglones": len(salida), "items": len({s["id_item"] for s in salida}),
                "items_pendientes": exportables["n"], "items_sin_telefono": exportables["sin_tel"],
+               "items_sin_telefono_por_origen": exportables["sin_tel_origen"], "exportacion": opciones,
                "con_contactos": con_contactos}
     return salida, {"cfg": cfg, "parte": p, "muestra": m, "resumen": resumen}
 

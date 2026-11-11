@@ -10,8 +10,7 @@ def base(api, n=40, **extra):
     for i in range(n):
         filas.append({"RUT": rut_valido(i), "Razón social": f"Empresa {i}", "Teléfono": f"2900{i:04d} / 099{i:06d}",
                       "Tamaño": "Grande" if i % 4 == 0 else "Pyme", "Departamento": "Montevideo" if i % 2 else "Canelones",
-                      "Naturaleza": "SA", "CIIU": "4711" if i % 3 else "5610", "Contacto": f"Persona {i}",
-                      "Cargo": "Gerente RRHH" if i % 2 else "Contador"})
+                      "Naturaleza": "SA", "CIIU": "4711" if i % 3 else "5610"})
     return cargar(api, filas, **extra)
 
 
@@ -128,8 +127,15 @@ def leer_csv(r):
     return list(csv.DictReader(io.StringIO(r.content.decode("utf-8-sig")), delimiter=";"))
 
 
+def contactos(sql):
+    """Los contactos vienen del campo (.sav), no de las bases: se crean directo en la base."""
+    sql.execute("INSERT INTO contacto (empresa_id, nombre, cargo, fuente_tipo)"
+                " SELECT id, 'Persona ' || id, CASE WHEN id % 2 = 1 THEN 'Gerente RRHH' ELSE 'Contador' END, 'sav' FROM empresa")
+
+
 def test_csv_ucontact(api, sql):
     base(api, n=10)
+    contactos(sql)
     e = estudio(api)
     mid, _ = muestra(api, e, {"n_por_estrato": 3})
     parte = e["partes"][0]
@@ -150,6 +156,7 @@ def test_csv_ucontact(api, sql):
 
 def test_csv_sin_permiso_de_contactos(api, sql):
     base(api, n=6)
+    contactos(sql)
     e = estudio(api)
     mid, _ = muestra(api, e, {"n_por_estrato": 2})
     r = api.get(f"/muestras/{mid}/csv?parte_id={e['partes'][0]['id']}", rol="jefe")

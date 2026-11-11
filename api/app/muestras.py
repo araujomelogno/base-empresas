@@ -12,7 +12,7 @@ from collections import Counter, defaultdict
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
-from . import auditoria, config
+from . import auditoria, catalogos, config
 
 FILTROS = ("ciiu", "tamano", "departamento", "naturaleza")
 ESTRATIFICADORES = ("tamano", "departamento", "naturaleza", "ciiu2", "ciiu1")
@@ -130,15 +130,57 @@ def sortear_snapshot(marco: list[tuple[int, str]], semilla: int, definicion: dic
     return salida
 
 
-def _validar_criterios(c: dict) -> dict:
+def _filtro_atributo(a: dict, spec) -> dict | None:
+    """Normaliza el filtro de un atributo según su tipo. None: no filtra."""
+    spec = spec or {}
+    if a["tipo"] == "lista":
+        valores = [v for v in (spec.get("valores") or []) if v]
+        fuera = set(valores) - set(a["opciones"] or [])
+        if fuera:
+            raise HTTPException(422, f"{a['nombre']}: valores que no son opciones del atributo: {', '.join(sorted(fuera))}")
+        return {"valores": valores} if valores else None
+    if a["tipo"] == "texto":
+        t = str(spec.get("contiene") or "").strip()
+        return {"contiene": t} if t else None
+    rango = {}
+    for k in ("desde", "hasta"):
+        v = spec.get(k)
+        if v in (None, ""):
+            continue
+        r = catalogos.interpretar(a, v)
+        if not r["valido"]:
+            raise HTTPException(422, f"{a['nombre']}: «{v}» no es un{'a fecha' if a['tipo'] == 'fecha' else ' número'} válid{'a' if a['tipo'] == 'fecha' else 'o'}")
+        rango[k] = r["texto"]
+    return rango or None
+
+
+def _validar_criterios(conn, c: dict) -> dict:
     c = dict(c or {})
     filtros = {k: v for k, v in (c.get("filtros") or {}).items() if v}
     for k in filtros:
         if k not in FILTROS:
             raise HTTPException(422, f"Filtro desconocido: {k}")
+    defs = {a["clave"]: a for a in catalogos.atributos(conn)}
+    atributos = {}
+    for clave, spec in (c.get("atributos") or {}).items():
+        a = defs.get(clave)
+        if a is None or not a["activo"] or not a["filtrable"]:
+            raise HTTPException(422, f"El atributo {clave} no existe o no se puede usar como filtro")
+        f = _filtro_atributo(a, spec)
+        if f:
+            atributos[clave] = f
+    origenes = sorted({o for o in (c.get("origenes") or []) if o})
+    if origenes:
+        conocidos = {o["codigo"] for o in catalogos.origenes(conn)}
+        if set(origenes) - conocidos:
+            raise HTTPException(422, f"Orígenes de teléfono desconocidos: {', '.join(sorted(set(origenes) - conocidos))}")
     por = c.get("estratificar_por") or []
     for k in por:
-        if k not in ESTRATIFICADORES:
+        if k.startswith(catalogos.PREFIJO):
+            a = defs.get(k[len(catalogos.PREFIJO):])
+            if a is None or not a["activo"] or not a["estratificable"]:
+                raise HTTPException(422, f"No se puede estratificar por {k}")
+        elif k not in ESTRATIFICADORES:
             raise HTTPException(422, f"No se puede estratificar por {k}")
     estratos = c.get("estratos") or []
     for e in estratos:
@@ -146,21 +188,22 @@ def _validar_criterios(c: dict) -> dict:
             raise HTTPException(422, "Tamaños y reemplazos no pueden ser negativos")
     if not estratos and c.get("n_por_estrato") is None:
         raise HTTPException(422, "Indicá el tamaño por estrato (lista de estratos o n_por_estrato)")
-    return {"filtros": filtros, "estratificar_por": por, "estratos": estratos,
+    return {"filtros": filtros, "atributos": atributos, "origenes": origenes, "estratificar_por": por, "estratos": estratos,
             "n_por_estrato": c.get("n_por_estrato"), "reemplazos_por_estrato": c.get("reemplazos_por_estrato", 0)}
 
 
 def crear_muestra(conn, estudio_id: int, nombre: str, criterios: dict, actor: str) -> dict:
     if conn.execute("SELECT 1 FROM estudio WHERE id = %s", (estudio_id,)).fetchone() is None:
         raise HTTPException(404, "Estudio inexistente")
-    criterios = _validar_criterios(criterios)
+    criterios = _validar_criterios(conn, criterios)
     m = conn.execute("INSERT INTO muestra (estudio_id, nombre, criterios, creado_por) VALUES (%s,%s,%s,%s) RETURNING *",
                      (estudio_id, nombre, Jsonb(criterios), actor)).fetchone()
     auditoria.registrar(conn, actor, "muestra.crear", "muestra", m["id"], {"criterios": criterios})
     return m
 
 
-def _universo(conn, filtros: dict) -> list[dict]:
+def _universo(conn, criterios: dict) -> list[dict]:
+    filtros = criterios.get("filtros") or {}
     where, args = ["TRUE"], []
     if filtros.get("ciiu"):
         where.append("(" + " OR ".join(["e.ciiu LIKE %s"] * len(filtros["ciiu"])) + ")")
@@ -174,18 +217,59 @@ def _universo(conn, filtros: dict) -> list[dict]:
     if filtros.get("naturaleza"):
         where.append("n.codigo = ANY(%s)")
         args.append(filtros["naturaleza"])
+    defs = {a["clave"]: a for a in catalogos.atributos(conn)}
+    for clave, f in (criterios.get("atributos") or {}).items():
+        a = defs[clave]
+        cond, cargs = [], [a["id"]]
+        if "valores" in f:
+            cond.append("ea.valor_texto = ANY(%s)")
+            cargs.append(f["valores"])
+        if "contiene" in f:
+            cond.append("ea.valor_texto ILIKE %s")
+            cargs.append(f"%{f['contiene']}%")
+        col = "ea.valor_numero" if a["tipo"] == "numero" else "ea.valor_fecha"
+        cast = "numeric" if a["tipo"] == "numero" else "date"
+        if "desde" in f:
+            cond.append(f"{col} >= %s::{cast}")
+            cargs.append(f["desde"])
+        if "hasta" in f:
+            cond.append(f"{col} <= %s::{cast}")
+            cargs.append(f["hasta"])
+        where.append("EXISTS (SELECT 1 FROM empresa_atributo ea WHERE ea.empresa_id = e.id AND ea.atributo_id = %s AND "
+                     + " AND ".join(cond) + ")")
+        args += cargs
+    cols, cargs = [], []
+    for k in criterios.get("estratificar_por") or []:
+        if k.startswith(catalogos.PREFIJO):
+            cols.append(f"(SELECT ea.valor_texto FROM empresa_atributo ea WHERE ea.empresa_id = e.id AND ea.atributo_id = %s)"
+                        f' AS "{k}"')
+            cargs.append(defs[k[len(catalogos.PREFIJO):]]["id"])
+    extra = "".join(", " + c for c in cols)
     return conn.execute(
-        "SELECT e.id, e.rut, e.ciiu, e.tamano, e.departamento, n.codigo AS naturaleza FROM empresa e"
+        f"SELECT e.id, e.rut, e.ciiu, e.tamano, e.departamento, n.codigo AS naturaleza{extra} FROM empresa e"
         " LEFT JOIN naturaleza_juridica n ON n.id = e.naturaleza_id WHERE " + " AND ".join(where),
-        args).fetchall()
+        cargs + args).fetchall()
+
+
+def _filtro_origen(conn, universo: list[dict], origenes: list[str], bloqueos: dict) -> None:
+    """Regla del filtro de origen: solo empresas con algún teléfono discable de esos orígenes."""
+    if not origenes:
+        return
+    con = {r["empresa_id"] for r in conn.execute(
+        "SELECT DISTINCT d.empresa_id FROM v_vinculo_discable d JOIN telefono_vinculo_origen x ON x.vinculo_id = d.vinculo_id"
+        " JOIN origen_telefono o ON o.id = x.origen_id WHERE o.codigo = ANY(%s)", (origenes,))}
+    for f in universo:
+        if f["id"] not in con:
+            bloqueos[f["id"]].add("filtro_origen")
 
 
 def previsualizar_marco(conn, criterios: dict) -> dict:
     """Cuántas empresas quedan en cada estrato y cuántas excluye cada regla, sin sortear."""
-    criterios = _validar_criterios({**criterios, "n_por_estrato": criterios.get("n_por_estrato", 0)})
+    criterios = _validar_criterios(conn, {**criterios, "n_por_estrato": criterios.get("n_por_estrato", 0)})
     _, cfg = config.vigente(conn)
-    universo = _universo(conn, criterios["filtros"])
+    universo = _universo(conn, criterios)
     bloqueos = _bloqueos(conn, cfg, None)
+    _filtro_origen(conn, universo, criterios["origenes"], bloqueos)
     excl, marco = _aplicar_bloqueos(universo, bloqueos)
     por_estrato = Counter(estrato_de(f, criterios["estratificar_por"]) for f in marco)
     return {"universo": len(universo), "marco": len(marco), "exclusiones": excl,
@@ -222,8 +306,10 @@ def sortear(conn, muestra_id: int, actor: str, semilla: int | None = None) -> di
         raise HTTPException(409, "La muestra ya fue sorteada")
     criterios = m["criterios"]
     version, cfg = config.vigente(conn)
-    universo = _universo(conn, criterios["filtros"])
-    excl, marco_filas = _aplicar_bloqueos(universo, _bloqueos(conn, cfg, muestra_id))
+    universo = _universo(conn, criterios)
+    bloqueos = _bloqueos(conn, cfg, muestra_id)
+    _filtro_origen(conn, universo, criterios.get("origenes") or [], bloqueos)
+    excl, marco_filas = _aplicar_bloqueos(universo, bloqueos)
     marco = [(f["id"], estrato_de(f, criterios["estratificar_por"])) for f in marco_filas]
 
     snapshot_id = conn.execute(
@@ -337,6 +423,7 @@ def detalle(conn, muestra_id: int) -> dict:
                      " WHERE m.id = %s", (muestra_id,)).fetchone()
     if m is None:
         raise HTTPException(404, "Muestra inexistente")
+    m["exportacion"] = opciones_exportacion(m)
     m["partes"] = conn.execute("SELECT id, nombre FROM parte WHERE estudio_id = %s ORDER BY id", (m["estudio_id"],)).fetchall()
     m["avance"] = conn.execute(
         """
@@ -360,6 +447,31 @@ def detalle(conn, muestra_id: int) -> dict:
         GROUP BY i.estrato ORDER BY i.estrato
         """, (muestra_id,)).fetchall()
     return m
+
+
+def opciones_exportacion(m: dict) -> dict:
+    e = m.get("exportacion") or {}
+    return {"origenes": e.get("origenes") or [], "orden": e.get("orden") or "prioridad"}
+
+
+def guardar_exportacion(conn, muestra_id: int, datos: dict, actor: str) -> dict:
+    """Orígenes a exportar y orden de los teléfonos del CSV (C8). Queda guardado en la muestra."""
+    m = conn.execute("SELECT * FROM muestra WHERE id = %s FOR UPDATE", (muestra_id,)).fetchone()
+    if m is None:
+        raise HTTPException(404, "Muestra inexistente")
+    orden = datos.get("orden") or "prioridad"
+    if orden not in ("prioridad", "verificados"):
+        raise HTTPException(422, "orden: prioridad | verificados")
+    origenes = sorted({o for o in (datos.get("origenes") or []) if o})
+    conocidos = {o["codigo"] for o in catalogos.origenes(conn)}
+    if set(origenes) - conocidos:
+        raise HTTPException(422, f"Orígenes de teléfono desconocidos: {', '.join(sorted(set(origenes) - conocidos))}")
+    nuevo = {"origenes": origenes, "orden": orden}
+    antes = opciones_exportacion(m)
+    if nuevo != antes:
+        conn.execute("UPDATE muestra SET exportacion = %s WHERE id = %s", (Jsonb(nuevo), muestra_id))
+        auditoria.registrar(conn, actor, "muestra.exportacion", "muestra", muestra_id, {"antes": antes, "despues": nuevo})
+    return nuevo
 
 
 def items(conn, muestra_id: int, estrato: str | None = None, limite: int = 500) -> list[dict]:

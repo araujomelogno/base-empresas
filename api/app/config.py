@@ -14,7 +14,8 @@ from pydantic import BaseModel, Field, ValidationError, field_validator, model_v
 from . import auditoria
 
 CAMPOS_CSV = ("id_item", "tel_e164", "tel_nacional", "tel_sin_mas", "rut", "razon_social", "fantasia",
-              "contacto", "contacto_cargo", "departamento", "localidad", "estrato", "link", "parte", "muestra")
+              "contacto", "contacto_cargo", "departamento", "localidad", "estrato", "link", "parte", "muestra",
+              "origen_telefono")
 FUSIONES = ("rut", "telefono", "razon_social", "dominio")
 
 

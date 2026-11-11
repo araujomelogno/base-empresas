@@ -21,7 +21,8 @@ const MENU = [
   ['Estudios', [['estudios', '📋', 'Estudios y muestras', ['jefe', 'coordinador']]]],
   ['Campo', [['sav', '📊', 'Ingesta .sav', ['coordinador']], ['conciliacion', '🧩', 'Conciliación', ['coordinador']],
     ['actividad', '📈', 'Actividad', ['coordinador', 'jefe']]]],
-  ['Administración', [['config', '⚙️', 'Configuración', ['admin']], ['naturalezas', '⚖️', 'Naturalezas jurídicas', ['admin', 'steward']],
+  ['Administración', [['config', '⚙️', 'Configuración', ['admin']], ['atributos', '🏷️', 'Atributos', ['admin', 'steward']],
+    ['origenes', '📞', 'Orígenes de teléfono', ['admin', 'steward']], ['naturalezas', '⚖️', 'Naturalezas jurídicas', ['admin', 'steward']],
     ['no-llamar', '🚫', 'No llamar', ['admin', 'steward']], ['usuarios', '👥', 'Usuarios', ['admin']],
     ['auditoria', '🔎', 'Auditoría', ['admin', 'steward']]]],
 ];
@@ -33,7 +34,7 @@ const RUTAS = [
   [/^estudios$/, estudios.lista], [/^estudios\/(\d+)$/, estudios.detalle], [/^estudios\/(\d+)\/nueva-muestra$/, estudios.nuevaMuestra],
   [/^muestras\/(\d+)$/, estudios.muestra],
   [/^sav$/, campo.sav], [/^sav\/(\d+)$/, campo.savDetalle], [/^conciliacion$/, campo.conciliacion], [/^actividad$/, campo.actividad],
-  [/^config$/, admin.config], [/^naturalezas$/, admin.naturalezas], [/^no-llamar$/, admin.noLlamar],
+  [/^config$/, admin.config], [/^atributos$/, admin.atributos], [/^origenes$/, admin.origenes], [/^naturalezas$/, admin.naturalezas], [/^no-llamar$/, admin.noLlamar],
   [/^usuarios$/, admin.usuarios], [/^auditoria$/, admin.auditoria],
 ];
 

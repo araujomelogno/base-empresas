@@ -148,6 +148,18 @@ def cerrar(muestra_id: int, conn=Depends(get_conn), u: Usuario = Depends(requier
     return muestras.cerrar(conn, muestra_id, u.email)
 
 
+class Exportacion(BaseModel):
+    origenes: list[str] = []
+    orden: str = "prioridad"
+
+
+@router.put("/muestras/{muestra_id}/exportacion")
+def exportacion_opciones(muestra_id: int, body: Exportacion, conn=Depends(get_conn),
+                         u: Usuario = Depends(requiere("coordinador", "jefe"))):
+    """Orígenes a exportar y orden de los teléfonos del CSV (queda guardado en la muestra)."""
+    return muestras.guardar_exportacion(conn, muestra_id, body.model_dump(), u.email)
+
+
 @router.get("/muestras/{muestra_id}/csv")
 def csv(muestra_id: int, parte_id: int, conn=Depends(get_conn), u: Usuario = Depends(requiere("coordinador", "jefe"))):
     nombre, contenido, resumen = exportacion.generar_csv(conn, muestra_id, parte_id, u)

@@ -349,3 +349,18 @@ textarea.finput.code { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
 .compacta .btn { white-space: nowrap; }
 .compacta .td-actions { flex-direction: column; align-items: stretch; }
 .est-omitida { background: var(--gray-light); color: var(--gray); }
+
+/* Carga v2: fila total, bloques del mapeo y explicación del estado */
+tr.fila-total td { font-weight: 700; border-top: 2px solid var(--border); background: var(--gray-light); }
+.map-bloque { border: 1px solid var(--border); border-radius: 10px; padding: 0.9rem 1rem; margin-bottom: 1rem; }
+.map-bloque h4 { margin: 0 0 0.15rem; font-size: 0.8rem; letter-spacing: 0.05em; text-transform: uppercase; }
+.map-bloque > .field-hint { margin: 0 0 0.6rem; }
+.map-bloque summary { cursor: pointer; font-weight: 700; font-size: 0.8rem; letter-spacing: 0.05em; text-transform: uppercase; }
+.map-fila { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) 40px; gap: 0.5rem; align-items: center; margin-bottom: 0.4rem; }
+.map-fila.tel { grid-template-columns: minmax(130px, 1fr) minmax(170px, 1.3fr) 40px; }
+.map-fila .td-strong { font-size: 0.85rem; }
+.map-agregar { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.4rem; }
+.map-agregar select { width: auto; }
+.estado-explica { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 1rem; font-size: 0.85rem; }
+.estado-explica dt { font-weight: 700; color: var(--gray); }
+.no-usadas { font-size: 0.8rem; color: var(--gray); margin-top: 0.5rem; }
