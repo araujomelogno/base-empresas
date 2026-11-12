@@ -1,6 +1,6 @@
 // Estudios, partes, muestras, reemplazos y CSV para uContact (R1.5, R1.6, R1.7)
 import * as api from '../api.js';
-import { $, $$, esc, main, toast, num, pct, fecha, fechaHora, rutFmt, est, etiqueta, pageHeader, stats, tabla, card, modal,
+import { $, $$, esc, main, toast, num, pct, fecha, fechaHora, rutFmt, est, estDe, etiqueta, pageHeader, stats, tabla, card, modal,
   confirmar, confirmarEscrito, seguirTarea, chips, activarChips, chipsSel } from '../ui.js';
 
 const pl = (n, uno, varios) => `${num(n)} ${n === 1 ? uno : varios}`;
@@ -66,7 +66,7 @@ export async function detalle(ctx, id) {
       { t: '', f: p => ctx.puede('jefe') ? `<button class="btn btn-outline btn-sm" data-editar="${p.id}">Editar</button>` : '' },
     ], e.partes, 'Sin partes'), ctx.puede('jefe') ? `<button class="btn btn-outline btn-sm" id="es-parte">+ Parte</button>` : '', true) +
     card('Muestras', tabla([
-      { t: 'Muestra', f: m => `<a class="link" href="#/muestras/${m.id}">${esc(m.nombre)}</a>` }, { t: 'Estado', f: m => est(m.estado) },
+      { t: 'Muestra', f: m => `<a class="link" href="#/muestras/${m.id}">${esc(m.nombre)}</a>` }, { t: 'Estado', f: m => estDe('muestra', m.estado) },
       { t: 'Ítems', cls: 'num', k: 'n_items' }, { t: 'Semilla', f: m => `<span class="mono small">${m.semilla ?? '—'}</span>` },
       { t: 'Config.', f: m => m.config_version ? 'v' + m.config_version : '—' }, { t: 'Sorteada', f: m => fechaHora(m.sorteada) },
     ], e.muestras, 'Sin muestras'), '', true);
@@ -218,7 +218,7 @@ export async function muestra(ctx, id) {
   const exp = m.exportacion || { origenes: [], orden: 'prioridad' };
   const r = m.resultado || {};
   const tot = (k) => m.avance.reduce((a, x) => a + (x[k] || 0), 0);
-  main().innerHTML = pageHeader(m.nombre, '', `<a class="link" href="#/estudios/${m.estudio_id}">${esc(m.estudio_nombre)}</a> · ${est(m.estado)} · semilla <span class="mono">${m.semilla ?? '—'}</span> · configuración v${m.config_version ?? '—'} · snapshot #${m.snapshot_id ?? '—'}`,
+  main().innerHTML = pageHeader(m.nombre, '', `<a class="link" href="#/estudios/${m.estudio_id}">${esc(m.estudio_nombre)}</a> · ${estDe('muestra', m.estado)} · semilla <span class="mono">${m.semilla ?? '—'}</span> · configuración v${m.config_version ?? '—'} · snapshot #${m.snapshot_id ?? '—'}`,
     `<button class="btn btn-outline" id="mu-verificar">Verificar reproducibilidad</button>` +
     (m.estado === 'activa' && ctx.puede('jefe') ? `<button class="btn btn-outline btn-del" id="mu-cerrar">Cerrar muestra</button>` : '') +
     (ctx.puede() ? `<button class="btn btn-danger" id="mu-borrar">Borrar muestra</button>` : '')) +
@@ -288,7 +288,7 @@ export async function muestra(ctx, id) {
   if ($('#mu-borrar')) $('#mu-borrar').onclick = async () => {
     const n = await api.get(`/muestras/${id}/borrado`);
     const ok = await confirmarEscrito({ titulo: `Borrar muestra «${m.nombre}»`, palabra: 'BORRAR',
-      cuerpo: `<p>Se elimina la muestra (${etiqueta(m.estado)}) con:</p><ul class="modal-conteos">
+      cuerpo: `<p>Se elimina la muestra (${etiqueta(m.estado, 'muestra')}) con:</p><ul class="modal-conteos">
         <li>${pl(n.items, 'ítem', 'ítems')}${m.estado === 'activa' ? ', que dejan de bloquear a sus empresas para otras muestras' : ''};</li>
         <li>${pl(n.intentos, 'intento', 'intentos')} del CDR y ${pl(n.filas_sav, 'fila', 'filas')} del .sav asociados a esos ítems;</li>
         <li>su marco congelado.</li></ul>
