@@ -1,6 +1,6 @@
 // Inicio, buscador de empresas y ficha (R1.1, R1.2, R1.11)
 import * as api from '../api.js';
-import { $, $$, esc, main, toast, num, fecha, fechaHora, rutFmt, est, etiqueta, pageHeader, stats, tabla, card, modal,
+import { $, $$, esc, main, toast, num, fecha, fechaHora, rutFmt, est, estDe, etiqueta, pageHeader, stats, tabla, card, modal,
   pedirTexto, confirmar, tabs } from '../ui.js';
 
 // ── Inicio ──
@@ -107,7 +107,7 @@ export async function ficha(ctx, rut, params) {
     ctx.puede() ? `<button class="btn btn-danger btn-sm" id="a-borrar">Borrar empresa</button>` : '',
   ].join('');
   main().innerHTML = pageHeader(e.razon_social || 'Empresa sin razón social', '', `RUT <strong class="mono">${rutFmt(e.rut)}</strong>
-    ${e.fantasia ? ' · ' + esc(e.fantasia) : ''} · ${est(e.estado)} ${e.baja ? est('error', e.baja) : ''}`, acciones) +
+    ${e.fantasia ? ' · ' + esc(e.fantasia) : ''} · ${estDe('empresa', e.estado)} ${e.baja ? est('error', e.baja) : ''}`, acciones) +
     (e.baja === 'fusionada' ? `<div class="alert alert-warn">Esta empresa fue absorbida por <a class="link" href="#/empresas/${e.fusionada_en_rut}">${rutFmt(e.fusionada_en_rut)}</a>.</div>` : '') +
     (d.disponible ? `<div class="alert alert-success">Disponible para muestras.</div>`
       : `<div class="alert alert-warn"><span>No disponible: ${(d.reglas || []).map(r => `<strong>${esc(etiqueta(r))}</strong>`).join(', ')}${d.hasta ? ` · hasta ${fecha(d.hasta)}` : ''}</span></div>`) +
@@ -124,7 +124,7 @@ export async function ficha(ctx, rut, params) {
     el.innerHTML = card('Valores vigentes', `<dl class="kv">${CAMPOS.map(([c, t]) => {
       const h = vig[c];
       let val = c === 'naturaleza' && e.naturaleza ? `${e.naturaleza.nombre} (${e.naturaleza.codigo})${e.naturaleza.excluida ? ' ' + est('error', 'excluida') : ''}` : esc(e[c] ?? '—');
-      if (c === 'estado') val = est(e.estado);
+      if (c === 'estado') val = estDe('empresa', e.estado);
       return `<dt>${t}</dt><dd>${val}${h ? `<span class="fuente">· ${esc(h.fuente_tipo)}${h.fuente_id ? ' #' + h.fuente_id : ''} · conf. ${h.confianza} · ${fecha(h.fecha)}</span>` : ''}</dd>`;
     }).join('')}</dl>`) + (e.sucursales.length ? card('Sucursales', tabla([{ t: 'Dirección', k: 'direccion' },
       { t: 'Departamento', k: 'departamento' }, { t: 'Localidad', k: 'localidad' }, { t: 'Fuente', k: 'fuente_tipo' }], e.sucursales), '', true) : '') +
@@ -178,7 +178,7 @@ export async function ficha(ctx, rut, params) {
   } else if (tab === 'muestras') {
     el.innerHTML = card('Muestras', tabla([
       { t: 'Muestra', f: m => `<a class="link" href="#/muestras/${m.muestra_id}">${esc(m.nombre)}</a>` }, { t: 'Estudio', k: 'estudio' },
-      { t: 'Estado', f: m => est(m.estado) }, { t: 'Estrato', k: 'estrato' }, { t: 'Rol', f: m => est(m.rol) },
+      { t: 'Estado', f: m => estDe('muestra', m.estado) }, { t: 'Estrato', k: 'estrato' }, { t: 'Rol', f: m => est(m.rol) },
       { t: 'Liberado', f: m => m.liberado ? 'sí' : 'no' }, { t: 'Ítem', cls: 'num', k: 'item_id' },
     ], e.muestras, 'Nunca entró a una muestra'), '', true);
   } else if (tab === 'tiempo') {

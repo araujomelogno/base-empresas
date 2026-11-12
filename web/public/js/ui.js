@@ -49,8 +49,17 @@ const ETIQUETAS = {
   baja: 'dada de baja', cerrada: 'empresa cerrada', filtro_origen: 'filtro de origen del teléfono',
   descartada: 'descartada', deshecha: 'deshecha', sin_dato: 'sin dato', cancelada: 'cancelada', trabada: 'trabada',
 };
-export const etiqueta = (s) => ETIQUETAS[s] || String(s ?? '').replace(/_/g, ' ');
-export const est = (s, texto) => `<span class="est est-${esc(s)}">${esc(texto ?? etiqueta(s))}</span>`;
+// Etiquetas por tipo de objeto: un mismo valor puede significar cosas distintas según la entidad
+// (por ejemplo «cerrada» en una empresa y en una muestra). Si el tipo no tiene etiqueta para ese
+// valor, se usa la global. La clase CSS (el color) sigue siendo est-<estado>.
+const ETIQUETAS_POR_TIPO = {
+  muestra: { borrador: 'borrador', activa: 'muestra activa', cerrada: 'muestra cerrada' },
+  empresa: { activa: 'activa', cerrada: 'empresa cerrada', desconocida: 'desconocida' },
+};
+export const etiqueta = (s, tipo) => (tipo && (ETIQUETAS_POR_TIPO[tipo] || {})[s]) || ETIQUETAS[s] || String(s ?? '').replace(/_/g, ' ');
+export const est = (s, texto, tipo) => `<span class="est est-${esc(s)}">${esc(texto ?? etiqueta(s, tipo))}</span>`;
+// Estado de un objeto con su etiqueta por contexto: estDe('muestra', m.estado)
+export const estDe = (tipo, s) => est(s, undefined, tipo);
 
 export function pageHeader(titulo, acento, sub, acciones = '') {
   return `<div class="page-header"><div class="accent-bar"></div>
