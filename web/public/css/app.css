@@ -369,3 +369,8 @@ tr.fila-total td { font-weight: 700; border-top: 2px solid var(--border); backgr
 .est-cancelada, .est-trabada { background: var(--gray-light); color: var(--gray); }
 .modal-conteos { margin: 0.6rem 0 0.9rem; padding-left: 1.2rem; }
 .modal-conteos li { margin: 0.15rem 0; }
+
+/* Embudo de una corrida del CDR */
+.tabla-simple { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.tabla-simple td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+.tabla-simple td.num { text-align: right; white-space: nowrap; }

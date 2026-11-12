@@ -157,7 +157,8 @@ async function seguirCorrida(id, el) {
     const c = await api.get(`/cdr/corridas/${id}`);
     const k = c.conteos || {};
     el.innerHTML = `<div class="alert ${c.estado === 'error' ? 'alert-error' : c.estado === 'ok' ? 'alert-success' : 'alert-info'}"><span>
-      Corrida #${c.id} ${est(c.estado)} ${c.dry_run ? '(dry-run)' : ''}<br><span class="small">${k.filas_leidas !== undefined ? `${num(k.filas_leidas)} filas leídas · ` : ''}${num(k.intentos_nuevos || 0)} intentos nuevos${c.mensaje ? ' · ' + esc(c.mensaje) : ''}</span></span></div>`;
+      Corrida #${c.id} ${est(c.estado)} ${c.dry_run ? '(dry-run)' : ''}<br><span class="small">${k.llamadas_a_empresas !== undefined ? `${num(k.llamadas)} llamadas · ${num(k.llamadas_a_empresas)} a empresas (${num(k.nuevas || 0)} nuevas)`
+        : `${k.filas_leidas !== undefined ? `${num(k.filas_leidas)} filas leídas · ` : ''}${num(k.intentos_nuevos || 0)} intentos nuevos`}${c.mensaje ? ' · ' + esc(c.mensaje) : ''}</span></span></div>`;
     if (c.estado !== 'en_curso') return c;
     await new Promise(r => setTimeout(r, 2000));
   }

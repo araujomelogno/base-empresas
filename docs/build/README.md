@@ -82,3 +82,11 @@ Las figuras se insertaron en `docs/Manual_de_usuario_Base_de_Empresas.docx` (gu√
 ```bash
 soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
 ```
+
+## Capturas del conteo de llamadas
+
+`capturas_llamadas.js` saca las figuras 40 a 43 (rendimiento por origen, corridas del job del CDR, detalle de una corrida y empresas llamadas). Necesita la demo y al menos una corrida del job con el conteo nuevo:
+
+```bash
+BASE=http://localhost:8080 node docs/build/capturas_llamadas.js docs/manual/img
+```

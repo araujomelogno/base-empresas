@@ -1,8 +1,11 @@
 """Campo: CDR, ingesta del .sav, conciliación y actividad (R1.8–R1.11)."""
+import datetime as dt
+
 from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
 
-from .. import actividad, cdr, conciliacion, sav, storage, tareas
+from .. import actividad, auditoria, cdr, conciliacion, sav, storage, tareas
 from ..auth import Usuario, requiere, requiere_job, usuario_actual
 from ..db import conexion, get_conn
 
@@ -99,10 +102,10 @@ def conciliacion_resolver(conciliacion_id: int, body: Resolucion, conn=Depends(g
 
 @router.get("/actividad/origenes")
 def rendimiento_origen(estudio_id: int | None = None, muestra_id: int | None = None, encuestador: str | None = None,
-                       desde: str | None = None, hasta: str | None = None, conn=Depends(get_conn),
-                       u: Usuario = Depends(usuario_actual)):
-    return actividad.rendimiento_origen(conn, {"estudio_id": estudio_id, "muestra_id": muestra_id,
-                                               "encuestador": encuestador, "desde": desde, "hasta": hasta})
+                       desde: str | None = None, hasta: str | None = None, corrida_id: int | None = None,
+                       conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+    return actividad.rendimiento_origen(conn, {"estudio_id": estudio_id, "muestra_id": muestra_id, "encuestador": encuestador,
+                                               "desde": desde, "hasta": hasta, "corrida_id": corrida_id})
 
 
 @router.get("/actividad")
@@ -111,3 +114,25 @@ def tablero(estudio_id: int | None = None, muestra_id: int | None = None, encues
             u: Usuario = Depends(usuario_actual)):
     return actividad.tablero(conn, {"estudio_id": estudio_id, "muestra_id": muestra_id, "encuestador": encuestador,
                                     "desde": desde, "hasta": hasta})
+
+
+@router.get("/actividad/empresas-llamadas")
+def empresas_llamadas(estudio_id: int | None = None, muestra_id: int | None = None, encuestador: str | None = None,
+                      desde: str | None = None, hasta: str | None = None, corrida_id: int | None = None,
+                      origen: str | None = None, solo_sin_muestra: bool = False, formato: str = "json",
+                      conn=Depends(get_conn), u: Usuario = Depends(requiere("coordinador", "jefe"))):
+    """Empresas a las que se llamó con los filtros de Actividad, una corrida y un origen (R4).
+    formato=csv descarga el archivo (separador ;, UTF-8 con BOM) y queda en Auditoría."""
+    filtros = {"estudio_id": estudio_id, "muestra_id": muestra_id, "encuestador": encuestador, "desde": desde,
+               "hasta": hasta, "corrida_id": corrida_id}
+    filas, llamadas = actividad.empresas_llamadas(conn, filtros, origen, solo_sin_muestra)
+    if formato != "csv":
+        return {"empresas": filas, "total": len(filas), "llamadas": llamadas}
+    usados = {k: v for k, v in {**filtros, "origen": origen, "solo_sin_muestra": solo_sin_muestra or None}.items() if v}
+    auditoria.registrar(conn, u.email, "actividad.exportar_empresas", "actividad", None,
+                        {"filtros": usados, "filas": len(filas), "llamadas": llamadas})
+    nombre = "empresas_llamadas" + (f"_corrida{corrida_id}" if corrida_id else "") + \
+        f"_{dt.datetime.now(actividad.TZ).strftime('%Y%m%d_%H%M')}.csv"
+    return Response(content=actividad.csv_empresas(filas).encode("utf-8-sig"), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{nombre}"', "X-Renglones": str(len(filas)),
+                             "Access-Control-Expose-Headers": "X-Renglones"})

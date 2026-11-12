@@ -326,9 +326,22 @@ Lo que no se pudo asociar solo espera en **Conciliación**:
 
 ![Tablero de actividad](img/23-actividad.png)
 
-**Rendimiento por origen.** Por cada origen de teléfono: teléfonos discables, llamados, intentos, contactabilidad (teléfonos con al menos una llamada atendida sobre llamados; atendida = disposición ANSWERED o, si la disposición no lo dice, duración facturada mayor a 0), contactos efectivos, % que la sala marcó como no corresponde, inexistente o intermediario, e intentos por contacto efectivo. Un teléfono con varios orígenes cuenta en cada uno; la fila Total, una sola vez. Se descarga como CSV.
+**Corridas del job del CDR.** Cada corrida muestra:
+
+| Columna | Qué cuenta |
+| --- | --- |
+| Llamadas | Una por llamada del CDR, como el dashboard de productividad: los tramos de una misma llamada cuentan una vez, sin las llamadas a anexos internos y sin filtro de campaña |
+| A empresas | Las llamadas a un teléfono de la base, nuevas o ya registradas (un reproceso repite el número) |
+| Teléfonos | Teléfonos distintos de esas llamadas |
+| Empresas | Empresas distintas de esas llamadas |
+
+**Ver detalle** muestra el embudo: filas leídas → llamadas (sin tramos repetidos ni internas) → llamadas a empresas (sin números no normalizables ni que no están en la base, nuevas y ya registradas) → asociadas a una muestra, en Conciliación o sin muestra. **Exportar empresas** abre la lista de empresas de esa corrida. Las corridas anteriores a este conteo muestran «—»; un reproceso con «Correr ahora» y fechas las recalcula.
+
+**Rendimiento por origen.** Por cada origen de teléfono: teléfonos discables, **teléfonos llamados**, **llamadas**, **empresas llamadas**, contactabilidad (teléfonos con al menos una llamada atendida sobre teléfonos llamados; atendida = disposición ANSWERED o, si la disposición no lo dice, duración facturada mayor a 0), contactos efectivos, % que la sala marcó como no corresponde, inexistente o intermediario, e intentos por contacto efectivo. Cuenta **todas las llamadas a empresas de la base**, estén o no en una muestra. Con un estudio o una muestra elegidos, cuenta las llamadas a las empresas de sus muestras aunque no hayan quedado asociadas al ítem (por ejemplo, antes del campo o en Conciliación). Un teléfono con varios orígenes cuenta en cada uno; la fila Total cuenta cada teléfono una sola vez y coincide con el total del tablero. Se descarga como CSV.
 
 ![Rendimiento por origen](img/40-rendimiento-origen.png)
+
+**Empresas llamadas.** El botón **Empresas llamadas** (con los filtros de la pantalla), cada número de llamadas o de empresas de la tarjeta de rendimiento (ese origen) y **Exportar empresas** de una corrida abren la lista: una fila por empresa con sus teléfonos llamados y su origen, llamadas, atendidas, primera y última llamada, encuestadores, y estudio, muestra y estado del ítem («sin muestra» si no está en ninguna). «Solo empresas que no están en ninguna muestra» filtra rápido las que no están en ningún estudio. **Descargar CSV** baja la misma lista (separador `;`, abre en Excel con tildes) y queda en Auditoría. No incluye contactos. Una llamada a un número compartido por varias empresas aparece en la fila de cada una; el total de llamadas arriba la cuenta una vez.
 
 El CDR se procesa cada noche a las 4:00 (hora de Montevideo) e incluye las llamadas de campaña **y** las del marcador manual: se reconocen por el número marcado, no por la campaña. Las llamadas a internos y a números que no están en la base se cuentan pero no se guardan.
 

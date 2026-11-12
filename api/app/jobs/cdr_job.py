@@ -9,6 +9,12 @@ número destino. Es incremental: el estado (última calldate y los uniqueid de e
 en la tabla cdr_estado y avanza en la misma transacción que cada lote, nunca hacia atrás.
 Re-procesar un período es seguro porque los intentos son idempotentes por cdr_id.
 
+Conteos de cada corrida (D38, mismos criterios que el dashboard de productividad CATI, sin
+filtro de campaña): «llamadas» es una por uniqueid (los tramos cuentan una vez), con destino
+externo y sin volver a contar las filas del segundo ya procesado. «llamadas_a_empresas» son las
+que cruzan con un teléfono de la base, nuevas más ya registradas (cdr_corrida_intento), así un
+reproceso repite el número en lugar de mostrar 0.
+
     python -m app.jobs.cdr_job                                    # incremental
     python -m app.jobs.cdr_job --desde 2026-10-01 --hasta 2026-10-02   # reproceso
     python -m app.jobs.cdr_job --dry-run                          # no escribe intentos
@@ -167,6 +173,37 @@ class _DryRun(Exception):
     pass
 
 
+CONTEO_VERSION = 2   # las corridas anteriores no tienen llamadas_a_empresas: la pantalla muestra «—»
+
+
+def vincular_intentos(conn, corrida_id: int, llamadas: list[dict]) -> None:
+    """Registra las llamadas a empresas del lote en la corrida (nuevas o ya registradas)."""
+    conn.execute("INSERT INTO cdr_corrida_intento (corrida_id, intento_id) SELECT %s, id FROM intento"
+                 " WHERE cdr_id = ANY(%s) ON CONFLICT DO NOTHING", (corrida_id, [str(ll["cdr_id"]) for ll in llamadas]))
+
+
+def resumen_corrida(conn, corrida_id: int, total: dict) -> dict:
+    """Completa los conteos de la corrida: llamadas (R1) y el embudo de las llamadas a empresas (R2)."""
+    r = conn.execute("""
+        SELECT count(*) AS llamadas_a_empresas, count(DISTINCT i.telefono_id) AS telefonos_marcados,
+               (SELECT count(DISTINCT e) FROM cdr_corrida_intento c2 JOIN intento i2 ON i2.id = c2.intento_id,
+                       unnest(i2.empresas) e WHERE c2.corrida_id = %(c)s) AS empresas_llamadas,
+               count(*) FILTER (WHERE i.item_id IS NOT NULL) AS asociadas_a_muestra,
+               count(*) FILTER (WHERE i.item_id IS NULL AND EXISTS (
+                 SELECT 1 FROM conciliacion k WHERE k.tipo = 'intento' AND k.objeto_id = i.id AND k.estado = 'pendiente'))
+                 AS en_conciliacion
+        FROM cdr_corrida_intento ci JOIN intento i ON i.id = ci.intento_id WHERE ci.corrida_id = %(c)s""",
+        {"c": corrida_id}).fetchone()
+    total.update(r)
+    total["sin_muestra"] = r["llamadas_a_empresas"] - r["asociadas_a_muestra"] - r["en_conciliacion"]
+    # Llamadas: una por uniqueid (ya deduplicadas), con destino externo
+    total["llamadas"] = total.get("recibidas", 0) - total.get("internas", 0)
+    total["nuevas"] = total.get("intentos_nuevos", 0)
+    total["ya_registradas"] = total.get("duplicados", 0)
+    total["conteo_version"] = CONTEO_VERSION
+    return total
+
+
 # ─── Ejecución ───
 
 def ejecutar(args, leer=None) -> int:
@@ -221,7 +258,7 @@ def _ejecutar(args, p: dict, corrida_id: int, leer) -> int:
             filas = [f for f in filas if not ya_enviada(f, estado)]
         filas = deduplicar(filas)
         llamadas = [fila_a_llamada(f, tz) for f in filas]
-        total = {"filas_leidas": leidas, "llamadas": len(llamadas)}
+        total = {"filas_leidas": leidas, "llamadas": 0}
         rango = {}
         if filas:
             fechas = [_fecha(f["calldate"]) for f in filas]
@@ -235,6 +272,8 @@ def _ejecutar(args, p: dict, corrida_id: int, leer) -> int:
                     with conn.transaction():
                         for lote_ll in lotes(llamadas, p["lote_tamano"]):
                             sumar(total, cdr.procesar_lote(conn, lote_ll, ORIGEN, ACTOR))
+                            vincular_intentos(conn, corrida_id, lote_ll)
+                        resumen_corrida(conn, corrida_id, total)
                         raise _DryRun()
                 except _DryRun:
                     pass
@@ -249,6 +288,7 @@ def _ejecutar(args, p: dict, corrida_id: int, leer) -> int:
             with conexion() as conn:  # lote y estado en la misma transacción
                 resp = cdr.procesar_lote(conn, lote_ll, ORIGEN, ACTOR)
                 conn.execute("UPDATE cdr_lote SET corrida_id = %s WHERE id = %s", (corrida_id, resp["lote_id"]))
+                vincular_intentos(conn, corrida_id, lote_ll)
                 nuevo = avanzar(estado, lote_f)
                 if nuevo is not estado:
                     guardar_estado(conn, nuevo)
@@ -256,6 +296,8 @@ def _ejecutar(args, p: dict, corrida_id: int, leer) -> int:
             sumar(total, resp)
             _actualizar(corrida_id, conteos=total)
             log.info("Corrida %s, lote %d: %s", corrida_id, n, json.dumps(resp, ensure_ascii=False, default=str))
+        with conexion() as conn:
+            resumen_corrida(conn, corrida_id, total)
         _terminar(corrida_id, "ok", None, conteos=total, **rango)
         return 0
     except Exception as e:

@@ -1,6 +1,6 @@
 // Ingesta del .sav, conciliación y actividad (R1.8–R1.11)
 import * as api from '../api.js';
-import { $, $$, esc, main, toast, num, pct, fecha, fechaHora, rutFmt, est, etiqueta, pageHeader, stats, tabla, card,
+import { $, $$, esc, main, toast, num, pct, fecha, fechaHora, rutFmt, est, etiqueta, pageHeader, stats, tabla, card, modal,
   confirmar, seguirTarea, archivoDrop, activarDrop, tabs, barras, columnas, json } from '../ui.js';
 import { actualizarContadores } from '../app.js';
 
@@ -194,16 +194,19 @@ export async function actividad(ctx) {
       <div class="form-group"><label>Muestra</label><select class="fselect" id="a-muestra_id"><option value="">Todas</option>${muestras.map(m => `<option value="${m.id}">${esc(m.estudio_nombre)} — ${esc(m.nombre)}</option>`).join('')}</select></div>
       <div class="form-group"><label>Encuestador/a</label><select class="fselect" id="a-encuestador"><option value="">Todos</option></select></div>
       <div class="form-group"><label>Desde</label><input type="date" id="a-desde" /></div>
-      <div class="form-group"><label>Hasta</label><input type="date" id="a-hasta" /></div></div></div></div><div id="a-res"></div>`;
+      <div class="form-group"><label>Hasta</label><input type="date" id="a-hasta" /></div>
+      ${ctx.puede('coordinador', 'jefe') ? `<div class="form-group"><label>&nbsp;</label><button class="btn btn-outline" id="a-empresas">Empresas llamadas</button></div>` : ''}
+      </div></div></div><div id="a-res"></div>`;
+  if ($('#a-empresas')) $('#a-empresas').onclick = () => irEmpresas(ctx, { ..._act });
   Object.entries(_act).forEach(([k, v]) => { const el = $('#a-' + k); if (el && k !== 'encuestador') el.value = v; });
   const cargar = async () => {
     Object.keys(_act).forEach(k => { _act[k] = $('#a-' + k).value; });
     const t = await api.get('/actividad', _act);
     const sel = $('#a-encuestador');
     if (sel.options.length === 1) sel.innerHTML += t.encuestadores_lista.map(e => `<option ${e === _act.encuestador ? 'selected' : ''}>${esc(e)}</option>`).join('');
-    $('#a-res').innerHTML = stats([[t.intentos, 'Intentos', 's-total'], [t.telefonos_marcados, 'Teléfonos marcados', 's-free'],
+    $('#a-res').innerHTML = stats([[t.intentos, 'Llamadas a empresas', 's-total'], [t.telefonos_marcados, 'Teléfonos marcados', 's-free'],
       [t.empresas_llamadas, 'Empresas llamadas', ''], [t.contactos_efectivos, 'Contactos efectivos', 's-warn'], [t.completas, 'Completas', 's-ok'],
-      [pct(t.asociados_a_item, t.intentos), 'Intentos asociados a ítem', '']]) +
+      [pct(t.asociados_a_item, t.intentos), 'Asociadas a un ítem de muestra', '']]) +
       `<div class="grid-2">${card('Intentos por franja', barras(t.por_franja, { label: 'franja', valor: 'intentos' }))}
       ${card('Intentos por día', columnas(t.por_dia, { label: 'dia', valor: 'intentos' }))}</div>` +
       card('Por encuestador/a', tabla([{ t: 'Encuestador/a', f: e => `<span class="td-strong">${esc(e.encuestador)}</span>` },
@@ -211,37 +214,40 @@ export async function actividad(ctx) {
         { t: 'Contactos efectivos', cls: 'num', f: e => num(e.contactos_efectivos) }, { t: 'Completas', cls: 'num', f: e => num(e.completas) },
         { t: 'Intentos por completa', cls: 'num', f: e => e.completas ? (e.intentos / e.completas).toLocaleString('es-UY', { maximumFractionDigits: 1 }) : '—' }],
       t.por_encuestador, 'Sin actividad'), '', true) +
-      `<div class="grid-2">${card('Disposiciones de llamada', barras(t.por_disposicion, { label: 'disposicion', valor: 'intentos' }))}
-      ${card('Corridas del job del CDR', tabla([{ t: 'Inicio', f: c => fechaHora(c.inicio) },
-        { t: 'Origen', f: c => esc(c.origen) + (c.dry_run ? ' · dry-run' : '') }, { t: 'Estado', f: c => est(c.estado) },
-        { t: 'Llamadas', cls: 'num', f: c => num((c.conteos || {}).filas_leidas) }, { t: 'Nuevos', cls: 'num', f: c => num((c.conteos || {}).intentos_nuevos) },
-        { t: 'Detalle', f: c => `<span class="small">${esc(c.mensaje || (c.pedido_desde ? `reproceso desde ${c.pedido_desde}` : ''))}</span>` }],
-        corridas.slice(0, 15), 'Todavía no corrió el job del CDR'), '', true)}</div>` +
+      card('Disposiciones de llamada', barras(t.por_disposicion, { label: 'disposicion', valor: 'intentos' })) +
+      tablaCorridas(ctx, corridas.slice(0, 15)) +
       `<div id="a-origenes"></div>`;
     rendimientoOrigen();
+    activarCorridas(ctx, corridas);
   };
   const rendimientoOrigen = async () => {
     const r = await api.get('/actividad/origenes', _act);
     const pc = (v) => v === null || v === undefined ? '—' : v.toLocaleString('es-UY', { maximumFractionDigits: 1 }) + '%';
     const dec = (v) => v === null || v === undefined ? '—' : v.toLocaleString('es-UY', { maximumFractionDigits: 1 });
     const cols = [
-      ['Origen', o => o.nombre], ['Discables', o => o.discables], ['Llamados', o => o.llamados],
-      ['Intentos', o => o.intentos], ['Contactab.', o => pc(o.contactabilidad)], ['Efectivos', o => o.contactos_efectivos],
+      ['Origen', o => o.nombre], ['Discables', o => o.discables], ['Teléfonos llamados', o => o.telefonos_llamados],
+      ['Llamadas', o => enlace(o, o.llamadas)], ['Empresas llamadas', o => enlace(o, o.empresas_llamadas)],
+      ['Contactab.', o => pc(o.contactabilidad)], ['Efectivos', o => o.contactos_efectivos],
       ['% no corr.', o => pc(o.pct_no_corresponde)], ['% inexist.', o => pc(o.pct_inexistente)],
       ['% interm.', o => pc(o.pct_intermediario)], ['Int. por efectivo', o => dec(o.intentos_por_efectivo)],
     ];
+    const enlace = (o, n) => !n || !ctx.puede('coordinador', 'jefe') ? num(n)
+      : `<a class="link" href="${hashEmpresas({ ..._act, origen: o.codigo || '' })}" title="Ver las empresas llamadas">${num(n)}</a>`;
     const filas = [...r.origenes, { ...r.total, __tr: 'class="fila-total"' }];
     $('#a-origenes').innerHTML = card('Rendimiento por origen', (r.origenes.length ? tabla(cols.map(([t, f], i) => ({
       t, cls: i ? 'num' : '', f: o => i ? (typeof f(o) === 'number' ? num(f(o)) : f(o)) : `<span class="td-strong">${esc(f(o))}</span>` })), filas)
       : `<div class="empty-state"><span class="ei">☎️</span>Sin teléfonos con origen para estos filtros</div>`) +
-      `<div class="card-body small muted">Discables y llamados son teléfonos; efectivos son ítems con contacto efectivo cuyo teléfono usado tiene ese origen. Un teléfono con varios orígenes cuenta en cada uno; la fila Total cuenta cada teléfono una sola vez.
+      `<div class="card-body small muted">Cuenta <strong>todas las llamadas a empresas de la base</strong> del período, estén o no en una muestra; con un estudio o una muestra elegidos, las llamadas a empresas de sus muestras (aunque no hayan quedado asociadas al ítem).
+       Discables y teléfonos llamados son teléfonos; llamadas son llamadas del CDR a esos teléfonos (una por llamada); empresas llamadas son empresas distintas; efectivos son ítems con contacto efectivo cuyo teléfono usado tiene ese origen.
+       Tocá un número de llamadas o de empresas para ver la lista. Un teléfono con varios orígenes cuenta en cada uno; la fila Total cuenta cada teléfono una sola vez.
        Contactabilidad: teléfonos con al menos una llamada atendida (${esc(r.definicion_atendida)}) sobre teléfonos llamados.
        Los porcentajes de no corresponde, inexistente e intermediario son vínculos marcados por la sala sobre teléfonos llamados.</div>`,
       r.origenes.length ? `<button class="btn btn-outline btn-sm" id="a-origenes-csv">Descargar CSV</button>` : '', true);
     if ($('#a-origenes-csv')) $('#a-origenes-csv').onclick = () => {
       const celda = (v) => { const s = v === null || v === undefined ? '' : String(v); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-      const crudo = [['Origen', o => o.nombre], ['Teléfonos discables', o => o.discables], ['Teléfonos llamados', o => o.llamados],
-        ['Intentos', o => o.intentos], ['Teléfonos atendidos', o => o.atendidos], ['Contactabilidad %', o => o.contactabilidad],
+      const crudo = [['Origen', o => o.nombre], ['Teléfonos discables', o => o.discables], ['Teléfonos llamados', o => o.telefonos_llamados],
+        ['Llamadas', o => o.llamadas], ['Empresas llamadas', o => o.empresas_llamadas], ['Teléfonos atendidos', o => o.atendidos],
+        ['Contactabilidad %', o => o.contactabilidad],
         ['Contactos efectivos', o => o.contactos_efectivos], ['% no corresponde', o => o.pct_no_corresponde],
         ['% inexistente', o => o.pct_inexistente], ['% intermediario', o => o.pct_intermediario],
         ['Intentos por contacto efectivo', o => o.intentos_por_efectivo]];
@@ -253,4 +259,103 @@ export async function actividad(ctx) {
   };
   $$('.inline-form select, .inline-form input').forEach(i => i.onchange = cargar);
   await cargar();
+}
+
+// ── Corridas del job del CDR (R2) ──
+const v2 = (c) => (c.conteos || {}).conteo_version >= 2;
+const NOTA_ANTERIOR = 'Corrida anterior al nuevo conteo: no tiene este dato. Un reproceso con «Correr ahora» y fechas lo recalcula.';
+
+function tablaCorridas(ctx, corridas) {
+  const n = (c, k) => v2(c) ? num(c.conteos[k] || 0) : `<span class="muted" title="${NOTA_ANTERIOR}">—</span>`;
+  return card('Corridas del job del CDR', tabla([
+    { t: 'Inicio', f: c => `<span class="small">${fechaHora(c.inicio)}</span><div class="small muted">${esc(c.origen)}${c.dry_run ? ' · dry-run' : ''}</div>` },
+    { t: 'Estado', f: c => est(c.estado) },
+    { t: 'Llamadas', cls: 'num', f: c => n(c, 'llamadas') }, { t: 'A empresas', cls: 'num', f: c => n(c, 'llamadas_a_empresas') },
+    { t: 'Teléfonos', cls: 'num', f: c => n(c, 'telefonos_marcados') }, { t: 'Empresas', cls: 'num', f: c => n(c, 'empresas_llamadas') },
+    { t: 'Detalle', f: c => `<span class="small">${esc(c.mensaje || (c.pedido_desde ? `reproceso desde ${c.pedido_desde}` : ''))}</span>
+      ${!v2(c) && c.conteos && Object.keys(c.conteos).length ? `<div class="small muted">corrida anterior al nuevo conteo</div>` : ''}
+      ${c.conteos && Object.keys(c.conteos).length ? `<div class="small"><a class="link" href="javascript:void 0" data-corrida-detalle="${c.id}">Ver detalle</a></div>` : ''}
+      ${ctx.puede('coordinador', 'jefe') && c.estado !== 'en_curso' && !c.dry_run ? `<div class="small"><a class="link" href="${hashEmpresas({ corrida_id: c.id })}">Exportar empresas</a></div>` : ''}` },
+  ], corridas, 'Todavía no corrió el job del CDR'), '', true) +
+    `<p class="small muted mt">Llamadas: una por llamada del CDR (los tramos de una misma llamada cuentan una vez), con destino externo y sin filtro de campaña, igual que el dashboard de productividad.
+     A empresas: las llamadas a un teléfono de la base, nuevas o ya registradas. Teléfonos y empresas: distintos, entre esas llamadas.</p>`;
+}
+
+function embudo(c) {
+  const k = c.conteos || {};
+  const fila = (t, v, sub = '') => `<tr><td>${t}</td><td class="num td-strong">${v === undefined ? (v2(c) ? '0' : '—') : num(v)}</td><td class="small muted">${sub}</td></tr>`;
+  const porTipo = Object.entries(k.no_cruzan_por_tipo || {}).map(([t, v]) => `${esc(etiqueta(t))} ${num(v)}`).join(' · ');
+  if (!v2(c)) {
+    return `<p class="small muted mb">${NOTA_ANTERIOR}</p><table class="tabla-simple">${fila('Filas leídas', k.filas_leidas)}
+      ${fila('Recibidas (después de quitar tramos repetidos)', k.recibidas)}${fila('Internas', k.internas)}${fila('No normalizables', k.no_normalizables)}
+      ${fila('No están en la base', k.no_cruzan, porTipo)}${fila('Intentos nuevos', k.intentos_nuevos)}${fila('Ya registrados', k.duplicados)}</table>`;
+  }
+  const repetidas = (k.filas_leidas || 0) - (k.recibidas || 0);
+  return `<table class="tabla-simple">
+    ${fila('Filas leídas', k.filas_leidas)}
+    ${fila('− tramos repetidos y filas ya procesadas', repetidas, 'una llamada con varios tramos (mismo uniqueid) cuenta una vez')}
+    ${fila('− internas', k.internas, 'anexos, colas y demás destinos internos de la configuración')}
+    ${fila('= Llamadas', k.llamadas)}
+    ${fila('− no normalizables', k.no_normalizables)}
+    ${fila('− números que no están en la base', k.no_cruzan, porTipo)}
+    ${fila('= Llamadas a empresas', k.llamadas_a_empresas, `${num(k.nuevas || 0)} nuevas · ${num(k.ya_registradas || 0)} ya registradas`)}
+    ${fila('&nbsp;&nbsp;asociadas a una muestra', k.asociadas_a_muestra)}
+    ${fila('&nbsp;&nbsp;en Conciliación', k.en_conciliacion)}
+    ${fila('&nbsp;&nbsp;sin muestra', k.sin_muestra, 'la empresa no está en una muestra activa o la llamada fue fuera de las fechas de campo')}
+    ${fila('Teléfonos marcados', k.telefonos_marcados)}${fila('Empresas llamadas', k.empresas_llamadas)}</table>`;
+}
+
+function activarCorridas(ctx, corridas) {
+  $$('[data-corrida-detalle]').forEach(b => b.onclick = () => {
+    const c = corridas.find(x => x.id === +b.dataset.corridaDetalle);
+    modal({ titulo: `Corrida #${c.id} — ${fechaHora(c.inicio)}`, ancho: 680, cuerpo: embudo(c),
+      acciones: [...(ctx.puede('coordinador', 'jefe') && !c.dry_run ? [{ t: 'Exportar empresas', fn: () => { ctx.ir(hashEmpresas({ corrida_id: c.id }).slice(2)); return true; } }] : []),
+        { t: 'Cerrar', cls: 'btn-orange' }] });
+  });
+}
+
+// ── Empresas llamadas (R4) ──
+const FILTROS_EMPRESAS = ['estudio_id', 'muestra_id', 'encuestador', 'desde', 'hasta', 'corrida_id', 'origen', 'solo_sin_muestra'];
+function hashEmpresas(f) {
+  const q = new URLSearchParams(Object.entries(f).filter(([k, v]) => FILTROS_EMPRESAS.includes(k) && v !== '' && v !== null && v !== undefined));
+  return '#/actividad/empresas' + (q.toString() ? '?' + q : '');
+}
+function irEmpresas(ctx, f) { location.hash = hashEmpresas(f); }
+
+export async function empresasLlamadas(ctx, params) {
+  const f = Object.fromEntries(FILTROS_EMPRESAS.map(k => [k, params.get(k) || '']));
+  const [r, estudios, muestras, origenes] = await Promise.all([api.get('/actividad/empresas-llamadas', f), api.get('/estudios'),
+    api.get('/muestras'), api.get('/origenes-telefono')]);
+  const nombreO = Object.fromEntries(origenes.map(o => [o.codigo, o.nombre]));
+  const filtros = [
+    f.corrida_id && `corrida #${esc(f.corrida_id)}`,
+    f.estudio_id && `estudio ${esc((estudios.find(e => e.id === +f.estudio_id) || {}).nombre || '#' + f.estudio_id)}`,
+    f.muestra_id && `muestra ${esc((muestras.find(m => m.id === +f.muestra_id) || {}).nombre || '#' + f.muestra_id)}`,
+    f.origen && `origen ${esc(f.origen === '_sin_vinculo' ? 'sin vínculo vigente' : (nombreO[f.origen] || f.origen))}`,
+    f.encuestador && `encuestador/a ${esc(f.encuestador)}`, f.desde && `desde ${fecha(f.desde)}`, f.hasta && `hasta ${fecha(f.hasta)}`,
+  ].filter(Boolean);
+  main().innerHTML = pageHeader('Empresas', 'llamadas', `${filtros.length ? 'Filtros: ' + filtros.join(' · ') : 'Todas las llamadas a empresas de la base'} ·
+    <a class="link" href="#/actividad">volver a Actividad</a>`,
+    `<button class="btn btn-orange" id="el-csv">Descargar CSV</button>`) +
+    stats([[r.total, 'Empresas', 's-total'], [r.llamadas, 'Llamadas', 's-free'],
+      [r.empresas.filter(e => !e.muestras).length, 'Sin muestra', '']]) +
+    `<div class="toolbar mb"><label class="check"><input type="checkbox" id="el-sin" ${f.solo_sin_muestra ? 'checked' : ''} /> Solo empresas que no están en ninguna muestra</label></div>` +
+    card(`${num(r.total)} empresas`, tabla([
+      { t: 'RUT', f: e => `<a class="link mono" href="#/empresas/${e.rut}">${rutFmt(e.rut)}</a>` },
+      { t: 'Razón social', f: e => `<span class="td-strong">${esc(e.razon_social || '—')}</span>` }, { t: 'Departamento', k: 'departamento' },
+      { t: 'Teléfonos llamados', f: e => (e.telefonos || []).map(t => `<div class="small"><span class="mono">${esc(t.numero)}</span> <span class="muted">${esc(t.origenes.join(', ') || 'sin origen')}</span></div>`).join('') },
+      { t: 'Llamadas', cls: 'num', f: e => num(e.llamadas) }, { t: 'Atendidas', cls: 'num', f: e => num(e.atendidas) },
+      { t: 'Primera y última', f: e => `<div class="small">${fechaHora(e.primera)}</div><div class="small">${fechaHora(e.ultima)}</div>` },
+      { t: 'Encuestadores', f: e => `<span class="small">${(e.encuestadores || []).map(esc).join(', ') || '—'}</span>` },
+      { t: 'Estudio / muestra', f: e => (e.muestras || []).map(m => `<div class="small"><a class="link" href="#/muestras/${m.muestra_id}">${esc(m.estudio)} / ${esc(m.muestra)}</a></div>`).join('') || '<span class="muted small">sin muestra</span>' },
+      { t: 'Estado del ítem', f: e => (e.muestras || []).map(m => `<div class="small">${Object.entries(m.estados || {}).map(([p, s]) => `${esc(p)}: ${est(s)}`).join(' ') || (m.liberado ? 'liberado' : 'no liberado')}</div>`).join('') || '—' },
+    ], r.empresas, 'No hay llamadas a empresas con estos filtros'), '', true) +
+    `<p class="small muted mt">Una fila por empresa de la base a la que se llamó. «Llamadas» arriba cuenta cada llamada una vez; una llamada a un número
+     compartido por varias empresas aparece en la fila de cada una, así que la suma de las filas puede ser mayor. Atendidas: disposición ANSWERED en el CDR o, si la disposición no lo dice, duración facturada mayor a 0.
+     No incluye contactos (nombres de personas). La descarga queda registrada en Auditoría.</p>`;
+  $('#el-sin').onchange = (e) => irEmpresas(ctx, { ...f, solo_sin_muestra: e.target.checked ? 'true' : '' });
+  $('#el-csv').onclick = async () => {
+    const d = await api.descargar('/actividad/empresas-llamadas', { ...Object.fromEntries(Object.entries(f).filter(([, v]) => v)), formato: 'csv' });
+    toast(`Descargado ${d.nombre} (${d.headers.get('X-Renglones')} empresas)`, 'ok');
+  };
 }
