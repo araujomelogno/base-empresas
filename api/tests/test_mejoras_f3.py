@@ -170,7 +170,7 @@ def test_atributo_de_contacto_en_la_carga_y_la_ficha(api, sql):
     assert api.patch(f"/contactos/{ana['id']}", rol="steward", json={"atributos": {"decisor": "Tal vez"}}).status_code == 422
     # no se usan para filtrar ni estratificar el sorteo, ni entran en los atributos de la empresa
     assert all(a["clave"] not in ("decisor", "antiguedad") for a in ficha(api, rut_valido(0))["atributos"])
-    assert api.post("/muestras/marco", rol="jefe", json={"n_por_estrato": 1, "atributos": {"decisor": ["Sí"]}}).status_code == 422
+    assert api.post("/muestras/marco", rol="jefe", json={"n_por_estrato": 1, "atributos": {"decisor": {"valores": ["Sí"]}}}).status_code == 422
     # el ámbito no se cambia y un atributo con valores no se borra
     assert api.put(f"/atributos/{ana['atributos'][0]['atributo_id']}", json={"ambito": "empresa"}).status_code == 422
     assert api.delete(f"/atributos/{ana['atributos'][0]['atributo_id']}").status_code == 409

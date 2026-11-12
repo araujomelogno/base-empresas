@@ -82,3 +82,13 @@ CREATE TABLE IF NOT EXISTS contacto_atributo (
 );
 CREATE INDEX IF NOT EXISTS contacto_atributo_atributo_idx ON contacto_atributo(atributo_id);
 CREATE INDEX IF NOT EXISTS contacto_fuente_idx ON contacto(fuente_tipo, fuente_id);
+
+-- ── F4.1 / F4.2 Normalización y fusión de atributos ──
+-- pg_trgm viene con Cloud SQL para PostgreSQL y es «trusted»: la crea el usuario dueño de la base.
+CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public;
+ALTER TABLE atributo ADD COLUMN IF NOT EXISTS normalizar_texto text NOT NULL DEFAULT 'ninguna';
+ALTER TABLE atributo DROP CONSTRAINT IF EXISTS atributo_normalizar_texto_check;
+ALTER TABLE atributo ADD CONSTRAINT atributo_normalizar_texto_check
+  CHECK (normalizar_texto IN ('ninguna', 'capital', 'mayusculas'));
+ALTER TABLE atributo ADD COLUMN IF NOT EXISTS fusionado_en int REFERENCES atributo(id);
+ALTER TABLE atributo ADD COLUMN IF NOT EXISTS nota text;

@@ -219,6 +219,12 @@ def analizar(conn, archivo: dict, tipo_fuente: str | None) -> dict:
     avisos = []
     if plantilla:
         mapeo_p, avisos = limpiar_mapeo(plantilla["mapeo"])
+    if plantilla:  # F4.2: un atributo fusionado se reemplaza por el que lo absorbió
+        fusionados = {r["clave"]: r["destino"] for r in conn.execute(
+            "SELECT a.clave, b.clave AS destino FROM atributo a JOIN atributo b ON b.id = a.fusionado_en")}
+        for bloque in ("atributos", "contacto_atributos"):
+            if mapeo_p.get(bloque):
+                mapeo_p[bloque] = {fusionados.get(k, k): v for k, v in mapeo_p[bloque].items()}
     if plantilla and columnas_de_mapeo(mapeo_p) <= set(columnas):
         mapeo, origen = mapeo_p, "plantilla"
         activos = {a["clave"] for a in atributos}
@@ -236,10 +242,29 @@ def analizar(conn, archivo: dict, tipo_fuente: str | None) -> dict:
         "archivo_id": archivo["id"], "nombre": archivo["nombre"], "tipo": archivo["tipo"],
         "columnas": columnas, "n_filas": len(filas), "ejemplos": filas[:8],
         "mapeo": mapeo, "origen_mapeo": origen, "avisos": avisos,
+        "sugerencias_atributos": sugerir_atributos(conn, columnas, mapeo),
         "campos": {"empresa": CAMPOS_NUCLEO, "sucursal": CAMPOS_SUCURSAL, "contacto": CAMPOS_CONTACTO},
         "atributos": atributos, "origenes": catalogos.origenes(conn, activos=True),
         "plantillas": [r["tipo_fuente"] for r in conn.execute("SELECT tipo_fuente FROM carga_plantilla ORDER BY 1")],
     }
+
+
+def sugerir_atributos(conn, columnas: list[str], mapeo: dict) -> list[dict]:
+    """F4.1: cada columna sin mapear que se parece a un atributo existente (nombre o sinónimos, con pg_trgm).
+    Al aceptar la sugerencia, el nombre de la columna queda como sinónimo del atributo."""
+    usadas = columnas_de_mapeo(mapeo)
+    libres = [c for c in columnas if c not in usadas and not _TEL.match(_norm_col(c)) and not _ORIGEN.match(_norm_col(c))]
+    if not libres:
+        return []
+    ya = set(mapeo.get("atributos") or {}) | set(mapeo.get("contacto_atributos") or {})
+    ambito = None if mapeo.get("contacto_nombre") else "empresa"
+    out = []
+    for col, lista in catalogos.parecidos(conn, libres, ambito, excluir=ya).items():
+        mejor = lista[0]
+        out.append({"columna": col, "atributo_id": mejor["id"], "clave": mejor["clave"], "nombre": mejor["nombre"],
+                    "ambito": mejor["ambito"], "similitud": mejor["similitud"], "por": mejor["por"],
+                    "otros": [{"clave": x["clave"], "nombre": x["nombre"], "similitud": x["similitud"]} for x in lista[1:3]]})
+    return sorted(out, key=lambda x: -x["similitud"])
 
 
 def _valor(fila: dict, mapeo: dict, campo: str):
@@ -341,9 +366,24 @@ def valores(conn, archivo_id: int, mapeo: dict) -> dict:
         cuenta.pop(None, None)
         cuenta.pop("", None)
         ya = tr.get(catalogos.PREFIJO + clave) or {}
-        pendientes = [{"valor": v, "filas": n, "sugerido": _sugerencia(v, [(o, o) for o in a["opciones"]]),
-                       "traduccion": ya.get(v), "traducido": v in ya}
-                      for v, n in cuenta.most_common() if v not in a["opciones"]]
+        # F4.1: «SI», «si» y «Sí » son la opción «Sí»: no piden traducción
+        faltan = [(v, n) for v, n in cuenta.most_common() if not catalogos.opcion_equivalente(a["opciones"], v)]
+        sim = catalogos.similitudes(conn, [catalogos.normalizar(v) for v, _ in faltan],
+                                    [catalogos.normalizar(o) for o in a["opciones"]])
+        umbral = float(config.vigente(conn)[1].get("umbral_similitud_atributos", 0.6))
+
+        def parecida(v):
+            nv = catalogos.normalizar(v)
+            mejor = max(((sim.get((nv, catalogos.normalizar(o)), 0.0), o) for o in a["opciones"]), default=(0.0, None))
+            return (mejor[1], round(mejor[0], 2)) if mejor[0] >= umbral else (None, None)
+        pendientes = []
+        for v, n in faltan:
+            sug = _sugerencia(v, [(o, o) for o in a["opciones"]])
+            pct = None
+            if sug is None:  # «Exportadora» se parece a «Exportador»: se sugiere, nunca se aplica sola
+                sug, pct = parecida(v)
+            pendientes.append({"valor": v, "filas": n, "sugerido": sug, "similitud": pct,
+                               "traduccion": ya.get(v), "traducido": v in ya})
         if pendientes:
             salida["atributos"].append({"clave": clave, "nombre": a["nombre"], "opciones": a["opciones"],
                                         "valores": pendientes})

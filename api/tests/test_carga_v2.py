@@ -221,8 +221,9 @@ def test_traduccion_sugerida_pero_no_aplicada_sin_confirmar(api, sql):
                               "traducido": False}
     assert v["origen"][1]["sugerido"] is None
     ex = v["atributos"][0]
-    assert ex["clave"] == "exporta" and {x["valor"]: x["sugerido"] for x in ex["valores"]} == {"si": "Sí", "NO": "No", "s/d": None}
-    assert v["pendientes"] == 5
+    # F4.1: «si» y «NO» son las opciones «Sí» y «No» sin distinguir mayúsculas ni tildes: no piden traducción
+    assert ex["clave"] == "exporta" and {x["valor"]: x["sugerido"] for x in ex["valores"]} == {"s/d": None}
+    assert v["pendientes"] == 3
     body = {"archivo_id": a["archivo_id"], "fuente": "x", "tipo_fuente": "dir", "licencia": "interna", "mapeo": m}
     r = api.post("/cargas", rol="steward", json=body)
     assert r.status_code == 422 and "sin traducir" in r.json()["detail"]   # la sugerencia nunca se aplica sola

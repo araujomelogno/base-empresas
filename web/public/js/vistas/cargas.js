@@ -120,6 +120,7 @@ function mapeo(ctx, a, tipoFuente, params) {
     <div class="alert alert-info"><span>Mapeo ${a.origen_mapeo === 'plantilla' ? `cargado de la plantilla <strong>${esc(tipoFuente)}</strong>` : 'sugerido por los nombres de columna'}.
       Se muestran solo los campos que se reconocieron en el archivo: <strong>todo es opcional salvo el RUT</strong>. Los demás se agregan con «+ Agregar».</span></div>
     ${(a.avisos || []).map(x => `<div class="alert alert-warn"><span>${esc(x)}</span></div>`).join('')}
+    <div id="c-parecidos"></div>
     <div class="grid-2"><div id="c-bloques"></div>
     <div><div class="form-group"><label>Nombre de la fuente</label><input type="text" id="c-fuente" value="${esc(a.nombre.replace(/\.[^.]+$/, ''))}" /></div>
       <div class="form-group"><label>Licencia de uso</label><input type="text" id="c-licencia" placeholder="p. ej. base propia, uso interno" /></div>
@@ -133,6 +134,24 @@ function mapeo(ctx, a, tipoFuente, params) {
     card('Primeras filas del archivo', `<div class="table-wrap"><table><thead><tr>${a.columnas.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead>
       <tbody>${a.ejemplos.map(f => `<tr>${a.columnas.map(c => `<td>${esc(f[c] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`, '', true);
 
+  // F4.1: columnas que se parecen a un atributo existente → se ofrece usarlo (y la columna queda como sinónimo)
+  const sugerencias = [...(a.sugerencias_atributos || [])];
+  const pintarParecidos = () => {
+    const m = mapeoDe(st), usadas = columnasUsadas(m);
+    const vivas = sugerencias.filter(x => !usadas.has(x.columna) && !(x.clave in st.atributos) && !(x.clave in st.contacto_atributos));
+    $('#c-parecidos').innerHTML = vivas.length ? `<div class="alert alert-warn"><div><strong>Columnas parecidas a atributos que ya existen</strong>
+      <ul class="aviso-lista">${vivas.map(x => `<li>«${esc(x.columna)}» se parece a <strong>${esc(x.nombre)}</strong>${x.ambito === 'contacto' ? ' (de contacto)' : ''}
+        (${Math.round(x.similitud * 100)} %). <button class="btn btn-outline btn-sm" data-usar-attr="${esc(x.columna)}">Usar ese atributo</button>
+        <button class="btn btn-outline btn-sm" data-ignorar-attr="${esc(x.columna)}">No</button></li>`).join('')}</ul>
+      <div class="small">Al usarlo, el nombre de la columna queda como sinónimo del atributo y la próxima base lo reconoce sola.</div></div></div>` : '';
+    $$('[data-usar-attr]').forEach(b => b.onclick = async () => {
+      const x = sugerencias.find(y => y.columna === b.dataset.usarAttr);
+      try { await api.post(`/atributos/${x.atributo_id}/sinonimo`, { texto: x.columna }); } catch (e) { toast(e.message, 'err'); return; }
+      (x.ambito === 'contacto' ? st.contacto_atributos : st.atributos)[x.clave] = x.columna;
+      toast(`«${x.columna}» se carga como ${x.nombre}`, 'ok'); dibujar();
+    });
+    $$('[data-ignorar-attr]').forEach(b => b.onclick = () => { sugerencias.splice(sugerencias.findIndex(y => y.columna === b.dataset.ignorarAttr), 1); pintarParecidos(); });
+  };
   const dibujar = () => {
     const sinUsar = (obj, todos) => todos.filter(k => !(k in obj));
     const faltanNucleo = sinUsar(st.nucleo, a.campos.empresa);
@@ -193,6 +212,7 @@ function mapeo(ctx, a, tipoFuente, params) {
     $$('[data-attr-c]').forEach(s => s.onchange = () => { st.contacto_atributos[s.dataset.attrC] = s.value; dibujar(); });
     $$('[data-quitar-attr-c]').forEach(b => b.onclick = () => { delete st.contacto_atributos[b.dataset.quitarAttrC]; dibujar(); });
     if ($('#c-add-attr-c')) $('#c-add-attr-c').onchange = (e) => { st.contacto_atributos[e.target.value] = ''; dibujar(); };
+    pintarParecidos();
   };
   dibujar();
 
@@ -248,7 +268,7 @@ function traduccion(ctx, a, st, v, crear) {
       La traducción queda en la plantilla del tipo de fuente.</span></div>
       ${grupos.map(g => `<div class="card-header-title mb mt">${esc(g.titulo)}</div>${tabla([
         { t: 'Valor en el archivo', f: x => `<span class="td-strong">${esc(x.valor)}</span>` }, { t: 'Filas', cls: 'num', f: x => num(x.filas) },
-        { t: 'Sugerido', f: x => x.sugerido ? esc(nombreDe(g, x.sugerido)) : '<span class="muted">—</span>' },
+        { t: 'Sugerido', f: x => x.sugerido ? esc(nombreDe(g, x.sugerido)) + (x.similitud ? ` <span class="small muted">(se parece: ${Math.round(x.similitud * 100)} %)</span>` : '') : '<span class="muted">—</span>' },
         { t: 'Traducir a', f: (x, i) => sel(g, x, i) }], g.valores)}`).join('')}
       <div class="mt gap"><button class="btn btn-outline" id="c-sugerencias">Usar sugerencias</button>
       <button class="btn btn-orange" id="c-preview">Ver preview</button></div>`);
