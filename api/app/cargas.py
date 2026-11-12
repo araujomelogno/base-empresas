@@ -23,10 +23,10 @@ CAMPOS_NUCLEO = (
 )
 CAMPOS_SUCURSAL = ("sucursal_direccion", "sucursal_departamento", "sucursal_localidad")
 CAMPOS_MAPEO = CAMPOS_NUCLEO + CAMPOS_SUCURSAL
-# Los contactos no vienen en las bases: se generan en el campo (EC_RESP_* del .sav). Una
-# plantilla vieja que los tenga se sigue abriendo y estos campos se ignoran con un aviso.
+# D-d (cambia lo decidido antes): los contactos pueden venir en una carga, uno por fila (F3.2)
 CAMPOS_CONTACTO = ("contacto_nombre", "contacto_cargo", "contacto_area", "contacto_email", "contacto_telefono")
-CLAVES_MAPEO = set(CAMPOS_MAPEO) | {"telefonos", "origenes_telefono", "origen_defecto", "atributos", "traducciones"}
+CLAVES_MAPEO = set(CAMPOS_MAPEO) | set(CAMPOS_CONTACTO) | {
+    "telefonos", "origenes_telefono", "origen_defecto", "atributos", "traducciones", "contacto_atributos"}
 
 SINONIMOS = {
     "rut": ["rut", "ruc", "nro rut", "numero rut", "rut empresa", "n rut", "num rut", "ec rut"],
@@ -44,7 +44,14 @@ SINONIMOS = {
     "sucursal_direccion": ["direccion sucursal", "sucursal direccion", "domicilio sucursal", "direccion local"],
     "sucursal_departamento": ["departamento sucursal", "sucursal departamento"],
     "sucursal_localidad": ["localidad sucursal", "sucursal localidad", "ciudad sucursal"],
+    "contacto_nombre": ["contacto", "nombre contacto", "nombre del contacto", "persona de contacto", "responsable",
+                        "contacto nombre"],
+    "contacto_cargo": ["cargo", "cargo contacto", "cargo del contacto", "puesto"],
+    "contacto_area": ["area", "area contacto", "area del contacto", "sector"],
+    "contacto_email": ["email contacto", "mail contacto", "correo contacto", "e mail contacto", "email del contacto"],
+    "contacto_telefono": ["tel contacto", "telefono contacto", "celular contacto", "telefono del contacto", "cel contacto"],
 }
+_EMAIL_GENERICO = ("email", "mail", "correo", "e mail", "correo electronico")
 _TEL = re.compile(r"^(tel|telefono|telefonos|celular|cel|movil|fono|phone|tel fijo|telefono fijo)( ?(\d+))?$")
 _ORIGEN = re.compile(r"^(origen|fuente)( (del )?(tel|telefono|telefonos|numero|nro))?( ?(\d+))?$")
 
@@ -69,11 +76,22 @@ def sugerir_mapeo(columnas: list[str], atributos: list[dict] | None = None) -> d
                 mapeo[campo] = col
                 usadas.add(col)
                 break
+    # Con un contacto en el archivo, un «Email» genérico es el del contacto si no hay otro
+    if mapeo.get("contacto_nombre") and mapeo.get("email") and not mapeo.get("contacto_email") \
+            and norm[mapeo["email"]] in _EMAIL_GENERICO:
+        mapeo["contacto_email"] = mapeo.pop("email")
+    if not mapeo.get("contacto_nombre"):  # cargo, área… sueltos no son de un contacto
+        for k in ("contacto_cargo", "contacto_area", "contacto_email", "contacto_telefono"):
+            if mapeo.get(k):
+                usadas.discard(mapeo.pop(k))
     for a in atributos or []:
+        if a.get("ambito", "empresa") == "contacto" and not mapeo.get("contacto_nombre"):
+            continue
         nombres = [a["clave"].replace("_", " "), catalogos.normalizar(a["nombre"]), *a["sinonimos"]]
         col = next((c for n in nombres for c in columnas if norm[c] == n and c not in usadas), None)
         if col:
-            mapeo.setdefault("atributos", {})[a["clave"]] = col
+            destino = "contacto_atributos" if a.get("ambito") == "contacto" else "atributos"
+            mapeo.setdefault(destino, {})[a["clave"]] = col
             usadas.add(col)
     numeros_tel = {}
     for c in columnas:
@@ -99,10 +117,11 @@ def sugerir_mapeo(columnas: list[str], atributos: list[dict] | None = None) -> d
 
 def columnas_de_mapeo(mapeo: dict) -> set[str]:
     cols = set()
-    for k in CAMPOS_MAPEO:
+    for k in CAMPOS_MAPEO + CAMPOS_CONTACTO:
         if mapeo.get(k):
             cols.add(mapeo[k])
     cols |= set(mapeo.get("telefonos") or [])
+    cols |= {c for c in (mapeo.get("contacto_atributos") or {}).values() if c}
     for o in (mapeo.get("origenes_telefono") or {}).values():
         if o.get("columna"):
             cols.add(o["columna"])
@@ -111,16 +130,12 @@ def columnas_de_mapeo(mapeo: dict) -> set[str]:
 
 
 def limpiar_mapeo(mapeo: dict) -> tuple[dict, list[str]]:
-    """Quita los campos vacíos y los de contacto (con aviso). Acepta telefonos como lista de columnas
-    o de objetos {columna, origen_columna | origen_fijo}."""
+    """Quita los campos vacíos. Acepta telefonos como lista de columnas o de objetos
+    {columna, origen_columna | origen_fijo}. Los campos de contacto se usan (D-d, F3.2)."""
     avisos = []
     m = {}
-    contacto = [k for k in CAMPOS_CONTACTO if (mapeo or {}).get(k)]
-    if contacto:
-        avisos.append("La plantilla tenía campos de contacto (" + ", ".join(contacto) + "): se ignoran. "
-                      "Los contactos se cargan con las respuestas del campo (.sav).")
     for k, v in (mapeo or {}).items():
-        if k in CAMPOS_CONTACTO or not v:
+        if not v:
             continue
         m[k] = v
     tels, ot = [], dict(m.get("origenes_telefono") or {})
@@ -137,13 +152,15 @@ def limpiar_mapeo(mapeo: dict) -> tuple[dict, list[str]]:
         else:
             tels.append(t)
     m["telefonos"] = tels
-    ot = {k: v for k, v in ot.items() if k in tels and v and (v.get("columna") or v.get("fijo"))}
+    ot = {k: v for k, v in ot.items() if (k in tels or k == m.get("contacto_telefono"))
+          and v and (v.get("columna") or v.get("fijo"))}
     if ot:
         m["origenes_telefono"] = ot
     else:
         m.pop("origenes_telefono", None)
-    if m.get("atributos"):
-        m["atributos"] = {k: v for k, v in m["atributos"].items() if v}
+    for k in ("atributos", "contacto_atributos"):
+        if m.get(k):
+            m[k] = {a: v for a, v in m[k].items() if v}
     return m, avisos
 
 
@@ -156,8 +173,11 @@ def _validar_mapeo(conn, mapeo: dict, columnas: list[str]):
     for c in columnas_de_mapeo(mapeo):
         if c not in columnas:
             raise HTTPException(422, f"La columna '{c}' no está en el archivo")
+    contacto = [k for k in CAMPOS_CONTACTO if mapeo.get(k)] + list(mapeo.get("contacto_atributos") or {})
+    if contacto and not mapeo.get("contacto_nombre"):
+        raise HTTPException(422, "Para cargar contactos, indicá la columna con el nombre del contacto")
     activos = {o["codigo"] for o in catalogos.origenes(conn, activos=True)}
-    if mapeo.get("telefonos"):
+    if mapeo.get("telefonos") or mapeo.get("contacto_telefono"):
         if not mapeo.get("origen_defecto"):
             raise HTTPException(422, "Elegí el origen por defecto de los teléfonos de esta carga")
         if mapeo["origen_defecto"] not in activos:
@@ -166,16 +186,17 @@ def _validar_mapeo(conn, mapeo: dict, columnas: list[str]):
             if o.get("fijo") and o["fijo"] not in activos:
                 raise HTTPException(422, f"Origen de teléfono desconocido o inactivo: {o['fijo']}")
     defs = {a["clave"]: a for a in catalogos.atributos(conn)}
-    for clave in mapeo.get("atributos") or {}:
-        if clave not in defs:
-            raise HTTPException(422, f"Atributo desconocido: {clave}")
-        if not defs[clave]["activo"]:
-            raise HTTPException(422, f"El atributo {defs[clave]['nombre']} está desactivado")
+    for bloque, ambito in (("atributos", "empresa"), ("contacto_atributos", "contacto")):
+        for clave in mapeo.get(bloque) or {}:
+            if clave not in defs or defs[clave]["ambito"] != ambito:
+                raise HTTPException(422, f"Atributo de {ambito} desconocido: {clave}")
+            if not defs[clave]["activo"]:
+                raise HTTPException(422, f"El atributo {defs[clave]['nombre']} está desactivado")
     tr = mapeo.get("traducciones") or {}
     for valor, cod in (tr.get("origen") or {}).items():
         if cod is not None and cod not in activos:
             raise HTTPException(422, f"La traducción de «{valor}» apunta a un origen desconocido o inactivo: {cod}")
-    for clave, col in (mapeo.get("atributos") or {}).items():
+    for clave, col in {**(mapeo.get("atributos") or {}), **(mapeo.get("contacto_atributos") or {})}.items():
         for valor, op in (tr.get(catalogos.PREFIJO + clave) or {}).items():
             if op is not None and op not in (defs[clave]["opciones"] or []):
                 raise HTTPException(422, f"La traducción de «{valor}» no es una opción de {defs[clave]['nombre']}")
@@ -215,7 +236,7 @@ def analizar(conn, archivo: dict, tipo_fuente: str | None) -> dict:
         "archivo_id": archivo["id"], "nombre": archivo["nombre"], "tipo": archivo["tipo"],
         "columnas": columnas, "n_filas": len(filas), "ejemplos": filas[:8],
         "mapeo": mapeo, "origen_mapeo": origen, "avisos": avisos,
-        "campos": {"empresa": CAMPOS_NUCLEO, "sucursal": CAMPOS_SUCURSAL},
+        "campos": {"empresa": CAMPOS_NUCLEO, "sucursal": CAMPOS_SUCURSAL, "contacto": CAMPOS_CONTACTO},
         "atributos": atributos, "origenes": catalogos.origenes(conn, activos=True),
         "plantillas": [r["tipo_fuente"] for r in conn.execute("SELECT tipo_fuente FROM carga_plantilla ORDER BY 1")],
     }
@@ -312,7 +333,7 @@ def valores(conn, archivo_id: int, mapeo: dict) -> dict:
             ya = (tr.get("origen") or {})
             salida["origen"].append({"valor": v, "filas": n, "sugerido": _sugerencia(v, opciones),
                                      "traduccion": ya.get(v), "traducido": v in ya})
-    for clave, col in (mapeo.get("atributos") or {}).items():
+    for clave, col in {**(mapeo.get("atributos") or {}), **(mapeo.get("contacto_atributos") or {})}.items():
         a = t.defs.get(clave)
         if not a or a["tipo"] != "lista":
             continue
@@ -367,6 +388,7 @@ def procesar(conn, carga: dict, filas: list[dict], cfg: dict, actor: str, real: 
     por_telefonos = Counter()
     por_origen: dict[str, Counter] = {}
     por_atributo: dict[str, Counter] = {k: Counter() for k in (mapeo.get("atributos") or {})}
+    por_atributo.update({k: Counter() for k in (mapeo.get("contacto_atributos") or {})})
     rechazos, conflictos_muestra, ruts_vistos = [], [], set()
     telefonos_tocados: set[int] = set()
     total = len(filas)
@@ -446,6 +468,9 @@ def procesar(conn, carga: dict, filas: list[dict], cfg: dict, actor: str, real: 
 
         hubo_cambio = aplicar_fila(conn, emp, datos, tels, cid, confianza, actor, c, conflictos_muestra,
                                    telefonos_tocados, attrs, por_origen)
+        if mapeo.get("contacto_nombre"):
+            hubo_cambio = aplicar_contacto(conn, emp, fila, mapeo, traductor, prefijos, cid, actor, c, por_atributo,
+                                           telefonos_tocados) or hubo_cambio
         if es_alta:
             c["altas"] += 1
         elif hubo_cambio:
@@ -471,6 +496,58 @@ def procesar(conn, carga: dict, filas: list[dict], cfg: dict, actor: str, real: 
     conteos["atributos"] = {k: {"cargados": n.get("cargados", 0), "invalidos": n.get("invalidos", 0),
                                 "sin_dato": n.get("sin_dato", 0)} for k, n in por_atributo.items()}
     return conteos, rechazos
+
+
+def aplicar_contacto(conn, emp, fila, mapeo, traductor, prefijos, cid, actor, c, por_atributo, telefonos_tocados) -> bool:
+    """Un contacto por fila (F3.2): se identifica por nombre normalizado o email dentro de la empresa;
+    si ya existe se completan los campos vacíos. Su teléfono se vincula a la empresa con el origen de la
+    fila y queda como «número del contacto»."""
+    v = {k: _valor(fila, mapeo, k) for k in CAMPOS_CONTACTO}
+    attrs = {}
+    for clave, col in (mapeo.get("contacto_atributos") or {}).items():
+        crudo = texto(fila.get(col))
+        if crudo:
+            attrs[clave] = crudo
+    if not v["contacto_nombre"]:
+        if any(v[k] for k in CAMPOS_CONTACTO[1:]) or attrs:
+            c["contactos_sin_nombre"] += 1
+        return False
+    email = contactos.normalizar_email(v["contacto_email"])
+    if email and not contactos.EMAIL.match(email):
+        c["contactos_email_invalido"] += 1
+        email = None
+    contacto, nuevo = empresas.contacto(conn, emp["id"], v["contacto_nombre"], v["contacto_cargo"], v["contacto_area"],
+                                        email, "carga", cid, actor=actor, solo_vacios=True)
+    hubo = nuevo or bool(contacto.get("_cambios"))
+    if v["contacto_telefono"]:
+        origen, _ = traductor.origen(fila, mapeo["contacto_telefono"])
+        for crudo in telmod.separar(v["contacto_telefono"]) or [v["contacto_telefono"]]:
+            n = telmod.normalizar(crudo, prefijos)
+            if n.tipo == "interno":
+                c["telefonos_invalidos"] += 1
+                continue
+            fila_tel, n, creado = empresas.telefono(conn, crudo, prefijos)
+            if fila_tel is None:
+                continue
+            if creado:
+                c["telefonos_nuevos"] += 1
+            _, vnuevo = empresas.vincular(conn, fila_tel["id"], emp["id"], "carga", cid, actor, origen=origen)
+            if vnuevo and n.e164:
+                telefonos_tocados.add(fila_tel["id"])
+            if contactos.relacionar_telefono(conn, contacto["id"], fila_tel["id"], "del_contacto", "carga", cid):
+                c["contactos_telefonos"] += 1
+                contactos.historia(conn, contacto, "telefono", n.e164 or n.crudo, "carga", cid, actor)
+                hubo = True
+    for clave, crudo in attrs.items():
+        a = traductor.atributo(clave, crudo)
+        if a is None:
+            por_atributo[clave]["sin_dato"] += 1
+            continue
+        por_atributo[clave]["invalidos" if a["invalido"] else "cargados"] += 1
+        if catalogos.aplicar_atributo_contacto(conn, contacto, clave, a["valor"], "carga", cid, actor):
+            hubo = True
+    c["contactos_nuevos" if nuevo else "contactos_actualizados" if hubo else "contactos_sin_cambios"] += 1
+    return hubo
 
 
 def aplicar_fila(conn, emp, datos, tels, cid, confianza, actor, c, conflictos_muestra, telefonos_tocados,

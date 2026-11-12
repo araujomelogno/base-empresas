@@ -9,6 +9,8 @@ const CAMPOS = {
   ciiu: 'CIIU / rubro', tamano: 'Tamaño', departamento: 'Departamento', localidad: 'Localidad', direccion: 'Dirección', web: 'Web',
   email: 'Email (para el dominio)', estado: 'Estado (activa / cerrada)',
   sucursal_direccion: 'Dirección de la sucursal', sucursal_departamento: 'Departamento de la sucursal', sucursal_localidad: 'Localidad de la sucursal',
+  contacto_nombre: 'Nombre del contacto', contacto_cargo: 'Cargo', contacto_area: 'Área', contacto_email: 'Email del contacto',
+  contacto_telefono: 'Teléfono del contacto',
 };
 const REGLAS = { rut: 'RUT (por defecto)', telefono: 'Teléfono', razon_social: 'Razón social normalizada', dominio: 'Dominio web' };
 // C10: qué significa cada estado y qué sigue
@@ -66,8 +68,10 @@ export async function nueva(ctx) {
 // ── 2 · Mapeo (C3, C4) ──
 function estadoInicial(a) {
   const m = a.mapeo || {};
-  const st = { nucleo: {}, sucursal: {}, atributos: { ...(m.atributos || {}) }, tels: [], origen_defecto: m.origen_defecto || '',
+  const st = { nucleo: {}, sucursal: {}, contacto: {}, atributos: { ...(m.atributos || {}) },
+    contacto_atributos: { ...(m.contacto_atributos || {}) }, tels: [], origen_defecto: m.origen_defecto || '',
     traducciones: m.traducciones || {} };
+  (a.campos.contacto || []).forEach(k => { st.contacto[k] = m[k] || ''; });
   a.campos.empresa.forEach(k => { if (m[k] || k === 'rut') st.nucleo[k] = m[k] || ''; });
   a.campos.sucursal.forEach(k => { st.sucursal[k] = m[k] || ''; });
   (m.telefonos || []).forEach(col => {
@@ -79,9 +83,11 @@ function estadoInicial(a) {
 
 function mapeoDe(st) {
   const m = { telefonos: [], traducciones: st.traducciones };
-  Object.entries({ ...st.nucleo, ...st.sucursal }).forEach(([k, v]) => { if (v) m[k] = v; });  // sin columna no se guarda
+  Object.entries({ ...st.nucleo, ...st.sucursal, ...st.contacto }).forEach(([k, v]) => { if (v) m[k] = v; });  // sin columna no se guarda
   const at = Object.fromEntries(Object.entries(st.atributos).filter(([, v]) => v));
   if (Object.keys(at).length) m.atributos = at;
+  const ac = Object.fromEntries(Object.entries(st.contacto_atributos).filter(([, v]) => v));
+  if (Object.keys(ac).length) m.contacto_atributos = ac;
   const ot = {};
   st.tels.filter(t => t.col).forEach(t => {
     m.telefonos.push(t.col);
@@ -99,12 +105,14 @@ function columnasUsadas(m) {
   (m.telefonos || []).forEach(c => u.add(c));
   Object.values(m.origenes_telefono || {}).forEach(o => o.columna && u.add(o.columna));
   Object.values(m.atributos || {}).forEach(c => u.add(c));
+  Object.values(m.contacto_atributos || {}).forEach(c => u.add(c));
   return u;
 }
 
 function mapeo(ctx, a, tipoFuente, params) {
   const st = estadoInicial(a);
-  const atributos = Object.fromEntries(a.atributos.map(x => [x.clave, x]));
+  const atributos = Object.fromEntries(a.atributos.filter(x => (x.ambito || 'empresa') === 'empresa').map(x => [x.clave, x]));
+  const atrContacto = Object.fromEntries(a.atributos.filter(x => x.ambito === 'contacto').map(x => [x.clave, x]));
   const opts = (sel, vacio = '— no usar —') => `<option value="">${vacio}</option>` + a.columnas.map(c => `<option ${c === sel ? 'selected' : ''}>${esc(c)}</option>`).join('');
   const quitar = (attr, k) => `<button class="btn btn-outline btn-sm btn-del" ${attr}="${esc(k)}" title="Quitar">×</button>`;
   $('.steps').outerHTML = pasos(2);
@@ -129,6 +137,8 @@ function mapeo(ctx, a, tipoFuente, params) {
     const sinUsar = (obj, todos) => todos.filter(k => !(k in obj));
     const faltanNucleo = sinUsar(st.nucleo, a.campos.empresa);
     const faltanAttr = sinUsar(st.atributos, Object.keys(atributos));
+    const faltanAttrC = sinUsar(st.contacto_atributos, Object.keys(atrContacto));
+    const hayContacto = Object.values(st.contacto).some(Boolean) || Object.keys(st.contacto_atributos).length;
     const origenOpts = (sel) => `<option value="" ${!sel ? 'selected' : ''}>Origen por defecto de la carga</option>
       <optgroup label="Columna del archivo">${a.columnas.map(c => `<option value="col:${esc(c)}" ${sel === 'col:' + c ? 'selected' : ''}>columna «${esc(c)}»</option>`).join('')}</optgroup>
       <optgroup label="Origen fijo">${a.origenes.map(o => `<option value="fijo:${esc(o.codigo)}" ${sel === 'fijo:' + o.codigo ? 'selected' : ''}>${esc(o.nombre)}</option>`).join('')}</optgroup>`;
@@ -157,6 +167,15 @@ function mapeo(ctx, a, tipoFuente, params) {
       <details class="map-bloque" ${Object.values(st.sucursal).some(Boolean) ? 'open' : ''}><summary>4 · Sucursal (opcional)</summary>
         <p class="field-hint">Un local de la empresa con dirección distinta de la fiscal. Si se completa, los teléfonos de la fila quedan asociados a esa sucursal.</p>
         ${Object.keys(st.sucursal).map(k => `<div class="map-fila"><span class="td-strong">${esc(CAMPOS[k])}</span><select class="fselect" data-suc="${k}">${opts(st.sucursal[k])}</select><span></span></div>`).join('')}</details>
+      <details class="map-bloque" ${hayContacto ? 'open' : ''}><summary>5 · Contacto (opcional)</summary>
+        <p class="field-hint">Un contacto por fila. Se reconoce dentro de la empresa por el nombre o el email: si ya existe, se completan sus campos vacíos.
+          Su teléfono se vincula a la empresa con el origen por defecto y queda como «número del contacto». Las filas con datos de contacto pero sin nombre se ignoran.</p>
+        ${Object.keys(st.contacto).map(k => `<div class="map-fila"><span class="td-strong">${esc(CAMPOS[k])}${k === 'contacto_nombre' && hayContacto ? ' <span class="est est-error">obligatorio</span>' : ''}</span>
+          <select class="fselect" data-cont="${k}">${opts(st.contacto[k])}</select><span></span></div>`).join('')}
+        ${Object.keys(st.contacto_atributos).map(k => `<div class="map-fila"><span class="td-strong">${esc(atrContacto[k].nombre)} <span class="small muted">${esc(atrContacto[k].tipo)}</span></span>
+          <select class="fselect" data-attr-c="${esc(k)}">${opts(st.contacto_atributos[k])}</select>${quitar('data-quitar-attr-c', k)}</div>`).join('')}
+        ${faltanAttrC.length ? `<div class="map-agregar"><select class="fselect" id="c-add-attr-c"><option value="">+ Agregar atributo de contacto…</option>${
+          faltanAttrC.map(k => `<option value="${esc(k)}">${esc(atrContacto[k].nombre)}</option>`).join('')}</select></div>` : ''}</details>
       <div class="no-usadas">${noUsadas.length ? `<strong>Columnas que no se van a cargar:</strong> ${noUsadas.map(esc).join(', ')}` : 'Se usan todas las columnas del archivo.'}</div>`;
     $$('[data-nucleo]').forEach(s => s.onchange = () => { st.nucleo[s.dataset.nucleo] = s.value; dibujar(); });
     $$('[data-quitar-nucleo]').forEach(b => b.onclick = () => { delete st.nucleo[b.dataset.quitarNucleo]; dibujar(); });
@@ -170,6 +189,10 @@ function mapeo(ctx, a, tipoFuente, params) {
     $('#c-add-tel').onclick = () => { st.tels.push({ col: '', origen: '' }); dibujar(); };
     $('#c-origen-defecto').onchange = (e) => { st.origen_defecto = e.target.value; };
     $$('[data-suc]').forEach(s => s.onchange = () => { st.sucursal[s.dataset.suc] = s.value; dibujar(); });
+    $$('[data-cont]').forEach(s => s.onchange = () => { st.contacto[s.dataset.cont] = s.value; dibujar(); });
+    $$('[data-attr-c]').forEach(s => s.onchange = () => { st.contacto_atributos[s.dataset.attrC] = s.value; dibujar(); });
+    $$('[data-quitar-attr-c]').forEach(b => b.onclick = () => { delete st.contacto_atributos[b.dataset.quitarAttrC]; dibujar(); });
+    if ($('#c-add-attr-c')) $('#c-add-attr-c').onchange = (e) => { st.contacto_atributos[e.target.value] = ''; dibujar(); };
   };
   dibujar();
 
@@ -190,7 +213,9 @@ function mapeo(ctx, a, tipoFuente, params) {
   $('#c-siguiente').onclick = async () => {
     const m = mapeoDe(st);
     if (!m.rut) return toast('Indicá la columna del RUT', 'err');
-    if (m.telefonos.length && !m.origen_defecto) return toast('Elegí el origen por defecto de los teléfonos', 'err');
+    if ((m.telefonos.length || m.contacto_telefono) && !m.origen_defecto) return toast('Elegí el origen por defecto de los teléfonos', 'err');
+    if (!m.contacto_nombre && (['contacto_cargo', 'contacto_area', 'contacto_email', 'contacto_telefono'].some(k => m[k]) || m.contacto_atributos))
+      return toast('Para cargar contactos, indicá la columna con el nombre del contacto', 'err');
     if (!$('#c-licencia').value.trim()) return toast('Indicá la licencia de uso de la fuente', 'err');
     try {
       const v = await api.post('/cargas/valores', { archivo_id: a.archivo_id, mapeo: m });
@@ -301,6 +326,13 @@ export async function detalle(ctx, id) {
       [k.revision || 0, 'A revisión', 's-warn'], [k.nuevos_sospechosos || 0, 'Nuevos sospechosos', 's-bad'],
       [k.telefonos_nuevos || 0, 'Teléfonos nuevos', 's-free'],
       ...(k.contactos_nuevos ? [[k.contactos_nuevos, 'Contactos nuevos', 's-free']] : [])]) +
+    (k.contactos_nuevos || k.contactos_actualizados || k.contactos_sin_nombre || k.contactos_sin_cambios
+      ? `<div class="card mb"><div class="card-body small"><strong>Contactos:</strong> ${num(k.contactos_nuevos || 0)} nuevos ·
+        ${num(k.contactos_actualizados || 0)} actualizados (se completaron campos vacíos) · ${num(k.contactos_sin_cambios || 0)} sin cambios
+        ${k.contactos_telefonos ? ` · ${num(k.contactos_telefonos)} teléfonos de contacto` : ''}
+        ${k.contactos_sin_nombre ? ` · <span class="est est-sospechoso">${num(k.contactos_sin_nombre)}</span> filas con datos de contacto pero sin nombre (se ignoran)` : ''}
+        ${k.contactos_email_invalido ? ` · <span class="est est-sospechoso">${num(k.contactos_email_invalido)}</span> emails con formato inválido (no se guardaron)` : ''}
+        <div class="muted">Deshacer o borrar la carga quita los contactos que trajo.</div></div></div>` : '') +
     (fpt || porOrigen.length || porAtributo.length ? `<div class="grid-2 mb">${card('Teléfonos', (fpt ? `<div class="card-body">${stats([[fpt['0'], 'Filas sin teléfono', fpt['0'] ? 's-warn' : ''],
         [fpt['1'], 'Con 1', ''], [fpt['2'], 'Con 2', ''], [fpt['3+'], 'Con 3 o más', '']]) +
         (fpt['0'] ? `<p class="small muted">Las filas sin teléfono se cargan igual: la empresa queda no disponible por «sin teléfono discable» si esa regla está activa.</p>` : '')}</div>` : '') +

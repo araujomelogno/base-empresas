@@ -162,7 +162,7 @@ def _validar_criterios(conn, c: dict) -> dict:
     for k in filtros:
         if k not in FILTROS:
             raise HTTPException(422, f"Filtro desconocido: {k}")
-    defs = {a["clave"]: a for a in catalogos.atributos(conn)}
+    defs = {a["clave"]: a for a in catalogos.atributos(conn, ambito="empresa")}
     atributos = {}
     for clave, spec in (c.get("atributos") or {}).items():
         a = defs.get(clave)
@@ -219,7 +219,7 @@ def _universo(conn, criterios: dict) -> list[dict]:
     if filtros.get("naturaleza"):
         where.append("n.codigo = ANY(%s)")
         args.append(filtros["naturaleza"])
-    defs = {a["clave"]: a for a in catalogos.atributos(conn)}
+    defs = {a["clave"]: a for a in catalogos.atributos(conn, ambito="empresa")}
     for clave, f in (criterios.get("atributos") or {}).items():
         a = defs[clave]
         cond, cargs = [], [a["id"]]

@@ -122,20 +122,20 @@ def test_no_se_borra_atributo_usado_en_muestra_activa(api, sql):
 
 # ─── C3 · Mapeo ───
 
-def test_mapeo_sin_contactos_y_plantilla_vieja(api, sql):
+def test_mapeo_con_contactos_y_plantilla_vieja(api, sql):
+    """D-d (SPEC_mejoras_sav_contactos, F3.2): los contactos pueden venir en una carga; las plantillas viejas los usan."""
     filas = [{"RUT": rut_valido(0), "Razón social": "X SA", "Contacto": "Ana", "Cargo": "Gerente", "Teléfono": "29001111"}]
     a = api.subir("/cargas/analizar", "x.csv", csv_bytes(filas), rol="steward", tipo_fuente="vieja").json()
-    assert not any(k.startswith("contacto") for k in a["mapeo"])
-    assert "contacto_nombre" not in a["campos"]["empresa"]
+    assert (a["mapeo"]["contacto_nombre"], a["mapeo"]["contacto_cargo"]) == ("Contacto", "Cargo")
+    assert "contacto_nombre" in a["campos"]["contacto"]
     sql.execute("INSERT INTO carga_plantilla (tipo_fuente, mapeo, autor) VALUES ('vieja', %s, 'x')",
                 (psycopg.types.json.Jsonb({"rut": "RUT", "razon_social": "Razón social", "contacto_nombre": "Contacto",
                                            "telefonos": ["Teléfono"]}),))
     b = api.subir("/cargas/analizar", "x.csv", csv_bytes(filas), rol="steward", tipo_fuente="vieja").json()
-    assert b["origen_mapeo"] == "plantilla" and "contacto_nombre" not in b["mapeo"]
-    assert any("contacto" in x for x in b["avisos"])
+    assert b["origen_mapeo"] == "plantilla" and b["mapeo"]["contacto_nombre"] == "Contacto" and b["avisos"] == []
     c = cargar(api, filas, tipo_fuente="vieja", mapeo={"contacto_nombre": "Contacto"})
-    assert c["estado"] == "confirmada" and "contactos_nuevos" not in c["conteos"]
-    assert sql.execute("SELECT count(*) AS n FROM contacto").fetchone()["n"] == 0
+    assert c["estado"] == "confirmada" and c["conteos"]["contactos_nuevos"] == 1
+    assert sql.execute("SELECT nombre FROM contacto").fetchone()["nombre"] == "Ana"
 
 
 # ─── C4 · Origen del teléfono ───

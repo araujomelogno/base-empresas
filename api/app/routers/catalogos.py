@@ -20,11 +20,13 @@ class Atributo(BaseModel):
     filtrable: bool | None = None
     estratificable: bool | None = None
     activo: bool | None = None
+    ambito: str | None = None
 
 
 @router.get("/atributos")
-def atributos(activos: bool | None = None, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
-    return catalogos.atributos(conn, activos)
+def atributos(activos: bool | None = None, ambito: str | None = None, conn=Depends(get_conn),
+              u: Usuario = Depends(usuario_actual)):
+    return catalogos.atributos(conn, activos, ambito)
 
 
 @router.post("/atributos")

@@ -112,6 +112,70 @@ export function telefonosContacto(tels) {
       : 'número del contacto'}</span></div>`).join('');
 }
 
+// F3.1: alta, edición y borrado de contactos (admin y data steward)
+async function activarContactos(ctx, e, recargar) {
+  const defs = await api.get('/atributos', { ambito: 'contacto', activos: true });
+  const form = (c = {}) => {
+    const mios = new Set((c.telefonos || []).filter(t => t.relacion === 'del_contacto').map(t => t.telefono_id));
+    const attr = Object.fromEntries((c.atributos || []).map(a => [a.clave, a.valor_texto ?? a.crudo]));
+    return `<div class="form-row"><div class="form-group"><label>Nombre <span class="req">*</span></label><input type="text" id="ct-nombre" value="${esc(c.nombre || '')}" /></div>
+      <div class="form-group"><label>Email</label><input type="email" id="ct-email" value="${esc(c.email || '')}" placeholder="nombre@empresa.com.uy" /></div></div>
+      <div class="form-row"><div class="form-group"><label>Cargo</label><input type="text" id="ct-cargo" value="${esc(c.cargo || '')}" /></div>
+      <div class="form-group"><label>Área</label><input type="text" id="ct-area" value="${esc(c.area || '')}" /></div></div>
+      ${e.sucursales.length ? `<div class="form-group"><label>Sucursal</label><select class="fselect" id="ct-sucursal"><option value="">— ninguna —</option>${
+        e.sucursales.map(x => `<option value="${x.id}" ${x.id === c.sucursal_id ? 'selected' : ''}>${esc([x.direccion, x.localidad, x.departamento].filter(Boolean).join(', '))}</option>`).join('')}</select></div>` : ''}
+      <div class="form-group"><label>Teléfonos del contacto</label>${e.telefonos.filter(t => t.e164).map(t => `<label class="check"><input type="checkbox" data-ct-tel="${t.telefono_id}" ${mios.has(t.telefono_id) ? 'checked' : ''} />
+        <span class="mono">${esc(t.e164)}</span> <span class="small muted">${esc(etiqueta(t.estado))}</span></label>`).join('') || '<div class="small muted">La empresa no tiene teléfonos.</div>'}
+        <input type="text" id="ct-nuevo" class="mt" placeholder="Agregar otro número (se vincula a la empresa como manual)" /></div>
+      ${defs.length ? `<div class="card-header-title mb">Atributos de contacto</div><div class="form-row">${defs.map(a => `<div class="form-group"><label>${esc(a.nombre)}</label>${
+        a.tipo === 'lista' ? `<select class="fselect" data-ct-attr="${esc(a.clave)}"><option value="">—</option>${a.opciones.map(o => `<option ${o === attr[a.clave] ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`
+          : `<input type="${a.tipo === 'numero' ? 'number' : a.tipo === 'fecha' ? 'date' : 'text'}" data-ct-attr="${esc(a.clave)}" value="${esc(attr[a.clave] ?? '')}" />`}</div>`).join('')}</div>` : ''}`;
+  };
+  const leer = (b, c) => {
+    const d = { nombre: $('#ct-nombre', b).value.trim(), email: $('#ct-email', b).value.trim() || null, cargo: $('#ct-cargo', b).value.trim() || null,
+      area: $('#ct-area', b).value.trim() || null, telefonos: $$('[data-ct-tel]', b).filter(x => x.checked).map(x => +x.dataset.ctTel),
+      telefonos_nuevos: $('#ct-nuevo', b).value.trim() ? [$('#ct-nuevo', b).value.trim()] : [] };
+    if ($('#ct-sucursal', b)) d.sucursal_id = $('#ct-sucursal', b).value ? +$('#ct-sucursal', b).value : null;
+    const attrs = {};
+    $$('[data-ct-attr]', b).forEach(x => {
+      const antes = ((c && c.atributos) || []).find(a => a.clave === x.dataset.ctAttr);
+      if (x.value || antes) attrs[x.dataset.ctAttr] = x.value || null;
+    });
+    if (Object.keys(attrs).length) d.atributos = attrs;
+    return d;
+  };
+  const editar = async (c) => {
+    const r = await modal({ titulo: `Editar contacto — ${c.nombre}`, ancho: 680, cuerpo: form(c),
+      acciones: [{ t: 'Cancelar' }, { t: 'Guardar', cls: 'btn-orange', fn: (b) => api.patch('/contactos/' + c.id, leer(b, c)) }] });
+    if (r) { toast('Contacto actualizado', 'ok'); recargar(); }
+  };
+  if ($('#c-agregar')) $('#c-agregar').onclick = async () => {
+    let forzar = false;
+    const r = await modal({ titulo: 'Agregar contacto', ancho: 680, cuerpo: form(), acciones: [{ t: 'Cancelar' }, { t: 'Agregar', cls: 'btn-orange', fn: async (b) => {
+      try { return await api.post(`/empresas/${e.rut}/contactos`, { ...leer(b), forzar }); }
+      catch (err) {
+        if (err.status !== 409 || !err.datos) throw err;
+        // Duplicado: mismo nombre normalizado en la empresa → editar el existente o crear igual
+        const existente = e.contactos.find(x => x.id === err.datos.duplicado);
+        const eleccion = await modal({ titulo: 'Ya existe un contacto con ese nombre', cuerpo: `<p>${esc(err.message)}.</p>
+          <p class="small muted">Podés editar el que ya existe o agregar otro contacto igual (por ejemplo, dos personas con el mismo nombre).</p>`,
+          acciones: [{ t: 'Cancelar' }, { t: 'Agregar igual', fn: () => 'forzar' }, { t: 'Editar el existente', cls: 'btn-orange', fn: () => 'editar' }] });
+        if (eleccion === 'forzar') { forzar = true; return api.post(`/empresas/${e.rut}/contactos`, { ...leer(b), forzar: true }); }
+        if (eleccion === 'editar' && existente) setTimeout(() => editar(existente), 50);
+        return { cancelado: true };
+      }
+    } }] });
+    if (r && !r.cancelado) { toast('Contacto agregado', 'ok'); recargar(); }
+  };
+  $$('[data-c-editar]').forEach(b => b.onclick = () => editar(e.contactos.find(c => c.id === +b.dataset.cEditar)));
+  $$('[data-c-borrar]').forEach(b => b.onclick = async () => {
+    const c = e.contactos.find(x => x.id === +b.dataset.cBorrar);
+    if (!await confirmar('Borrar contacto', `Se borra definitivamente a ${c.nombre}: sus datos, su historia, sus teléfonos de contacto, sus atributos y su «no llamar». Es un dato personal (Ley 18.331): no se puede deshacer. En Auditoría queda el borrado sin el nombre.`, 'Borrar', 'btn-danger')) return;
+    await api.del('/contactos/' + c.id);
+    toast('Contacto borrado', 'ok'); recargar();
+  });
+}
+
 // ── Ficha ──
 const CAMPOS = [['razon_social', 'Razón social'], ['fantasia', 'Nombre de fantasía'], ['naturaleza', 'Naturaleza jurídica'],
   ['ciiu', 'CIIU'], ['tamano', 'Tamaño'], ['departamento', 'Departamento'], ['localidad', 'Localidad'], ['direccion', 'Dirección'],
@@ -192,12 +256,17 @@ export async function ficha(ctx, rut, params) {
       recargar();
     };
   } else if (tab === 'contactos') {
+    const edita = ctx.puede('steward') && !e.baja;
     el.innerHTML = card('Contactos (dato personal, Ley 18.331)', tabla([
-      { t: 'Nombre', f: c => `<span class="td-strong">${esc(c.nombre)}</span>${c.no_llamar ? ' ' + est('error', 'no llamar') : ''}` },
+      { t: 'Nombre', f: c => `<span class="td-strong">${esc(c.nombre)}</span>${c.no_llamar ? ' ' + est('error', 'no llamar') : ''}${c.sucursal ? `<div class="small muted">${esc(c.sucursal)}</div>` : ''}` },
       { t: 'Cargo', k: 'cargo' }, { t: 'Área', k: 'area' }, { t: 'Email', k: 'email' },
       { t: 'Teléfonos', f: c => telefonosContacto(c.telefonos) },
+      { t: 'Atributos', f: c => (c.atributos || []).map(a => `<div class="small"><span class="muted">${esc(a.nombre)}:</span> ${esc(a.valor_texto ?? a.crudo ?? '—')}</div>`).join('') || '<span class="muted">—</span>' },
       { t: 'Fuente', k: 'fuente_tipo' }, { t: 'Actualizado', f: c => fecha(c.actualizado) },
-    ], e.contactos, 'Sin contactos'), '', true);
+      { t: '', f: c => edita && c.id ? `<div class="td-actions"><button class="btn btn-outline btn-sm" data-c-editar="${c.id}">Editar</button>
+        <button class="btn btn-outline btn-sm btn-del" data-c-borrar="${c.id}">Borrar</button></div>` : '' },
+    ], e.contactos, 'Sin contactos'), edita ? `<button class="btn btn-orange btn-sm" id="c-agregar">+ Agregar contacto</button>` : '', true);
+    if (edita) activarContactos(ctx, e, recargar);
   } else if (tab === 'muestras') {
     el.innerHTML = card('Muestras', tabla([
       { t: 'Muestra', f: m => `<a class="link" href="#/muestras/${m.muestra_id}">${esc(m.nombre)}</a>` }, { t: 'Estudio', k: 'estudio' },

@@ -16,7 +16,12 @@ const VALORES = {
 const VALOR_TXT = { cerro: 'la empresa cerró', intermediario: 'estudio contable o jurídico (intermediario)', no_corresponde: 'no corresponde', ignorar: '— ignorar —' };
 
 // Editor del mapeo: compartido entre la primera ingesta y la corrección (remapeo)
-function editor(el, { columnas: cols, info, mapeo }) {
+const normTxt = (x) => String(x ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+function editor(el, { columnas: cols, info, mapeo, atributos = [] }) {
+  const defsC = Object.fromEntries(atributos.map(a => [a.clave, a]));
+  const ac = { ...(mapeo.atributos_contacto || {}) };
+  const trad = JSON.parse(JSON.stringify(mapeo.traducciones || {}));
   const opt = (sel) => `<option value="">—</option>` + cols.map(c => `<option ${c === sel ? 'selected' : ''}>${esc(c)}</option>`).join('');
   const pintarValores = () => {
     const html = Object.keys(VALORES).map(d => {
@@ -35,6 +40,41 @@ function editor(el, { columnas: cols, info, mapeo }) {
       ], [...conocidos.entries()])}</div>`;
     }).join('');
     $('#ed-valores', el).innerHTML = html || '<p class="small muted">No hay variables codificadas mapeadas.</p>';
+    pintarAtributos();
+  };
+  // F3.3: cualquier variable del .sav puede ir a un atributo de contacto (las listas, con traducción de valores)
+  const pintarAtributos = () => {
+    const box = $('#ed-attrc', el);
+    if (!box) return;
+    const libres = atributos.filter(a => !(a.clave in ac));
+    box.innerHTML = !atributos.length ? '<p class="small muted">No hay atributos de contacto. Un administrador los crea en Administración → Atributos → De contacto.</p>' :
+      `<table class="map-grid"><thead><tr><th>Atributo de contacto</th><th>Variable del .sav</th><th></th></tr></thead><tbody>${Object.keys(ac).map(k => `<tr>
+        <td class="td-strong">${esc((defsC[k] || {}).nombre || k)} <span class="small muted">${esc((defsC[k] || {}).tipo || '')}</span></td>
+        <td><select class="fselect" data-ac="${esc(k)}">${opt(ac[k])}</select></td>
+        <td><button class="btn btn-outline btn-sm btn-del" data-ac-quitar="${esc(k)}">×</button></td></tr>`).join('')}</tbody></table>
+      ${libres.length ? `<select class="fselect mt" id="ed-ac-add" style="width:auto"><option value="">+ Asociar una variable a un atributo de contacto…</option>${libres.map(a => `<option value="${esc(a.clave)}">${esc(a.nombre)}</option>`).join('')}</select>` : ''}
+      ${Object.entries(ac).filter(([k, v]) => v && (defsC[k] || {}).tipo === 'lista').map(([k, v]) => {
+        const etiquetas = (info[v] && info[v].valores) || {};
+        const codigos = new Map(Object.entries(etiquetas));
+        ((info[v] && info[v].frecuentes) || []).forEach(([c]) => { if (!codigos.has(String(c))) codigos.set(String(c), null); });
+        const t = trad['atributo.' + k] ||= {};
+        codigos.forEach((lab, cod) => {  // sugerencia: la etiqueta (o el código) coincide con una opción, sin mayúsculas ni tildes
+          if (!(cod in t)) { const op = defsC[k].opciones.find(o => normTxt(o) === normTxt(lab ?? cod)); if (op) t[cod] = op; }
+        });
+        return `<div class="mt"><div class="card-header-title mb">${esc(defsC[k].nombre)} · variable ${esc(v)}</div>${tabla([
+          { t: 'Código', f: x => `<span class="mono td-strong">${esc(x[0])}</span>` }, { t: 'Etiqueta en el archivo', f: x => esc(x[1] ?? '—') },
+          { t: 'Opción', f: x => `<select class="fselect" data-ac-tr="${esc(k)}" data-cod="${esc(x[0])}" style="width:auto"><option value="">sin traducir (queda como crudo)</option>
+            <option value="__nulo" ${t[x[0]] === null ? 'selected' : ''}>— sin dato —</option>
+            ${defsC[k].opciones.map(o => `<option ${t[x[0]] === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>` },
+        ], [...codigos.entries()], 'Sin valores')}</div>`;
+      }).join('')}`;
+    $$('[data-ac]', box).forEach(x => x.onchange = () => { ac[x.dataset.ac] = x.value; pintarAtributos(); });
+    $$('[data-ac-quitar]', box).forEach(x => x.onclick = () => { delete ac[x.dataset.acQuitar]; pintarAtributos(); });
+    if ($('#ed-ac-add', box)) $('#ed-ac-add', box).onchange = (e) => { ac[e.target.value] = ''; pintarAtributos(); };
+    $$('[data-ac-tr]', box).forEach(x => x.onchange = () => {
+      const t = trad['atributo.' + x.dataset.acTr] ||= {};
+      if (!x.value) delete t[x.dataset.cod]; else t[x.dataset.cod] = x.value === '__nulo' ? null : x.value;
+    });
   };
   el.innerHTML = `<div class="grid-2"><div>
       <div class="form-group"><label>Response ID (identifica la respuesta)</label><select class="fselect" id="ed-rid">${opt(mapeo.response_id)}</select></div>
@@ -47,13 +87,18 @@ function editor(el, { columnas: cols, info, mapeo }) {
       no hace falta mapear un resultado ni el estado de Alchemer. El número usado y el adicional quedan verificados.</span></div></div>
     <div><table class="map-grid"><thead><tr><th>Dato del sistema</th><th>Variable del .sav</th></tr></thead><tbody>
       ${Object.entries(DESTINOS).map(([d, t]) => `<tr><td class="td-strong">${esc(t)}</td><td><select class="fselect" data-dest="${d}">${opt((mapeo.variables || {})[d])}</select></td></tr>`).join('')}
-    </tbody></table></div></div><div id="ed-valores"></div>`;
+    </tbody></table></div></div><div id="ed-valores"></div>
+    <div class="mt"><div class="card-header-title mb">Atributos de contacto (opcional)</div>
+      <p class="field-hint">Además de las variables EC_*, cualquier variable del .sav se puede guardar como atributo del contacto que respondió (EC_RESP_NOMBRE).</p>
+      <div id="ed-attrc"></div></div>`;
   $$('[data-dest]', el).forEach(s => s.onchange = () => { leer(); pintarValores(); });
   const leer = () => {
     const m = { ...mapeo, response_id: $('#ed-rid', el).value, identificador: { variable: $('#ed-idv', el).value, tipo: $('#ed-idt', el).value }, variables: {}, valores: {} };
     $$('[data-dest]', el).forEach(s => { if (s.value) m.variables[s.dataset.dest] = s.value; });
     $$('[data-val]', el).forEach(s => { if (s.value) (m.valores[s.dataset.val] ||= {})[s.dataset.cod] = s.value; });
     Object.keys(VALORES).forEach(d => { if (!m.variables[d]) delete m.valores[d]; });
+    m.atributos_contacto = Object.fromEntries(Object.entries(ac).filter(([, v]) => v));
+    m.traducciones = Object.fromEntries(Object.entries(trad).filter(([k]) => !k.startsWith('atributo.') || m.atributos_contacto[k.slice(9)]));
     mapeo = m;
     return m;
   };
@@ -105,7 +150,7 @@ export async function sav(ctx) {
         card('Variables del archivo', tabla([{ t: 'Variable', f: v => `<span class="mono td-strong">${esc(v.nombre)}</span>` }, { t: 'Etiqueta', k: 'etiqueta' },
           { t: 'No vacíos', cls: 'num', f: v => num(v.n_no_vacios) }, { t: 'Distintos', cls: 'num', f: v => num(v.n_distintos) },
           { t: 'Valores frecuentes', f: v => `<span class="small muted">${esc(v.frecuentes.slice(0, 6).map(([c, n]) => `${c} (${n})`).join(' · '))}</span>` }], a.variables), '', true);
-      const ed = editor($('#s-ed'), { columnas: a.variables.map(v => v.nombre), info, mapeo: a.mapeo });
+      const ed = editor($('#s-ed'), { columnas: a.variables.map(v => v.nombre), info, mapeo: a.mapeo, atributos: a.atributos_contacto });
       pintarConteos($('#s-conteos'), a.conteos);
       $('#s-recontar').onclick = async () => pintarConteos($('#s-conteos'), await api.post(`/sav/${a.ingesta_id}/contar`, { ingesta_id: a.ingesta_id, mapeo: ed.leer() }));
       $('#s-confirmar').onclick = async () => {
@@ -147,7 +192,7 @@ export async function savDetalle(ctx, id) {
     const info = Object.fromEntries(Object.entries(s.frecuencias).map(([v, f]) => [v, { frecuentes: f, valores: {} }]));
     $('#sd-editor').innerHTML = card('Corregir mapeo (se reaplica sobre los valores crudos guardados)', `<div id="sd-ed"></div>
       <button class="btn btn-orange mt" id="sd-aplicar">Reaplicar con este mapeo</button><div id="sd-prog2" class="mt"></div>`);
-    const ed = editor($('#sd-ed'), { columnas: s.columnas, info, mapeo: s.mapeo });
+    const ed = editor($('#sd-ed'), { columnas: s.columnas, info, mapeo: s.mapeo, atributos: s.atributos_contacto });
     $('#sd-aplicar').onclick = async () => {
       $('#sd-aplicar').disabled = true;
       try {

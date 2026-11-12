@@ -38,10 +38,17 @@ def slug(s) -> str:
 # Atributos
 # ─────────────────────────────────────────────────────────────
 
-def atributos(conn, activos: bool | None = None) -> list[dict]:
+AMBITOS = ("empresa", "contacto")
+
+
+def atributos(conn, activos: bool | None = None, ambito: str | None = None) -> list[dict]:
+    """Catálogo de atributos; ambito: 'empresa', 'contacto' o None (todos)."""
     filas = conn.execute(
-        "SELECT a.*, (SELECT count(*) FROM empresa_atributo ea WHERE ea.atributo_id = a.id) AS n_valores"
-        " FROM atributo a WHERE (%s::boolean IS NULL OR a.activo = %s) ORDER BY a.nombre", (activos, activos)).fetchall()
+        "SELECT a.*, CASE WHEN a.ambito = 'contacto'"
+        "  THEN (SELECT count(*) FROM contacto_atributo ca WHERE ca.atributo_id = a.id)"
+        "  ELSE (SELECT count(*) FROM empresa_atributo ea WHERE ea.atributo_id = a.id) END AS n_valores"
+        " FROM atributo a WHERE (%s::boolean IS NULL OR a.activo = %s) AND (%s::text IS NULL OR a.ambito = %s)"
+        " ORDER BY a.nombre", (activos, activos, ambito, ambito)).fetchall()
     return filas
 
 
@@ -67,8 +74,14 @@ def _limpiar_atributo(datos: dict, actual: dict | None = None) -> dict:
     estratificable = bool(d.get("estratificable"))
     if estratificable and tipo != "lista":
         raise HTTPException(422, "Solo un atributo de tipo lista puede usarse como estrato")
+    ambito = d.get("ambito") or "empresa"
+    if ambito not in AMBITOS:
+        raise HTTPException(422, "El ámbito de un atributo es «empresa» o «contacto»")
+    filtrable = bool(d.get("filtrable"))
+    if ambito == "contacto":  # los atributos de contacto no filtran ni estratifican el sorteo (P2)
+        filtrable = estratificable = False
     return {"nombre": nombre, "tipo": tipo, "opciones": opciones, "sinonimos": sinonimos,
-            "filtrable": bool(d.get("filtrable")), "estratificable": estratificable,
+            "filtrable": filtrable, "estratificable": estratificable, "ambito": ambito,
             "activo": bool(d.get("activo", True))}
 
 
@@ -98,10 +111,10 @@ def crear_atributo(conn, datos: dict, actor: str) -> dict:
     else:
         clave = clave_libre(conn, d["nombre"])
     a = conn.execute(
-        "INSERT INTO atributo (clave, nombre, tipo, opciones, sinonimos, filtrable, estratificable, activo, creado_por)"
-        " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
+        "INSERT INTO atributo (clave, nombre, tipo, opciones, sinonimos, filtrable, estratificable, activo, creado_por,"
+        " ambito) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
         (clave, d["nombre"], d["tipo"], Jsonb(d["opciones"]), d["sinonimos"], d["filtrable"], d["estratificable"],
-         d["activo"], actor)).fetchone()
+         d["activo"], actor, d["ambito"])).fetchone()
     auditoria.registrar(conn, actor, "atributo.crear", "atributo", clave, d)
     return a
 
@@ -112,18 +125,20 @@ def actualizar_atributo(conn, atributo_id: int, datos: dict, actor: str) -> dict
         raise HTTPException(404, "Atributo inexistente")
     if datos.get("clave") not in (None, a["clave"]):
         raise HTTPException(422, "La clave de un atributo no se puede cambiar")
+    if datos.get("ambito") not in (None, a["ambito"]):
+        raise HTTPException(422, "El ámbito de un atributo no se puede cambiar")
     if datos.get("tipo") not in (None, a["tipo"]):
-        hay = conn.execute("SELECT 1 FROM empresa_campo_historia WHERE campo = %s LIMIT 1",
-                           (PREFIJO + a["clave"],)).fetchone()
-        if hay:
+        if tiene_valores(conn, a):
             raise HTTPException(409, "No se puede cambiar el tipo de un atributo que ya tiene valores cargados")
     d = _limpiar_atributo(datos, a)
     quitadas = set(a["opciones"] or []) - set(d["opciones"])
     if quitadas:
-        en_uso = conn.execute("SELECT count(*) AS n FROM empresa_atributo WHERE atributo_id = %s AND valor_texto = ANY(%s)",
+        tabla = "contacto_atributo" if a["ambito"] == "contacto" else "empresa_atributo"
+        en_uso = conn.execute(f"SELECT count(*) AS n FROM {tabla} WHERE atributo_id = %s AND valor_texto = ANY(%s)",
                               (atributo_id, sorted(quitadas))).fetchone()["n"]
         if en_uso:
-            raise HTTPException(409, f"No se puede quitar {', '.join(sorted(quitadas))}: {en_uso} empresas tienen ese valor")
+            quien = "contactos" if a["ambito"] == "contacto" else "empresas"
+            raise HTTPException(409, f"No se puede quitar {', '.join(sorted(quitadas))}: {en_uso} {quien} tienen ese valor")
     a = conn.execute(
         "UPDATE atributo SET nombre = %s, tipo = %s, opciones = %s, sinonimos = %s, filtrable = %s, estratificable = %s,"
         " activo = %s, actualizado = now() WHERE id = %s RETURNING *",
@@ -131,6 +146,12 @@ def actualizar_atributo(conn, atributo_id: int, datos: dict, actor: str) -> dict
          atributo_id)).fetchone()
     auditoria.registrar(conn, actor, "atributo.editar", "atributo", a["clave"], d)
     return a
+
+
+def tiene_valores(conn, a: dict) -> bool:
+    return bool(conn.execute(
+        "SELECT 1 FROM empresa_campo_historia WHERE campo = %(c)s"
+        " UNION ALL SELECT 1 FROM contacto_historia WHERE campo = %(c)s LIMIT 1", {"c": PREFIJO + a["clave"]}).fetchone())
 
 
 def _usado_en_muestra_activa(conn, clave: str) -> bool:
@@ -143,7 +164,7 @@ def borrar_atributo(conn, atributo_id: int, actor: str) -> dict:
     a = conn.execute("SELECT * FROM atributo WHERE id = %s FOR UPDATE", (atributo_id,)).fetchone()
     if a is None:
         raise HTTPException(404, "Atributo inexistente")
-    if conn.execute("SELECT 1 FROM empresa_campo_historia WHERE campo = %s LIMIT 1", (PREFIJO + a["clave"],)).fetchone():
+    if tiene_valores(conn, a):
         raise HTTPException(409, "El atributo tiene valores cargados: desactivalo en lugar de borrarlo")
     if _usado_en_muestra_activa(conn, a["clave"]):
         raise HTTPException(409, "El atributo se usa en una muestra activa")

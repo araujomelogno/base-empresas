@@ -288,7 +288,7 @@ def contacto(conn, empresa_id: int, nombre: str, cargo, area, email, fuente_tipo
             for k, v in cambios.items():
                 contactos.historia(conn, c, k, v, fuente_tipo, fuente_id, actor, detalle)
             c = {**c, **cambios}
-        return c, False
+        return {**c, "_cambios": list(cambios)}, False
     c = conn.execute(
         "INSERT INTO contacto (empresa_id, sucursal_id, nombre, cargo, area, email, fuente_tipo, fuente_id, detalle)"
         " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",

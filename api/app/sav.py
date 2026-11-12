@@ -154,6 +154,19 @@ def validar_mapeo(mapeo: dict, columnas: list[str]):
             raise HTTPException(422, f"Valores no válidos para {destino}: {', '.join(sorted(malos))}")
 
 
+def validar_atributos_contacto(conn, mapeo: dict):
+    """F3.3: cualquier variable del .sav se puede asociar a un atributo de contacto (con traducción para las listas)."""
+    from . import catalogos
+
+    defs = {a["clave"]: a for a in catalogos.atributos(conn, ambito="contacto")}
+    for clave in (mapeo.get("atributos_contacto") or {}):
+        if clave not in defs:
+            raise HTTPException(422, f"Atributo de contacto desconocido: {clave}")
+        for cod, op in ((mapeo.get("traducciones") or {}).get("atributo." + clave) or {}).items():
+            if op is not None and defs[clave]["tipo"] == "lista" and op not in (defs[clave]["opciones"] or []):
+                raise HTTPException(422, f"La traducción de «{cod}» no es una opción de {defs[clave]['nombre']}")
+
+
 # ─────────────────────────────────────────────────────────────
 # Asociación de filas a ítems de muestra
 # ─────────────────────────────────────────────────────────────
@@ -360,13 +373,20 @@ def analizar(conn, parte_id: int, archivo: dict, actor: str, plantilla_de_parte:
                         {"parte_id": parte_id, "archivo": archivo["nombre"], "filas": len(filas)})
     return {"ingesta_id": ingesta["id"], "archivo": archivo["nombre"], "n_filas": len(filas),
             "variables": describir(columnas, filas, meta), "mapeo": mapeo, "origen_mapeo": origen or "sugerido",
-            "conteos": conteos, "destinos": list(DESTINOS), "codificados": {k: list(v) for k, v in CODIFICADOS.items()}}
+            "conteos": conteos, "destinos": list(DESTINOS), "codificados": {k: list(v) for k, v in CODIFICADOS.items()},
+            "atributos_contacto": _atributos_contacto(conn)}
+
+
+def _atributos_contacto(conn) -> list[dict]:
+    from . import catalogos
+    return [{k: a[k] for k in ("clave", "nombre", "tipo", "opciones")} for a in catalogos.atributos(conn, True, "contacto")]
 
 
 def recontar(conn, ingesta_id: int, mapeo: dict) -> dict:
     ing = obtener(conn, ingesta_id)
     columnas, filas, _ = _leer(conn, ing)
     validar_mapeo(mapeo, columnas)
+    validar_atributos_contacto(conn, mapeo)
     return contar(conn, _parte(conn, ing["parte_id"]), filas, mapeo)
 
 
@@ -379,6 +399,7 @@ def confirmar(conn, parte_id: int, ingesta_id: int, mapeo: dict, actor: str) -> 
     columnas, _, _ = _leer(conn, ing)
     mapeo = limpiar_mapeo(mapeo)
     validar_mapeo(mapeo, columnas)
+    validar_atributos_contacto(conn, mapeo)
     conn.execute("UPDATE sav_ingesta SET estado = 'en_proceso', mapeo = %s WHERE id = %s", (Jsonb(mapeo), ingesta_id))
     return tareas.crear(conn, "sav.confirmar", {"ingesta_id": ingesta_id}, actor)
 
@@ -481,6 +502,7 @@ def remapear(conn, ingesta_id: int, mapeo: dict, actor: str) -> int:
                                   (ingesta_id,)).fetchone() or {"valores": {}})["valores"].keys())
     mapeo = limpiar_mapeo(mapeo)
     validar_mapeo(mapeo, columnas)
+    validar_atributos_contacto(conn, mapeo)
     conn.execute("UPDATE sav_ingesta SET mapeo = %s, estado = 'en_proceso' WHERE id = %s", (Jsonb(mapeo), ingesta_id))
     return tareas.crear(conn, "sav.remapear", {"ingesta_id": ingesta_id}, actor)
 
@@ -517,6 +539,11 @@ def obtener(conn, ingesta_id: int) -> dict:
                 "SELECT valores->>%s AS v, count(*) AS n FROM sav_fila WHERE ingesta_id = %s AND valores->>%s IS NOT NULL"
                 " GROUP BY 1 ORDER BY 2 DESC", (var, ingesta_id, var))]
     ing["mapeo"] = limpiar_mapeo(ing["mapeo"])
+    ing["atributos_contacto"] = _atributos_contacto(conn)
+    for var in (ing["mapeo"].get("atributos_contacto") or {}).values():
+        ing["frecuencias"][var] = [[r["v"], r["n"]] for r in conn.execute(
+            "SELECT valores->>%s AS v, count(*) AS n FROM sav_fila WHERE ingesta_id = %s AND valores->>%s IS NOT NULL"
+            " GROUP BY 1 ORDER BY 2 DESC LIMIT 30", (var, ingesta_id, var))]
     ing["avisos_filas"] = conn.execute(
         "SELECT a->>'motivo' AS motivo, count(*) AS n,"
         " (array_agg(json_build_object('response_id', s.response_id, 'valor', a->>'valor') ORDER BY s.id))[1:5] AS ejemplos"
