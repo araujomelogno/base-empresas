@@ -335,3 +335,57 @@ def registrar_origen(conn, vinculo_id: int, codigo: str, fuente_tipo: str, fuent
         " SELECT %s, id, %s, %s FROM origen_telefono WHERE codigo = %s ON CONFLICT DO NOTHING RETURNING vinculo_id",
         (vinculo_id, fuente_tipo, fuente_id, codigo)).fetchone()
     return r is not None
+
+
+# ─────────────────────────────────────────────────────────────
+# Atributos de contacto (F3.3)
+# ─────────────────────────────────────────────────────────────
+
+def atributos_de_contactos(conn, contacto_ids: list[int]) -> dict[int, list[dict]]:
+    out: dict[int, list[dict]] = {}
+    if not contacto_ids:
+        return out
+    for r in conn.execute(
+            "SELECT ca.contacto_id, a.id AS atributo_id, a.clave, a.nombre, a.tipo, ca.valor_texto, ca.valor_numero,"
+            " ca.valor_fecha, ca.crudo, ca.fuente_tipo, ca.fuente_id, ca.actualizado"
+            " FROM contacto_atributo ca JOIN atributo a ON a.id = ca.atributo_id"
+            " WHERE ca.contacto_id = ANY(%s) ORDER BY a.nombre", (contacto_ids,)):
+        out.setdefault(r["contacto_id"], []).append(r)
+    return out
+
+
+def aplicar_atributo_contacto(conn, contacto: dict, clave: str, crudo, fuente_tipo: str, fuente_id, actor: str | None,
+                              detalle=None) -> bool:
+    """Guarda el valor de un atributo de contacto (el más reciente gana) con su historia. True si cambió."""
+    from . import contactos
+
+    a = conn.execute("SELECT * FROM atributo WHERE clave = %s AND ambito = 'contacto'", (clave,)).fetchone()
+    if a is None or crudo is None or str(crudo).strip() == "":
+        return False
+    v = interpretar(a, crudo)
+    actual = conn.execute("SELECT * FROM contacto_atributo WHERE contacto_id = %s AND atributo_id = %s",
+                          (contacto["id"], a["id"])).fetchone()
+    if actual and actual["valor_texto"] == v["texto"] and actual["crudo"] == v["crudo"]:
+        return False
+    conn.execute(
+        "INSERT INTO contacto_atributo (contacto_id, atributo_id, valor_texto, valor_numero, valor_fecha, crudo,"
+        " fuente_tipo, fuente_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (contacto_id, atributo_id) DO UPDATE SET"
+        " valor_texto = EXCLUDED.valor_texto, valor_numero = EXCLUDED.valor_numero, valor_fecha = EXCLUDED.valor_fecha,"
+        " crudo = EXCLUDED.crudo, fuente_tipo = EXCLUDED.fuente_tipo, fuente_id = EXCLUDED.fuente_id, actualizado = now()",
+        (contacto["id"], a["id"], v["texto"], v["numero"], v["fecha"], v["crudo"], fuente_tipo, fuente_id))
+    contactos.historia(conn, contacto, PREFIJO + clave, v["texto"] if v["valido"] else v["crudo"], fuente_tipo, fuente_id,
+                       actor, {**(detalle or {}), **({} if v["valido"] else {"invalido": True})})
+    return True
+
+
+def quitar_atributo_contacto(conn, contacto: dict, clave: str, fuente_tipo: str, fuente_id, actor: str) -> bool:
+    from . import contactos
+
+    a = conn.execute("SELECT * FROM atributo WHERE clave = %s AND ambito = 'contacto'", (clave,)).fetchone()
+    if a is None:
+        return False
+    r = conn.execute("DELETE FROM contacto_atributo WHERE contacto_id = %s AND atributo_id = %s RETURNING 1",
+                     (contacto["id"], a["id"])).fetchone()
+    if r:
+        contactos.historia(conn, contacto, PREFIJO + clave, None, fuente_tipo, fuente_id, actor)
+    return bool(r)

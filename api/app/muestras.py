@@ -84,7 +84,9 @@ def estudio_detalle(conn, estudio_id: int) -> dict:
     e["partes"] = conn.execute(
         """SELECT p.*, (p.plantilla_mapeo IS NOT NULL) AS tiene_plantilla,
                   (SELECT json_object_agg(estado, n) FROM (SELECT estado, count(*) AS n FROM item_parte_estado
-                    WHERE parte_id = p.id GROUP BY estado) x) AS estados
+                    WHERE parte_id = p.id GROUP BY estado) x) AS estados,
+                  (SELECT count(*) FROM sav_fila s WHERE s.parte_id = p.id) AS completas_sav,
+                  (SELECT count(*) FROM sav_fila s WHERE s.parte_id = p.id AND s.item_id IS NULL) AS completas_sin_asociar
            FROM parte p WHERE p.estudio_id = %s ORDER BY p.id""", (estudio_id,)).fetchall()
     e["muestras"] = conn.execute(
         "SELECT id, nombre, estado, semilla, config_version, sorteada, (SELECT count(*) FROM muestra_item WHERE muestra_id = m.id) AS n_items"

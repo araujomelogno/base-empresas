@@ -13,7 +13,7 @@ import psycopg
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
-from . import auditoria, catalogos, config, empresas, intermediarios, lectores, rut as rutmod, storage, tareas
+from . import auditoria, catalogos, config, contactos, empresas, intermediarios, lectores, rut as rutmod, storage, tareas
 from . import telefonos as telmod
 from .util import dominio, razon_normalizada, sin_tildes, texto
 
@@ -648,9 +648,11 @@ def deshacer(conn, carga_id: int, actor: str) -> dict:
     conn.execute("DELETE FROM telefono_vinculo_origen WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))
     vincs = conn.execute("DELETE FROM telefono_vinculo WHERE fuente_tipo = 'carga' AND fuente_id = %s"
                          " RETURNING id, telefono_id", (carga_id,)).fetchall()
-    conn.execute("UPDATE telefono_vinculo SET contacto_id = NULL WHERE contacto_id IN "
-                 "(SELECT id FROM contacto WHERE fuente_tipo = 'carga' AND fuente_id = %s)", (carga_id,))
-    conn.execute("DELETE FROM contacto WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))
+    # Los contactos que trajo la carga se borran (con su historia); los que solo completó vuelven a recalcularse
+    contactos.borrar(conn, [r["id"] for r in conn.execute(
+        "SELECT id FROM contacto WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))])
+    conn.execute("DELETE FROM contacto_telefono WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))
+    conn.execute("DELETE FROM contacto_atributo WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))
     conn.execute("UPDATE telefono_vinculo SET sucursal_id = NULL WHERE sucursal_id IN "
                  "(SELECT id FROM sucursal WHERE fuente_tipo = 'carga' AND fuente_id = %s)", (carga_id,))
     conn.execute("DELETE FROM sucursal WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))

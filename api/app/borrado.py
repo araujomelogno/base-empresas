@@ -20,7 +20,7 @@ import logging
 import psycopg
 from fastapi import HTTPException
 
-from . import auditoria, empresas, intermediarios, storage, tareas
+from . import auditoria, contactos as contmod, empresas, intermediarios, storage, tareas
 
 log = logging.getLogger(__name__)
 
@@ -97,10 +97,10 @@ def borrar_empresas(conn, ids: list[int], accion: str = "empresa.borrar", actor:
     x("DELETE FROM empresa_atributo WHERE empresa_id = ANY(%s)", (ids,))
     x("DELETE FROM telefono_vinculo_historia WHERE empresa_id = ANY(%s)", (ids,))
     x("DELETE FROM empresa_campo_historia WHERE empresa_id = ANY(%s)", (ids,))
-    x("DELETE FROM contacto WHERE id = ANY(%s)", (contactos,))
+    contmod.borrar(conn, contactos)
+    x("DELETE FROM contacto_historia WHERE empresa_id = ANY(%s)", (ids,))  # contactos ya movidos o borrados
     x("DELETE FROM sucursal WHERE empresa_id = ANY(%s)", (ids,))
-    x("DELETE FROM no_llamar WHERE (alcance = 'empresa' AND objeto_id = ANY(%s))"
-      " OR (alcance = 'contacto' AND objeto_id = ANY(%s))", (ids, contactos))
+    x("DELETE FROM no_llamar WHERE alcance = 'empresa' AND objeto_id = ANY(%s)", (ids,))
     x("UPDATE empresa SET fusionada_en = NULL WHERE id = ANY(%s)", (ids,))
     x("DELETE FROM empresa WHERE id = ANY(%s)", (ids,))
 
@@ -220,11 +220,10 @@ def _borrar_carga(conn, carga, tarea_id):
     x("DELETE FROM telefono_vinculo_origen WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,))
     tels = [r["telefono_id"] for r in x(
         "DELETE FROM telefono_vinculo WHERE fuente_tipo = 'carga' AND fuente_id = %s RETURNING telefono_id", (cid,))]
-    x("UPDATE telefono_vinculo SET contacto_id = NULL WHERE contacto_id IN "
-      "(SELECT id FROM contacto WHERE fuente_tipo = 'carga' AND fuente_id = %s)", (cid,))
-    x("DELETE FROM no_llamar WHERE alcance = 'contacto' AND objeto_id IN "
-      "(SELECT id FROM contacto WHERE fuente_tipo = 'carga' AND fuente_id = %s)", (cid,))
-    x("DELETE FROM contacto WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,))
+    contmod.borrar(conn, _ids(conn, "SELECT id FROM contacto WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,)))
+    x("DELETE FROM contacto_historia WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,))
+    x("DELETE FROM contacto_telefono WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,))
+    x("DELETE FROM contacto_atributo WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,))
     x("UPDATE telefono_vinculo SET sucursal_id = NULL WHERE sucursal_id IN "
       "(SELECT id FROM sucursal WHERE fuente_tipo = 'carga' AND fuente_id = %s)", (cid,))
     x("UPDATE contacto SET sucursal_id = NULL WHERE sucursal_id IN "

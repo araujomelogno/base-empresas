@@ -4,7 +4,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .. import actividad, auditoria, borrado, catalogos, config, empresas, intermediarios, rut as rutmod
+from .. import actividad, auditoria, borrado, catalogos, config, contactos, empresas, intermediarios, rut as rutmod
 from ..auth import Usuario, requiere, usuario_actual
 from ..db import get_conn
 
@@ -123,12 +123,21 @@ def ficha(rut: str, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)
         " FROM telefono_vinculo v JOIN telefono t ON t.id = v.telefono_id LEFT JOIN contacto c ON c.id = v.contacto_id"
         " WHERE v.empresa_id = %s ORDER BY discable DESC, t.e164", (eid,)).fetchall()
     if u.rol == "lectura":
-        e["contactos"] = [{"id": None, "nombre": "(dato personal oculto)", "cargo": None, "area": None, "email": None}
+        e["contactos"] = [{"id": None, "nombre": "(dato personal oculto)", "cargo": None, "area": None, "email": None,
+                           "telefonos": [], "atributos": []}
                           for _ in conn.execute("SELECT 1 FROM contacto WHERE empresa_id = %s", (eid,))]
+        for t in e["telefonos"]:
+            t["contacto"] = None
     else:
         e["contactos"] = conn.execute(
-            "SELECT c.*, EXISTS (SELECT 1 FROM no_llamar n WHERE n.activo AND n.alcance = 'contacto' AND n.objeto_id = c.id)"
-            " AS no_llamar FROM contacto c WHERE c.empresa_id = %s ORDER BY c.actualizado DESC", (eid,)).fetchall()
+            "SELECT c.*, concat_ws(', ', s.direccion, s.localidad, s.departamento) AS sucursal, EXISTS (SELECT 1 FROM no_llamar n WHERE n.activo AND n.alcance = 'contacto'"
+            " AND n.objeto_id = c.id) AS no_llamar FROM contacto c LEFT JOIN sucursal s ON s.id = c.sucursal_id"
+            " WHERE c.empresa_id = %s ORDER BY c.actualizado DESC", (eid,)).fetchall()
+        tels = contactos.telefonos(conn, [c["id"] for c in e["contactos"]])
+        attrs = catalogos.atributos_de_contactos(conn, [c["id"] for c in e["contactos"]])
+        for c in e["contactos"]:
+            c["telefonos"] = tels.get(c["id"], [])
+            c["atributos"] = attrs.get(c["id"], [])
     e["atributos"] = catalogos.atributos_de_empresa(conn, eid)
     e["sucursales"] = conn.execute("SELECT * FROM sucursal WHERE empresa_id = %s ORDER BY id", (eid,)).fetchall()
     e["muestras"] = conn.execute(
@@ -144,7 +153,7 @@ def ficha(rut: str, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)
         " WHERE f.absorbente_id = %s OR f.absorbida_id = %s ORDER BY f.id DESC", (eid, eid)).fetchall()
     e["no_llamar"] = conn.execute("SELECT * FROM no_llamar WHERE alcance = 'empresa' AND objeto_id = %s ORDER BY id DESC",
                                   (eid,)).fetchall()
-    e["linea_de_tiempo"] = actividad.linea_de_tiempo(conn, eid)
+    e["linea_de_tiempo"] = actividad.linea_de_tiempo(conn, eid, ver_contactos=u.rol != "lectura")
     return e
 
 

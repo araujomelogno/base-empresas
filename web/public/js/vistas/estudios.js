@@ -62,7 +62,8 @@ export async function detalle(ctx, id) {
       { t: 'Respondente objetivo', k: 'respondente_objetivo' },
       { t: 'Link base', f: p => p.link_base ? `<span class="small mono">${esc(p.link_base)}</span>` : '<span class="muted">—</span>' },
       { t: 'Plantilla .sav', f: p => p.tiene_plantilla ? est('ok', 'sí') : est('pendiente', 'no') },
-      { t: 'Estados', f: p => Object.entries(p.estados || {}).map(([s, n]) => est(s, `${etiqueta(s)} ${n}`)).join(' ') || '—' },
+      { t: 'Completas (.sav)', cls: 'num', f: p => `${num(p.completas_sav)}${p.completas_sin_asociar ? `<div class="small muted">${num(p.completas_sin_asociar)} sin asociar</div>` : ''}` },
+      { t: 'Estados de los ítems', f: p => Object.entries(p.estados || {}).map(([s, n]) => est(s, `${etiqueta(s)} ${n}`)).join(' ') || '—' },
       { t: '', f: p => ctx.puede('jefe') ? `<button class="btn btn-outline btn-sm" data-editar="${p.id}">Editar</button>` : '' },
     ], e.partes, 'Sin partes'), ctx.puede('jefe') ? `<button class="btn btn-outline btn-sm" id="es-parte">+ Parte</button>` : '', true) +
     card('Muestras', tabla([

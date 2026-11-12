@@ -25,18 +25,17 @@ DESTINOS = {
     "resp_nombre": ["EC_RESP_NOMBRE", "resp_nombre"],
     "resp_cargo": ["EC_RESP_CARGO", "resp_cargo"],
     "resp_area": ["EC_RESP_AREA", "resp_area"],
-    "resultado": ["EC_RESULTADO", "resultado"],
     "rut": ["EC_RUT", "rut"],
     "encuestador": ["EC_ENCUESTADOR", "encuestador", "agente", "interviewer"],
     "fecha": ["datesubmitted", "date_submitted", "EC_FECHA", "fecha", "datestarted"],
-    "estado_alchemer": ["status", "estado", "responsestatus"],
 }
+# D39: toda fila del .sav es una encuesta completa. Estos destinos ya no se piden ni se usan;
+# los mapeos y plantillas viejos que los traen se limpian al usarlos.
+LEGADOS = ("resultado", "estado_alchemer")
 RESPONSE_ID = ["responseid", "response_id", "respondentid", "id", "EC_RESPONSE_ID"]
 ID_ITEM = ["EC_ID_ITEM", "id_item", "iditem"]
 CODIFICADOS = {
     "calidad_tel": ("corresponde", "no_corresponde", "intermediario", "cerro", "inexistente", "ignorar"),
-    "resultado": ("completa", "parcial", "rechazo", "no_corresponde", "agendada", "descalificada", "ignorar"),
-    "estado_alchemer": ("completa", "parcial", "rechazo", "no_corresponde", "agendada", "descalificada", "ignorar"),
 }
 # Códigos del bloque estándar acordado en la fase 0
 ESTANDAR_CALIDAD = {"1": "corresponde", "2": "no_corresponde", "3": "intermediario", "4": "cerro", "5": "inexistente"}
@@ -44,11 +43,16 @@ PALABRAS = {
     "calidad_tel": [("contable", "intermediario"), ("juridic", "intermediario"), ("estudio", "intermediario"),
                     ("no es de", "no_corresponde"), ("no corresponde", "no_corresponde"), ("cerr", "cerro"),
                     ("inexist", "inexistente"), ("no existe", "inexistente"), ("corresponde", "corresponde")],
-    "resultado": [("complet", "completa"), ("parcial", "parcial"), ("rechaz", "rechazo"),
-                  ("no corresponde", "no_corresponde"), ("agend", "agendada"), ("descalif", "descalificada"),
-                  ("disqualif", "descalificada"), ("partial", "parcial"), ("complete", "completa")],
 }
-PALABRAS["estado_alchemer"] = PALABRAS["resultado"]
+SIN_ITEM = "fila sin ítem asociado: en Conciliación"
+
+
+def limpiar_mapeo(mapeo: dict | None) -> dict:
+    """Quita los destinos que ya no existen (resultado y estado de Alchemer, D39)."""
+    m = dict(mapeo or {})
+    m["variables"] = {k: v for k, v in (m.get("variables") or {}).items() if k not in LEGADOS}
+    m["valores"] = {k: v for k, v in (m.get("valores") or {}).items() if k not in LEGADOS}
+    return m
 
 
 def _buscar(columnas: list[str], nombres: list[str]) -> str | None:
@@ -87,7 +91,7 @@ def describir(columnas, filas, meta) -> list[dict]:
 
 def proponer(columnas, filas, meta, plantilla: dict | None) -> dict:
     """Propuesta editable. Si hay plantilla de la parte, se precarga y solo se completan huecos."""
-    base = plantilla or {}
+    base = limpiar_mapeo(plantilla) if plantilla else {}
     variables = dict(base.get("variables") or {})
     for destino, nombres in DESTINOS.items():
         if not variables.get(destino) or variables[destino] not in columnas:
@@ -120,10 +124,18 @@ def proponer(columnas, filas, meta, plantilla: dict | None) -> dict:
                 sug = _sugerir_valor(destino, cod, etiquetas.get(var, {}).get(cod))
                 if sug:
                     mapa[cod] = sug
-    return {"response_id": resp, "identificador": ident, "variables": variables, "valores": valores}
+    return {"response_id": resp, "identificador": ident, "variables": variables, "valores": valores,
+            "atributos_contacto": {k: c for k, c in (base.get("atributos_contacto") or {}).items() if c in columnas},
+            "traducciones": base.get("traducciones") or {}}
 
 
 def validar_mapeo(mapeo: dict, columnas: list[str]):
+    for legado in LEGADOS:  # mapeos guardados antes de D39
+        (mapeo.get("variables") or {}).pop(legado, None)
+        (mapeo.get("valores") or {}).pop(legado, None)
+    for clave, var in (mapeo.get("atributos_contacto") or {}).items():
+        if var and var not in columnas:
+            raise HTTPException(422, f"La variable {var} no está en el archivo")
     if not mapeo.get("response_id") or mapeo["response_id"] not in columnas:
         raise HTTPException(422, "Indicá la variable de response_id (identificador de la respuesta en Alchemer)")
     ident = mapeo.get("identificador") or {}
@@ -224,12 +236,40 @@ def valores_mapeados(fila: dict, mapeo: dict) -> tuple[dict, dict]:
                 v[destino] = valor
         else:
             v[destino] = texto(crudo)
-    # EC_RESULTADO gana sobre el estado de Alchemer
-    if "resultado" not in v and v.get("estado_alchemer") and v["estado_alchemer"] != "ignorar":
-        v["resultado"] = v["estado_alchemer"]
-    if v.get("resultado") == "ignorar":
-        v.pop("resultado")
+    attrs = {}
+    for clave, var in (mapeo.get("atributos_contacto") or {}).items():
+        crudo = fila.get(var) if var else None
+        if crudo is None or (isinstance(crudo, str) and not crudo.strip()):
+            continue
+        cod = lectores.clave_valor(crudo)
+        trad = ((mapeo.get("traducciones") or {}).get("atributo." + clave) or {})
+        if cod in trad:
+            if trad[cod] is None:  # «ignorar»
+                continue
+            attrs[clave] = trad[cod]
+        else:
+            attrs[clave] = texto(crudo)
+    if attrs:
+        v["atributos_contacto"] = attrs
     return v, sin_mapear
+
+
+def avisos_fila(fila: dict, mapeo: dict, v: dict, item, prefijos) -> list[dict]:
+    """Por qué no se aplicó algo de la fila (F2.1). motivo agrupa; valor es el crudo, si hay."""
+    avisos = []
+    if item is None:
+        avisos.append({"motivo": SIN_ITEM})
+    variables = mapeo.get("variables") or {}
+    for destino, nombre in (("tel_usado", "EC_TEL_USADO"), ("tel_alt", "EC_TEL_ALT")):
+        var = variables.get(destino)
+        if not var:
+            continue
+        crudo = fila.get(var)
+        if crudo is None or not str(crudo).strip():
+            avisos.append({"motivo": f"{nombre} vacío"})
+        elif not telmod.normalizar(crudo, prefijos).e164:
+            avisos.append({"motivo": f"{nombre} no normalizable", "valor": str(crudo).strip()})
+    return avisos
 
 
 def _fecha(valor, defecto: dt.datetime) -> dt.datetime:
@@ -276,6 +316,7 @@ def contar(conn, parte: dict, filas: list[dict], mapeo: dict) -> dict:
     avisos = [f"{destino}: el {cod} quedó sin mapear: {n} filas"
               for destino, cs in sin_mapear.items() for cod, n in cs.most_common()]
     total = c["filas"] - c["sin_response_id"]
+    c["completas"] = total  # D39: toda fila con response_id es una encuesta completa
     return {**c, "porcentaje_asociadas": round(100 * c["asociadas"] / total, 1) if total else 0.0,
             "motivos_sin_asociar": dict(motivos), "sin_mapear": {k: dict(v) for k, v in sin_mapear.items()},
             "avisos": avisos}
@@ -336,6 +377,7 @@ def confirmar(conn, parte_id: int, ingesta_id: int, mapeo: dict, actor: str) -> 
     if ing["estado"] not in ("analizada", "error"):
         raise HTTPException(409, f"La ingesta está {ing['estado']}")
     columnas, _, _ = _leer(conn, ing)
+    mapeo = limpiar_mapeo(mapeo)
     validar_mapeo(mapeo, columnas)
     conn.execute("UPDATE sav_ingesta SET estado = 'en_proceso', mapeo = %s WHERE id = %s", (Jsonb(mapeo), ingesta_id))
     return tareas.crear(conn, "sav.confirmar", {"ingesta_id": ingesta_id}, actor)
@@ -345,8 +387,10 @@ def aplicar_filas(conn, ingesta: dict, parte: dict, filas: list[dict], mapeo: di
                   tarea_id: int | None, forzar: bool) -> dict:
     """Guarda cada fila cruda y aplica sus resultados. forzar=True reaplica aunque no haya cambiado."""
     _, cfg = config.vigente(conn)
+    prefijos = cfg.get("prefijos_salida") or []
     ctx = Contexto(conn, parte)
     estudio_id = parte["estudio_id"]
+    por_motivo = Counter()
     c = Counter()
     sin_mapear = defaultdict(Counter)
     total = len(filas)
@@ -361,6 +405,9 @@ def aplicar_filas(conn, ingesta: dict, parte: dict, filas: list[dict], mapeo: di
                               (parte["id"], rid)).fetchone()
         if previa and previa["valores"] == fila and previa["aplicado"] is not None and not forzar:
             c["ya_ingeridas"] += 1
+            c["completas"] += 1
+            for a in previa.get("avisos") or []:
+                por_motivo[a["motivo"]] += 1
             if previa["item_id"]:
                 c["asociadas"] += 1
             else:
@@ -374,13 +421,18 @@ def aplicar_filas(conn, ingesta: dict, parte: dict, filas: list[dict], mapeo: di
         linaje = {"estudio_id": estudio_id, "parte_id": parte["id"], "ingesta_id": ingesta["id"], "response_id": rid,
                   "encuestador": v.get("encuestador"), "fecha": fecha}
         aplicado = resultados.aplicar(conn, item, parte, v, linaje, cfg, actor, forzar) if item else {}
+        avisos = avisos_fila(fila, mapeo, v, item, prefijos)
+        for a in avisos:
+            por_motivo[a["motivo"]] += 1
+        c["completas"] += 1
         sf = conn.execute(
-            "INSERT INTO sav_fila (ingesta_id, parte_id, response_id, item_id, valores, aplicado, motivo)"
-            " VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (parte_id, response_id) DO UPDATE SET ingesta_id = EXCLUDED.ingesta_id,"
-            " item_id = EXCLUDED.item_id, valores = EXCLUDED.valores, aplicado = EXCLUDED.aplicado, motivo = EXCLUDED.motivo,"
-            " actualizado = now() RETURNING id",
+            "INSERT INTO sav_fila (ingesta_id, parte_id, response_id, item_id, valores, aplicado, motivo, avisos, fecha,"
+            " encuestador) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (parte_id, response_id) DO UPDATE SET"
+            " ingesta_id = EXCLUDED.ingesta_id, item_id = EXCLUDED.item_id, valores = EXCLUDED.valores,"
+            " aplicado = EXCLUDED.aplicado, motivo = EXCLUDED.motivo, avisos = EXCLUDED.avisos, fecha = EXCLUDED.fecha,"
+            " encuestador = EXCLUDED.encuestador, actualizado = now() RETURNING id",
             (ingesta["id"], parte["id"], rid, item["id"] if item else None, Jsonb(fila), Jsonb(aplicado),
-             motivo)).fetchone()
+             motivo, Jsonb(avisos), fecha, v.get("encuestador"))).fetchone()
         if item:
             c["asociadas"] += 1
             conn.execute("UPDATE conciliacion SET estado = 'resuelta', resuelto = now(), resuelto_por = %s,"
@@ -404,6 +456,7 @@ def aplicar_filas(conn, ingesta: dict, parte: dict, filas: list[dict], mapeo: di
                          for cod, n in cs.most_common()]
     base = total - c["sin_response_id"]
     conteos["porcentaje_asociadas"] = round(100 * c["asociadas"] / base, 1) if base else 0.0
+    conteos["avisos_filas"] = dict(por_motivo.most_common())
     return conteos
 
 
@@ -412,7 +465,7 @@ def _tarea_confirmar(conn, payload, tarea_id):
     ing = conn.execute("SELECT * FROM sav_ingesta WHERE id = %s", (payload["ingesta_id"],)).fetchone()
     parte = _parte(conn, ing["parte_id"])
     _, filas, _ = _leer(conn, ing)
-    conteos = aplicar_filas(conn, ing, parte, filas, ing["mapeo"], ing["actor"], tarea_id, forzar=False)
+    conteos = aplicar_filas(conn, ing, parte, filas, limpiar_mapeo(ing["mapeo"]), ing["actor"], tarea_id, forzar=False)
     conn.execute("UPDATE sav_ingesta SET estado = 'confirmada', conteos = %s, confirmada = now() WHERE id = %s",
                  (Jsonb(conteos), ing["id"]))
     conn.execute("UPDATE parte SET plantilla_mapeo = %s WHERE id = %s", (Jsonb(ing["mapeo"]), parte["id"]))
@@ -426,6 +479,7 @@ def remapear(conn, ingesta_id: int, mapeo: dict, actor: str) -> int:
         raise HTTPException(409, "Solo se remapea una ingesta confirmada")
     columnas = list((conn.execute("SELECT valores FROM sav_fila WHERE ingesta_id = %s LIMIT 1",
                                   (ingesta_id,)).fetchone() or {"valores": {}})["valores"].keys())
+    mapeo = limpiar_mapeo(mapeo)
     validar_mapeo(mapeo, columnas)
     conn.execute("UPDATE sav_ingesta SET mapeo = %s, estado = 'en_proceso' WHERE id = %s", (Jsonb(mapeo), ingesta_id))
     return tareas.crear(conn, "sav.remapear", {"ingesta_id": ingesta_id}, actor)
@@ -438,7 +492,7 @@ def _tarea_remapear(conn, payload, tarea_id):
     parte = _parte(conn, ing["parte_id"])
     filas = [r["valores"] for r in conn.execute("SELECT valores FROM sav_fila WHERE ingesta_id = %s ORDER BY id",
                                                 (ing["id"],))]
-    conteos = aplicar_filas(conn, ing, parte, filas, ing["mapeo"], ing["actor"], tarea_id, forzar=True)
+    conteos = aplicar_filas(conn, ing, parte, filas, limpiar_mapeo(ing["mapeo"]), ing["actor"], tarea_id, forzar=True)
     conn.execute("UPDATE sav_ingesta SET estado = 'confirmada', conteos = %s WHERE id = %s", (Jsonb(conteos), ing["id"]))
     conn.execute("UPDATE parte SET plantilla_mapeo = %s WHERE id = %s", (Jsonb(ing["mapeo"]), parte["id"]))
     auditoria.registrar(conn, ing["actor"], "sav.remapear", "sav_ingesta", ing["id"], conteos)
@@ -462,6 +516,16 @@ def obtener(conn, ingesta_id: int) -> dict:
             ing["frecuencias"][var] = [[r["v"], r["n"]] for r in conn.execute(
                 "SELECT valores->>%s AS v, count(*) AS n FROM sav_fila WHERE ingesta_id = %s AND valores->>%s IS NOT NULL"
                 " GROUP BY 1 ORDER BY 2 DESC", (var, ingesta_id, var))]
+    ing["mapeo"] = limpiar_mapeo(ing["mapeo"])
+    ing["avisos_filas"] = conn.execute(
+        "SELECT a->>'motivo' AS motivo, count(*) AS n,"
+        " (array_agg(json_build_object('response_id', s.response_id, 'valor', a->>'valor') ORDER BY s.id))[1:5] AS ejemplos"
+        " FROM sav_fila s, jsonb_array_elements(s.avisos) a WHERE s.ingesta_id = %s GROUP BY 1 ORDER BY 2 DESC",
+        (ingesta_id,)).fetchall()
+    ing["completas"] = conn.execute(
+        "SELECT count(*) AS total, count(*) FILTER (WHERE item_id IS NOT NULL) AS asociadas,"
+        " count(*) FILTER (WHERE item_id IS NULL) AS sin_asociar FROM sav_fila WHERE ingesta_id = %s",
+        (ingesta_id,)).fetchone()
     ing["tarea"] = conn.execute(
         "SELECT id, tipo, estado, progreso, total, error, creado,"
         " (estado = 'corriendo' AND creado < now() - make_interval(mins => %s)) AS trabada"

@@ -270,23 +270,35 @@ def cambiar_estado_vinculo(conn, vinculo: dict, estado: str, fuente_tipo: str, f
 
 
 def contacto(conn, empresa_id: int, nombre: str, cargo, area, email, fuente_tipo, fuente_id,
-             detalle=None, sucursal_id=None) -> tuple[dict, bool]:
-    """Crea o actualiza un contacto de la empresa (se identifica por nombre normalizado)."""
-    clave = razon_normalizada(nombre)
-    for c in conn.execute("SELECT * FROM contacto WHERE empresa_id = %s", (empresa_id,)).fetchall():
-        if razon_normalizada(c["nombre"]) == clave:
-            conn.execute(
-                "UPDATE contacto SET cargo = coalesce(%s, cargo), area = coalesce(%s, area),"
-                " email = coalesce(%s, email), actualizado = now() WHERE id = %s",
-                (cargo, area, email, c["id"]),
-            )
-            return c, False
+             detalle=None, sucursal_id=None, actor: str | None = None, solo_vacios: bool = False) -> tuple[dict, bool]:
+    """Crea o actualiza un contacto de la empresa (se identifica por nombre normalizado o por email).
+    La sala actualiza los campos que trae; una carga (solo_vacios) completa solo los vacíos.
+    Cada alta y cada cambio queda en contacto_historia (F2.4)."""
+    from . import contactos
+
+    email = contactos.normalizar_email(email)
+    c = contactos.buscar(conn, empresa_id, nombre, email)
+    nuevos = {"cargo": cargo, "area": area, "email": email, "sucursal_id": sucursal_id}
+    if c is not None:
+        cambios = {k: v for k, v in nuevos.items() if v not in (None, "") and v != c[k]
+                   and not (solo_vacios and c[k] not in (None, ""))}
+        if cambios:
+            conn.execute(f"UPDATE contacto SET {', '.join(f'{k} = %s' for k in cambios)}, actualizado = now() WHERE id = %s",
+                         (*cambios.values(), c["id"]))
+            for k, v in cambios.items():
+                contactos.historia(conn, c, k, v, fuente_tipo, fuente_id, actor, detalle)
+            c = {**c, **cambios}
+        return c, False
     c = conn.execute(
         "INSERT INTO contacto (empresa_id, sucursal_id, nombre, cargo, area, email, fuente_tipo, fuente_id, detalle)"
         " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
         (empresa_id, sucursal_id, nombre.strip(), cargo, area, email, fuente_tipo, fuente_id,
-         Jsonb(detalle) if detalle else None),
+         Jsonb(contactos._json(detalle)) if detalle else None),
     ).fetchone()
+    contactos.historia(conn, c, "alta", c["nombre"], fuente_tipo, fuente_id, actor, detalle)
+    for k in ("cargo", "area", "email"):
+        if c[k]:
+            contactos.historia(conn, c, k, c[k], fuente_tipo, fuente_id, actor, detalle)
     return c, True
 
 

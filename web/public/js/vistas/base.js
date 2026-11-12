@@ -98,6 +98,20 @@ export async function empresas(ctx) {
   await buscar(_filtros.pagina);
 }
 
+// F2.2: los números del contacto, con «se habló el …» cuando vienen del .sav
+const telNac = (e164) => {
+  if (!e164 || !e164.startsWith('+598')) return e164 || '';
+  const n = e164.slice(4);
+  return n.startsWith('9') ? `0${n.slice(0, 2)} ${n.slice(2, 5)} ${n.slice(5)}` : `${n.slice(0, 4)} ${n.slice(4)}`;
+};
+export function telefonosContacto(tels) {
+  if (!tels || !tels.length) return '<span class="muted">—</span>';
+  return tels.map(t => `<div class="small"><span class="mono">${esc(telNac(t.e164) || t.crudo)}</span> <span class="muted">${
+    t.relacion === 'se_hablo'
+      ? `se habló el ${fecha(t.ultima_vez)}${t.estudio ? ` (${esc(t.estudio)}, ${esc(t.parte)})` : ''}${t.veces > 1 ? ` · ${t.veces} veces` : ''}`
+      : 'número del contacto'}</span></div>`).join('');
+}
+
 // ── Ficha ──
 const CAMPOS = [['razon_social', 'Razón social'], ['fantasia', 'Nombre de fantasía'], ['naturaleza', 'Naturaleza jurídica'],
   ['ciiu', 'CIIU'], ['tamano', 'Tamaño'], ['departamento', 'Departamento'], ['localidad', 'Localidad'], ['direccion', 'Dirección'],
@@ -180,8 +194,9 @@ export async function ficha(ctx, rut, params) {
   } else if (tab === 'contactos') {
     el.innerHTML = card('Contactos (dato personal, Ley 18.331)', tabla([
       { t: 'Nombre', f: c => `<span class="td-strong">${esc(c.nombre)}</span>${c.no_llamar ? ' ' + est('error', 'no llamar') : ''}` },
-      { t: 'Cargo', k: 'cargo' }, { t: 'Área', k: 'area' }, { t: 'Email', k: 'email' }, { t: 'Fuente', k: 'fuente_tipo' },
-      { t: 'Actualizado', f: c => fecha(c.actualizado) },
+      { t: 'Cargo', k: 'cargo' }, { t: 'Área', k: 'area' }, { t: 'Email', k: 'email' },
+      { t: 'Teléfonos', f: c => telefonosContacto(c.telefonos) },
+      { t: 'Fuente', k: 'fuente_tipo' }, { t: 'Actualizado', f: c => fecha(c.actualizado) },
     ], e.contactos, 'Sin contactos'), '', true);
   } else if (tab === 'muestras') {
     el.innerHTML = card('Muestras', tabla([
@@ -193,9 +208,14 @@ export async function ficha(ctx, rut, params) {
     if ($('#f-item')) $('#f-item').scrollIntoView({ block: 'center' });
   } else if (tab === 'tiempo') {
     const clase = { llamada: 't-llamada', resultado: 't-resultado', dato: 't-dato', 'no llamar': 't-no' };
-    el.innerHTML = card('Línea de tiempo', e.linea_de_tiempo.length ? `<ul class="timeline">${e.linea_de_tiempo.map(x => `
-      <li class="${clase[x.tipo] || ''}"><div class="tl-fecha">${fechaHora(x.fecha)} · ${esc(x.tipo)}</div>
-      <div class="tl-desc">${esc(x.descripcion)}</div><div class="tl-meta">${esc(x.fuente || '')}${x.actor ? ' · ' + esc(x.actor) : ''}</div></li>`).join('')}</ul>`
+    const evento = (x) => `<li class="${clase[x.tipo] || ''}"><div class="tl-fecha">${fechaHora(x.fecha)} · ${esc(x.tipo)}</div>
+      <div class="tl-desc">${esc(x.descripcion)}</div><div class="tl-meta">${esc(x.fuente || '')}${x.actor ? ' · ' + esc(x.actor) : ''}</div></li>`;
+    // F2.4: lo que trajo una ingesta del .sav se agrupa en una línea desplegable
+    const grupo = (g) => `<li class="t-ingesta"><div class="tl-fecha">${fechaHora(g.fecha)} · ingesta .sav</div>
+      <details class="tl-grupo"><summary class="tl-desc"><a class="link" href="#/sav/${g.ingesta_id}">${esc(g.titulo)}</a>: ${esc(g.descripcion.slice(g.titulo.length + 2))}</summary>
+      <ul class="timeline tl-sub">${g.eventos.map(evento).join('')}</ul></details>
+      <div class="tl-meta">${esc(g.fuente)}${g.actor ? ' · ' + esc(g.actor) : ''}</div></li>`;
+    el.innerHTML = card('Línea de tiempo', e.linea_de_tiempo.length ? `<ul class="timeline">${e.linea_de_tiempo.map(x => x.tipo === 'ingesta' ? grupo(x) : evento(x)).join('')}</ul>`
       : '<div class="empty-state">Sin eventos</div>');
   } else if (tab === 'fusiones') {
     el.innerHTML = card('Fusiones', tabla([

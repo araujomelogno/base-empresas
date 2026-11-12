@@ -95,7 +95,11 @@ def test_borrar_estudio_completo(api, sql):
     assert cuenta(sql, "archivo a JOIN sav_ingesta s ON s.archivo_id = a.id") == 0
     assert cuenta(sql, "archivo") == 1                        # queda solo el de la carga
     ficha = api.get(f"/empresas/{rut0}").json()
-    assert ficha["contactos"] == contactos and ficha["ultimo_contacto_efectivo"]
+    sin_tel = lambda cs: [{k: v for k, v in c.items() if k != "telefonos"} for c in cs]  # noqa: E731
+    assert sin_tel(ficha["contactos"]) == sin_tel(contactos) and ficha["ultimo_contacto_efectivo"]
+    # la relación contacto–teléfono se conserva; la ingesta ya no existe, así que pierde estudio y parte
+    assert [(t["e164"], t["estudio"]) for t in ficha["contactos"][0]["telefonos"]] == \
+        [(t["e164"], None) for t in contactos[0]["telefonos"]]
     f1 = api.get(f"/empresas/{rut1}").json()
     assert f1["estado"] == "cerrada"                           # lo aprendido por el campo se conserva
     sala = [h for h in f1["historia"] if h["fuente_tipo"] in ("sala", "sav")]

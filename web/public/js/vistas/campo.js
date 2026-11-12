@@ -7,14 +7,12 @@ import { actualizarContadores } from '../app.js';
 const DESTINOS = {
   tel_usado: 'Teléfono usado (EC_TEL_USADO)', calidad_tel: 'Calidad del número (EC_CALIDAD_TEL)', tel_alt: 'Teléfono alternativo (EC_TEL_ALT)',
   resp_nombre: 'Respondente: nombre', resp_cargo: 'Respondente: cargo', resp_area: 'Respondente: área',
-  resultado: 'Resultado (EC_RESULTADO)', estado_alchemer: 'Estado de Alchemer (status)', rut: 'RUT (EC_RUT, respaldo)',
+  rut: 'RUT (EC_RUT, respaldo)',
   encuestador: 'Encuestador/a', fecha: 'Fecha de la respuesta',
 };
 const VALORES = {
   calidad_tel: ['corresponde', 'no_corresponde', 'intermediario', 'cerro', 'inexistente', 'ignorar'],
-  resultado: ['completa', 'parcial', 'rechazo', 'no_corresponde', 'agendada', 'descalificada', 'ignorar'],
 };
-VALORES.estado_alchemer = VALORES.resultado;
 const VALOR_TXT = { cerro: 'la empresa cerró', intermediario: 'estudio contable o jurídico (intermediario)', no_corresponde: 'no corresponde', ignorar: '— ignorar —' };
 
 // Editor del mapeo: compartido entre la primera ingesta y la corrección (remapeo)
@@ -44,13 +42,15 @@ function editor(el, { columnas: cols, info, mapeo }) {
       <div class="form-group"><label>Tipo de identificador</label><select class="fselect" id="ed-idt">
         <option value="id_item" ${(mapeo.identificador || {}).tipo === 'id_item' ? 'selected' : ''}>id_item (EC_ID_ITEM)</option>
         <option value="rut" ${(mapeo.identificador || {}).tipo === 'rut' ? 'selected' : ''}>RUT</option></select></div></div>
-      <p class="field-hint">Si una fila no trae id_item, se intenta asociar por RUT y teléfono usado.</p></div>
+      <p class="field-hint">Si una fila no trae id_item, se intenta asociar por RUT y teléfono usado.</p>
+      <div class="alert alert-info small"><span><strong>Toda fila del .sav es una encuesta completa</strong> (Alchemer exporta solo las completas):
+      no hace falta mapear un resultado ni el estado de Alchemer. El número usado y el adicional quedan verificados.</span></div></div>
     <div><table class="map-grid"><thead><tr><th>Dato del sistema</th><th>Variable del .sav</th></tr></thead><tbody>
       ${Object.entries(DESTINOS).map(([d, t]) => `<tr><td class="td-strong">${esc(t)}</td><td><select class="fselect" data-dest="${d}">${opt((mapeo.variables || {})[d])}</select></td></tr>`).join('')}
     </tbody></table></div></div><div id="ed-valores"></div>`;
   $$('[data-dest]', el).forEach(s => s.onchange = () => { leer(); pintarValores(); });
   const leer = () => {
-    const m = { response_id: $('#ed-rid', el).value, identificador: { variable: $('#ed-idv', el).value, tipo: $('#ed-idt', el).value }, variables: {}, valores: {} };
+    const m = { ...mapeo, response_id: $('#ed-rid', el).value, identificador: { variable: $('#ed-idv', el).value, tipo: $('#ed-idt', el).value }, variables: {}, valores: {} };
     $$('[data-dest]', el).forEach(s => { if (s.value) m.variables[s.dataset.dest] = s.value; });
     $$('[data-val]', el).forEach(s => { if (s.value) (m.valores[s.dataset.val] ||= {})[s.dataset.cod] = s.value; });
     Object.keys(VALORES).forEach(d => { if (!m.variables[d]) delete m.valores[d]; });
@@ -63,9 +63,11 @@ function editor(el, { columnas: cols, info, mapeo }) {
 
 function pintarConteos(el, k) {
   if (!k || k.filas === undefined) { el.innerHTML = ''; return; }
-  el.innerHTML = stats([[k.filas, 'Filas', 's-total'], [k.asociadas || 0, 'Asociadas', 's-ok'], [k.sin_asociar || 0, 'Sin asociar', 's-bad'],
+  el.innerHTML = stats([[k.filas, 'Filas', 's-total'], [k.completas ?? ((k.filas || 0) - (k.sin_response_id || 0)), 'Encuestas completas', 's-ok'],
+    [k.asociadas || 0, 'Asociadas', 's-ok'], [k.sin_asociar || 0, 'Sin asociar', 's-bad'],
     [`${k.porcentaje_asociadas ?? 0}%`, 'Asociadas', k.porcentaje_asociadas >= 95 ? 's-ok' : 's-warn'], [k.ya_ingeridas || 0, 'Ya ingeridas', '']]) +
     (Object.keys(k.motivos_sin_asociar || {}).length ? `<div class="small mb"><strong>Sin asociar por motivo:</strong> ${Object.entries(k.motivos_sin_asociar).map(([m, n]) => `${esc(m)} <strong>${num(n)}</strong>`).join(' · ')}</div>` : '') +
+    (k.sin_response_id ? `<div class="small mb"><strong>${num(k.sin_response_id)} fila${k.sin_response_id > 1 ? 's' : ''} sin response_id:</strong> no cuentan como encuesta.</div>` : '') +
     ((k.avisos || []).length ? `<div class="alert alert-warn"><div><strong>Valores sin mapear</strong> (el valor crudo se guarda igual y se puede corregir después):<ul class="aviso-lista">${k.avisos.map(a => `<li>${esc(a)}</li>`).join('')}</ul></div></div>`
       : `<div class="alert alert-success">Todos los valores codificados están mapeados.</div>`);
 }
@@ -131,6 +133,12 @@ export async function savDetalle(ctx, id) {
     (s.tarea && s.tarea.trabada ? `<div class="alert alert-warn"><span>La tarea #${s.tarea.id} figura corriendo desde el ${fechaHora(s.tarea.creado)}:
       está <strong>trabada</strong> (la instancia que la corría probablemente se reinició). Volvé a subir el .sav; un administrador puede borrar el estudio de prueba si hace falta.</span></div>` : '') +
     `<div id="sd-prog"></div><div id="sd-conteos"></div>` +
+    (s.completas ? `<div class="alert alert-info"><span><strong>${num(s.completas.total)} encuestas completas</strong> (filas con response_id):
+      ${num(s.completas.asociadas)} asociadas a un ítem y ${num(s.completas.sin_asociar)} sin asociar${s.completas.sin_asociar ? ` · <a class="link" href="#/conciliacion?tipo=sav_fila">conciliarlas</a>` : ''}.</span></div>` : '') +
+    card('Lo que no se aplicó, fila por fila', tabla([
+      { t: 'Motivo', f: a => `<span class="td-strong">${esc(a.motivo)}</span>` }, { t: 'Filas', cls: 'num', f: a => num(a.n) },
+      { t: 'Ejemplos (response_id)', f: a => `<span class="small">${(a.ejemplos || []).map(x => `<span class="mono">${esc(x.response_id)}</span>${x.valor ? ` «${esc(x.valor)}»` : ''}`).join(' · ')}</span>` },
+    ], s.avisos_filas || [], 'Todas las filas se aplicaron completas'), '', true) +
     `<div class="grid-2">${card('Cambios aplicados a la base', tabla([{ t: 'Cambio', f: x => esc(etiqueta(x[0])) }, { t: 'Filas', cls: 'num', f: x => num(x[1]) }], aplicado, 'Sin cambios'), '', true)}
     ${card('Mapeo confirmado', json(s.mapeo))}</div><div id="sd-editor"></div>`;
   pintarConteos($('#sd-conteos'), k);
@@ -205,8 +213,11 @@ export async function actividad(ctx) {
     const sel = $('#a-encuestador');
     if (sel.options.length === 1) sel.innerHTML += t.encuestadores_lista.map(e => `<option ${e === _act.encuestador ? 'selected' : ''}>${esc(e)}</option>`).join('');
     $('#a-res').innerHTML = stats([[t.intentos, 'Llamadas a empresas', 's-total'], [t.telefonos_marcados, 'Teléfonos marcados', 's-free'],
-      [t.empresas_llamadas, 'Empresas llamadas', ''], [t.contactos_efectivos, 'Contactos efectivos', 's-warn'], [t.completas, 'Completas', 's-ok'],
+      [t.empresas_llamadas, 'Empresas llamadas', ''], [t.contactos_efectivos, 'Contactos efectivos', 's-warn'], [t.completas, 'Encuestas completas', 's-ok'],
       [pct(t.asociados_a_item, t.intentos), 'Asociadas a un ítem de muestra', '']]) +
+      `<div class="card mb"><div class="card-body small">Encuestas completas (filas del .sav): <strong>${num(t.completas_asociadas)}</strong> asociadas a un ítem
+        + <strong>${num(t.completas_sin_asociar)}</strong> sin asociar${t.completas_sin_asociar ? ` · <a class="link" href="#/conciliacion?tipo=sav_fila">conciliar las sin asociar</a>` : ''}.
+        <span class="muted">Cuentan todas las filas del .sav, estén o no asociadas; el período usa la fecha de la respuesta.</span></div></div>` +
       `<div class="grid-2">${card('Intentos por franja', barras(t.por_franja, { label: 'franja', valor: 'intentos' }))}
       ${card('Intentos por día', columnas(t.por_dia, { label: 'dia', valor: 'intentos' }))}</div>` +
       card('Por encuestador/a', tabla([{ t: 'Encuestador/a', f: e => `<span class="td-strong">${esc(e.encuestador)}</span>` },

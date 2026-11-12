@@ -379,3 +379,9 @@ tr.fila-total td { font-weight: 700; border-top: 2px solid var(--border); backgr
 .tabla-simple td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
 .tabla-simple td.num { text-align: right; white-space: nowrap; }
 .req { color: var(--red); font-weight: 700; }
+
+/* Línea de tiempo: grupo de una ingesta .sav (F2.4) */
+.timeline li.t-ingesta::before { background: var(--orange, #e8590c); }
+details.tl-grupo > summary { cursor: pointer; list-style: revert; }
+.timeline.tl-sub { margin: .5rem 0 .2rem; }
+.timeline.tl-sub li { padding-bottom: .5rem; }
