@@ -19,6 +19,7 @@ Registro maestro de empresas por RUT del que salen muestras aleatorias y auditab
 | Despliegue de la carga v2 (atributos y origen del teléfono) | [`docs/despliegue_carga_v2.md`](docs/despliegue_carga_v2.md) |
 | Despliegue del borrado de estudios, muestras y cargas en curso | [`docs/despliegue_borrado_estudios.md`](docs/despliegue_borrado_estudios.md) |
 | Despliegue del conteo de llamadas del CDR y empresas llamadas | [`docs/despliegue_conteo_llamadas.md`](docs/despliegue_conteo_llamadas.md) |
+| Despliegue de .sav, contactos, atributos, exportación y base provisoria | [`docs/despliegue_mejoras_sav_contactos.md`](docs/despliegue_mejoras_sav_contactos.md) |
 
 ## Estructura
 

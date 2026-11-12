@@ -22,10 +22,14 @@ experimento C).
 | `EC_RESP_NOMBRE` | Texto | Pregunta abierta | Nombre de quien contestó | No |
 | `EC_RESP_CARGO` | Texto | Pregunta abierta | Cargo de quien contestó | No |
 | `EC_RESP_AREA` | Texto | Pregunta abierta | Área de quien contestó | No |
-| `EC_RESULTADO` | Numérica con etiquetas | Pregunta cerrada al final, o estado de Alchemer | Resultado del contacto (códigos abajo) | Sí |
 
 Además el .sav de Alchemer trae `responseid` (identificador de la respuesta, base de la
 idempotencia), `status` y `datesubmitted`; no hay que agregarlas.
+
+**Desde noviembre de 2026 (D39) no hace falta `EC_RESULTADO`:** Alchemer exporta solo las encuestas
+completas, así que **toda fila del .sav es una encuesta completa**. El sistema ya no pide ni usa un
+resultado ni el `status` de Alchemer. Un cuestionario que todavía tenga `EC_RESULTADO` funciona igual:
+esa variable se ignora.
 
 ### Códigos
 
@@ -39,18 +43,8 @@ idempotencia), `status` y `datesubmitted`; no hay que agregarlas.
 | 4 | La empresa cerró | `cerro` | La empresa pasa a estado "cerrada" |
 | 5 | Número inexistente | `inexistente` | Vínculo inexistente |
 
-`EC_RESULTADO`
-
-| Código | Etiqueta | Valor en el sistema |
-| --- | --- | --- |
-| 1 | Completa | `completa` |
-| 2 | Rechazo | `rechazo` |
-| 3 | No corresponde | `no_corresponde` |
-| 4 | Agendada | `agendada` |
-
-Si un estudio no usa `EC_RESULTADO`, el sistema toma el `status` de Alchemer
-(Complete → completa, Partial → parcial, Disqualified → descalificada). `EC_RESULTADO` gana
-cuando están las dos.
+El número usado (`EC_TEL_USADO`) y el adicional (`EC_TEL_ALT`) quedan **verificados** con origen
+Sala, salvo que `EC_CALIDAD_TEL` diga 2, 3 o 5 para el número usado (gana la calidad explícita).
 
 ## Cómo se arma en Alchemer
 
@@ -58,7 +52,7 @@ cuando están las dos.
    agregar una acción *Hidden Value* por variable con el valor `[url("EC_ID_ITEM")]` (y
    `[url("EC_RUT")]`, `[url("EC_TEL_USADO")]`). El nombre de la variable en la URL distingue
    mayúsculas: usar exactamente estos.
-2. **Preguntas** (`EC_CALIDAD_TEL`, `EC_TEL_ALT`, `EC_RESP_*`, `EC_RESULTADO`): crearlas en una
+2. **Preguntas** (`EC_CALIDAD_TEL`, `EC_TEL_ALT`, `EC_RESP_*`): crearlas en una
    página de cierre, visibles solo para el encuestador.
 3. **Nombre de la variable en la exportación:** en cada elemento, poner como alias de la pregunta
    (*Question Alias* / alias de reporte) el nombre `EC_…` exacto, para que la exportación a SPSS

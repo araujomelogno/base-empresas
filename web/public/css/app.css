@@ -385,3 +385,7 @@ tr.fila-total td { font-weight: 700; border-top: 2px solid var(--border); backgr
 details.tl-grupo > summary { cursor: pointer; list-style: revert; }
 .timeline.tl-sub { margin: .5rem 0 .2rem; }
 .timeline.tl-sub li { padding-bottom: .5rem; }
+/* Reglas de fusión en cascada (F6.2) y códigos de empresa */
+.map-fila.regla { grid-template-columns: 22px minmax(150px, 1fr) 110px 76px auto; align-items: center; }
+.map-fila.regla input[type=number] { padding: .45rem .5rem; }
+td a.mono, td .mono { white-space: nowrap; }

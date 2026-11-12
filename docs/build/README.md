@@ -90,3 +90,17 @@ soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx
 ```bash
 BASE=http://localhost:8080 node docs/build/capturas_llamadas.js docs/manual/img
 ```
+
+## Capturas de .sav, contactos, atributos, exportación y base provisoria
+
+`capturas_mejoras.js` saca las imágenes 44 a 52 de las guías 19 a 24 (línea de tiempo con la ingesta agrupada, empresas de la muestra, agregar un contacto, base provisoria, destino y reglas de fusión, coincidencias a decidir, atributo parecido, qué incluir al exportar y motivos por fila de la ingesta). Necesita la demo **recién cargada**: el script crea un atributo de contacto y hace una carga a la base provisoria.
+
+```bash
+BASE=http://localhost:8080 node docs/build/capturas_mejoras.js docs/manual/img
+```
+
+Después, `docs/build/manual_mejoras.py` agregó las guías al Word (`docs/Manual_de_usuario_Base_de_Empresas.docx`); el PDF se regenera con:
+
+```bash
+soffice --headless --convert-to pdf --outdir docs docs/Manual_de_usuario_Base_de_Empresas.docx
+```

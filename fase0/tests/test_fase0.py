@@ -78,7 +78,8 @@ def test_exp_b_asocia_parte_a_y_b(datos):
     assert dict(b["bloque"])["EC_RESP_AREA"] == "falta"
     assert r["go"] is True and r["falta_id_item"] == ["parteB.sav"]
     mapeo = json.loads((datos["salida"] / "exp_b_mapeo_parteA.json").read_text())
-    assert mapeo["valores"]["resultado"]["1"] == "completa"
+    # D39: el resultado no se mapea (toda fila del .sav es una encuesta completa)
+    assert "resultado" not in mapeo["variables"] and "resultado" not in mapeo.get("valores", {})
 
 
 def test_plantilla_json_coincide_con_lo_que_reconoce_app_sav():
