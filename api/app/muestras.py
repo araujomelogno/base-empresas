@@ -84,7 +84,9 @@ def estudio_detalle(conn, estudio_id: int) -> dict:
     e["partes"] = conn.execute(
         """SELECT p.*, (p.plantilla_mapeo IS NOT NULL) AS tiene_plantilla,
                   (SELECT json_object_agg(estado, n) FROM (SELECT estado, count(*) AS n FROM item_parte_estado
-                    WHERE parte_id = p.id GROUP BY estado) x) AS estados
+                    WHERE parte_id = p.id GROUP BY estado) x) AS estados,
+                  (SELECT count(*) FROM sav_fila s WHERE s.parte_id = p.id) AS completas_sav,
+                  (SELECT count(*) FROM sav_fila s WHERE s.parte_id = p.id AND s.item_id IS NULL) AS completas_sin_asociar
            FROM parte p WHERE p.estudio_id = %s ORDER BY p.id""", (estudio_id,)).fetchall()
     e["muestras"] = conn.execute(
         "SELECT id, nombre, estado, semilla, config_version, sorteada, (SELECT count(*) FROM muestra_item WHERE muestra_id = m.id) AS n_items"
@@ -160,7 +162,7 @@ def _validar_criterios(conn, c: dict) -> dict:
     for k in filtros:
         if k not in FILTROS:
             raise HTTPException(422, f"Filtro desconocido: {k}")
-    defs = {a["clave"]: a for a in catalogos.atributos(conn)}
+    defs = {a["clave"]: a for a in catalogos.atributos(conn, ambito="empresa")}
     atributos = {}
     for clave, spec in (c.get("atributos") or {}).items():
         a = defs.get(clave)
@@ -188,8 +190,11 @@ def _validar_criterios(conn, c: dict) -> dict:
             raise HTTPException(422, "Tamaños y reemplazos no pueden ser negativos")
     if not estratos and c.get("n_por_estrato") is None:
         raise HTTPException(422, "Indicá el tamaño por estrato (lista de estratos o n_por_estrato)")
-    return {"filtros": filtros, "atributos": atributos, "origenes": origenes, "estratificar_por": por, "estratos": estratos,
-            "n_por_estrato": c.get("n_por_estrato"), "reemplazos_por_estrato": c.get("reemplazos_por_estrato", 0)}
+    salida = {"filtros": filtros, "atributos": atributos, "origenes": origenes, "estratificar_por": por, "estratos": estratos,
+              "n_por_estrato": c.get("n_por_estrato"), "reemplazos_por_estrato": c.get("reemplazos_por_estrato", 0)}
+    if c.get("incluir_provisoria"):  # F6.1 (Q2): desmarcado por defecto; solo se guarda si se marca (reproducibilidad)
+        salida["incluir_provisoria"] = True
+    return salida
 
 
 def crear_muestra(conn, estudio_id: int, nombre: str, criterios: dict, actor: str) -> dict:
@@ -205,6 +210,8 @@ def crear_muestra(conn, estudio_id: int, nombre: str, criterios: dict, actor: st
 def _universo(conn, criterios: dict) -> list[dict]:
     filtros = criterios.get("filtros") or {}
     where, args = ["TRUE"], []
+    if not criterios.get("incluir_provisoria"):
+        where.append("e.base = 'definitiva'")
     if filtros.get("ciiu"):
         where.append("(" + " OR ".join(["e.ciiu LIKE %s"] * len(filtros["ciiu"])) + ")")
         args += [f"{x}%" for x in filtros["ciiu"]]
@@ -217,7 +224,7 @@ def _universo(conn, criterios: dict) -> list[dict]:
     if filtros.get("naturaleza"):
         where.append("n.codigo = ANY(%s)")
         args.append(filtros["naturaleza"])
-    defs = {a["clave"]: a for a in catalogos.atributos(conn)}
+    defs = {a["clave"]: a for a in catalogos.atributos(conn, ambito="empresa")}
     for clave, f in (criterios.get("atributos") or {}).items():
         a = defs[clave]
         cond, cargs = [], [a["id"]]
@@ -449,9 +456,16 @@ def detalle(conn, muestra_id: int) -> dict:
     if m is None:
         raise HTTPException(404, "Muestra inexistente")
     m["exportacion"] = opciones_exportacion(m)
+    m["contactos_por_empresa_csv"] = int(config.vigente(conn)[1].get("contactos_por_empresa_csv", 3))
     m["n_items_borrados"] = conn.execute("SELECT count(*) AS n FROM muestra_item_borrado WHERE muestra_id = %s",
                                          (muestra_id,)).fetchone()["n"]
     m["partes"] = conn.execute("SELECT id, nombre FROM parte WHERE estudio_id = %s ORDER BY id", (m["estudio_id"],)).fetchall()
+    # F1.1: un «Borrar muestra» que quedó en error o cancelado se avisa en el detalle
+    m["borrado_fallido"] = conn.execute(
+        "SELECT id, estado, error, creado, terminado FROM tarea WHERE tipo = 'muestra.borrar'"
+        " AND (payload->>'borrar_muestra_id')::int = %s ORDER BY id DESC LIMIT 1", (muestra_id,)).fetchone()
+    if m["borrado_fallido"] and m["borrado_fallido"]["estado"] not in ("error", "cancelada"):
+        m["borrado_fallido"] = None
     m["avance"] = conn.execute(
         """
         SELECT i.estrato,
@@ -476,40 +490,96 @@ def detalle(conn, muestra_id: int) -> dict:
     return m
 
 
+CAMPOS_CONTACTO_CSV = ("nombre", "cargo", "area", "email", "telefonos")
+NUMEROS = ("discables", "verificados")
+
+
 def opciones_exportacion(m: dict) -> dict:
+    """Qué incluir al exportar (C8 y F5.1). Por defecto, todo: los atributos se guardan como excluidos, así un
+    atributo nuevo entra solo. «numeros»: todos los discables (verificados y sin verificar, como siempre) o solo
+    los verificados."""
     e = m.get("exportacion") or {}
-    return {"origenes": e.get("origenes") or [], "orden": e.get("orden") or "prioridad"}
+    return {"origenes": e.get("origenes") or [], "orden": e.get("orden") or "prioridad",
+            "numeros": e.get("numeros") if e.get("numeros") in NUMEROS else "discables",
+            "atributos_excluidos": e.get("atributos_excluidos") or [],
+            "contactos": e.get("contactos", True) is not False,
+            "contacto_campos": [c for c in (e.get("contacto_campos") or CAMPOS_CONTACTO_CSV) if c in CAMPOS_CONTACTO_CSV],
+            "atributos_contacto_excluidos": e.get("atributos_contacto_excluidos") or []}
 
 
 def guardar_exportacion(conn, muestra_id: int, datos: dict, actor: str) -> dict:
-    """Orígenes a exportar y orden de los teléfonos del CSV (C8). Queda guardado en la muestra."""
+    """Orígenes, orden de los teléfonos (C8) y qué incluir (F5.1). Queda guardado en la muestra."""
     m = conn.execute("SELECT * FROM muestra WHERE id = %s FOR UPDATE", (muestra_id,)).fetchone()
     if m is None:
         raise HTTPException(404, "Muestra inexistente")
+    antes = opciones_exportacion(m)
+    datos = {**antes, **{k: v for k, v in datos.items() if v is not None}}
     orden = datos.get("orden") or "prioridad"
     if orden not in ("prioridad", "verificados"):
         raise HTTPException(422, "orden: prioridad | verificados")
+    if datos.get("numeros") not in NUMEROS:
+        raise HTTPException(422, "numeros: discables | verificados")
     origenes = sorted({o for o in (datos.get("origenes") or []) if o})
     conocidos = {o["codigo"] for o in catalogos.origenes(conn)}
     if set(origenes) - conocidos:
         raise HTTPException(422, f"Orígenes de teléfono desconocidos: {', '.join(sorted(set(origenes) - conocidos))}")
-    nuevo = {"origenes": origenes, "orden": orden}
-    antes = opciones_exportacion(m)
+    claves = {a["clave"]: a["ambito"] for a in catalogos.atributos(conn)}
+    for k, ambito in (("atributos_excluidos", "empresa"), ("atributos_contacto_excluidos", "contacto")):
+        malos = [c for c in datos.get(k) or [] if claves.get(c) != ambito]
+        if malos:
+            raise HTTPException(422, f"Atributos de {ambito} desconocidos: {', '.join(malos)}")
+    campos = [c for c in CAMPOS_CONTACTO_CSV if c in (datos.get("contacto_campos") or [])]
+    nuevo = {"origenes": origenes, "orden": orden, "numeros": datos["numeros"],
+             "atributos_excluidos": sorted(set(datos.get("atributos_excluidos") or [])),
+             "contactos": bool(datos.get("contactos")), "contacto_campos": campos or list(CAMPOS_CONTACTO_CSV),
+             "atributos_contacto_excluidos": sorted(set(datos.get("atributos_contacto_excluidos") or []))}
     if nuevo != antes:
         conn.execute("UPDATE muestra SET exportacion = %s WHERE id = %s", (Jsonb(nuevo), muestra_id))
         auditoria.registrar(conn, actor, "muestra.exportacion", "muestra", muestra_id, {"antes": antes, "despues": nuevo})
     return nuevo
 
 
-def items(conn, muestra_id: int, estrato: str | None = None, limite: int = 500) -> list[dict]:
-    return conn.execute(
-        """
+POR_PAGINA = 50
+
+
+def items(conn, muestra_id: int, estrato: str | None = None, rol: str | None = None, liberado: bool | None = None,
+          parte_id: int | None = None, estado: str | None = None, q: str | None = None,
+          pagina: int = 1, por_pagina: int = POR_PAGINA) -> dict:
+    """«Empresas de la muestra», paginada del lado del servidor (F1.3).
+    estado se mira en la parte elegida (o en cualquiera); «pendiente» incluye a los ítems sin estado en esa parte.
+    q busca por RUT, razón social o EC_ID_ITEM (el id del ítem, con o sin «#»)."""
+    pagina, por_pagina = max(1, pagina), min(max(1, por_pagina), 500)
+    q = (q or "").strip() or None
+    digitos = q.lstrip("#").strip() if q else None
+    p = {"m": muestra_id, "estrato": estrato or None, "rol": rol or None, "liberado": liberado, "parte": parte_id,
+         "estado": estado or None, "q": q, "q_like": f"%{q}%" if q else None,
+         "rut": "".join(ch for ch in q if ch.isdigit()) if q else None,
+         "item": int(digitos) if digitos and digitos.isdigit() and len(digitos) <= 9 else None}
+    where = """
+        WHERE i.muestra_id = %(m)s
+          AND (%(estrato)s::text IS NULL OR i.estrato = %(estrato)s)
+          AND (%(rol)s::text IS NULL OR i.rol = %(rol)s)
+          AND (%(liberado)s::bool IS NULL OR i.liberado = %(liberado)s)
+          AND (%(estado)s::text IS NULL
+               OR EXISTS (SELECT 1 FROM item_parte_estado ps WHERE ps.item_id = i.id AND ps.estado = %(estado)s
+                          AND (%(parte)s::int IS NULL OR ps.parte_id = %(parte)s))
+               OR (%(estado)s = 'pendiente' AND NOT EXISTS (
+                     SELECT 1 FROM item_parte_estado ps WHERE ps.item_id = i.id
+                     AND (%(parte)s::int IS NULL OR ps.parte_id = %(parte)s))))
+          AND (%(q)s::text IS NULL OR e.razon_social ILIKE %(q_like)s
+               OR (%(rut)s <> '' AND e.rut LIKE %(rut)s || '%%') OR i.id = %(item)s OR e.codigo = upper(%(q)s))"""
+    total = conn.execute(f"SELECT count(*) AS n FROM muestra_item i JOIN empresa e ON e.id = i.empresa_id {where}",
+                         p).fetchone()["n"]
+    filas = conn.execute(
+        f"""
         SELECT i.id, i.estrato, i.rol, i.orden, i.liberado, i.liberado_por, i.liberado_motivo, i.liberado_fecha,
-               e.rut, e.razon_social, e.departamento, e.tamano,
+               e.codigo AS rut, e.base, e.razon_social, e.departamento, e.tamano,
                (SELECT count(*) FROM intento t WHERE t.item_id = i.id) AS intentos,
                (SELECT json_object_agg(p.nombre, ps.estado) FROM item_parte_estado ps JOIN parte p ON p.id = ps.parte_id
                  WHERE ps.item_id = i.id) AS estados
         FROM muestra_item i JOIN empresa e ON e.id = i.empresa_id
-        WHERE i.muestra_id = %s AND (%s::text IS NULL OR i.estrato = %s)
-        ORDER BY i.estrato, i.orden LIMIT %s
-        """, (muestra_id, estrato, estrato, limite)).fetchall()
+        {where}
+        ORDER BY i.estrato, i.orden LIMIT %(lim)s OFFSET %(off)s
+        """, {**p, "lim": por_pagina, "off": (pagina - 1) * por_pagina}).fetchall()
+    return {"total": total, "pagina": pagina, "por_pagina": por_pagina,
+            "paginas": max(1, -(-total // por_pagina)), "items": filas}

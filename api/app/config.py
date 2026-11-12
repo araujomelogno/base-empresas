@@ -137,6 +137,11 @@ class Parametros(BaseModel):
     confianza_fuentes: dict[str, int]
     destinos_internos: list[str]
     prefijos_salida: list[str] = []
+    # SPEC_mejoras_sav_contactos: similitud para sugerir atributos parecidos (F4.1), contactos por
+    # empresa en el CSV de uContact (F5.1) y umbral por defecto de las reglas de fusión flexibles (F6.2)
+    umbral_similitud_atributos: float = Field(0.6, ge=0.3, le=1.0)
+    contactos_por_empresa_csv: int = Field(3, ge=0, le=10)
+    umbral_fusion_flexible: float = Field(0.85, ge=0.5, le=1.0)
     franjas: list[Franja]
     contacto_efectivo: list[str]
     csv_ucontact: CsvUcontact

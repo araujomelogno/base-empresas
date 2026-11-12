@@ -13,7 +13,7 @@ import psycopg
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
-from . import auditoria, catalogos, config, empresas, intermediarios, lectores, rut as rutmod, storage, tareas
+from . import auditoria, catalogos, config, contactos, empresas, intermediarios, lectores, provisorias, rut as rutmod, storage, tareas
 from . import telefonos as telmod
 from .util import dominio, razon_normalizada, sin_tildes, texto
 
@@ -23,10 +23,10 @@ CAMPOS_NUCLEO = (
 )
 CAMPOS_SUCURSAL = ("sucursal_direccion", "sucursal_departamento", "sucursal_localidad")
 CAMPOS_MAPEO = CAMPOS_NUCLEO + CAMPOS_SUCURSAL
-# Los contactos no vienen en las bases: se generan en el campo (EC_RESP_* del .sav). Una
-# plantilla vieja que los tenga se sigue abriendo y estos campos se ignoran con un aviso.
+# D-d (cambia lo decidido antes): los contactos pueden venir en una carga, uno por fila (F3.2)
 CAMPOS_CONTACTO = ("contacto_nombre", "contacto_cargo", "contacto_area", "contacto_email", "contacto_telefono")
-CLAVES_MAPEO = set(CAMPOS_MAPEO) | {"telefonos", "origenes_telefono", "origen_defecto", "atributos", "traducciones"}
+CLAVES_MAPEO = set(CAMPOS_MAPEO) | set(CAMPOS_CONTACTO) | {
+    "telefonos", "origenes_telefono", "origen_defecto", "atributos", "traducciones", "contacto_atributos"}
 
 SINONIMOS = {
     "rut": ["rut", "ruc", "nro rut", "numero rut", "rut empresa", "n rut", "num rut", "ec rut"],
@@ -44,7 +44,14 @@ SINONIMOS = {
     "sucursal_direccion": ["direccion sucursal", "sucursal direccion", "domicilio sucursal", "direccion local"],
     "sucursal_departamento": ["departamento sucursal", "sucursal departamento"],
     "sucursal_localidad": ["localidad sucursal", "sucursal localidad", "ciudad sucursal"],
+    "contacto_nombre": ["contacto", "nombre contacto", "nombre del contacto", "persona de contacto", "responsable",
+                        "contacto nombre"],
+    "contacto_cargo": ["cargo", "cargo contacto", "cargo del contacto", "puesto"],
+    "contacto_area": ["area", "area contacto", "area del contacto", "sector"],
+    "contacto_email": ["email contacto", "mail contacto", "correo contacto", "e mail contacto", "email del contacto"],
+    "contacto_telefono": ["tel contacto", "telefono contacto", "celular contacto", "telefono del contacto", "cel contacto"],
 }
+_EMAIL_GENERICO = ("email", "mail", "correo", "e mail", "correo electronico")
 _TEL = re.compile(r"^(tel|telefono|telefonos|celular|cel|movil|fono|phone|tel fijo|telefono fijo)( ?(\d+))?$")
 _ORIGEN = re.compile(r"^(origen|fuente)( (del )?(tel|telefono|telefonos|numero|nro))?( ?(\d+))?$")
 
@@ -69,11 +76,22 @@ def sugerir_mapeo(columnas: list[str], atributos: list[dict] | None = None) -> d
                 mapeo[campo] = col
                 usadas.add(col)
                 break
+    # Con un contacto en el archivo, un «Email» genérico es el del contacto si no hay otro
+    if mapeo.get("contacto_nombre") and mapeo.get("email") and not mapeo.get("contacto_email") \
+            and norm[mapeo["email"]] in _EMAIL_GENERICO:
+        mapeo["contacto_email"] = mapeo.pop("email")
+    if not mapeo.get("contacto_nombre"):  # cargo, área… sueltos no son de un contacto
+        for k in ("contacto_cargo", "contacto_area", "contacto_email", "contacto_telefono"):
+            if mapeo.get(k):
+                usadas.discard(mapeo.pop(k))
     for a in atributos or []:
+        if a.get("ambito", "empresa") == "contacto" and not mapeo.get("contacto_nombre"):
+            continue
         nombres = [a["clave"].replace("_", " "), catalogos.normalizar(a["nombre"]), *a["sinonimos"]]
         col = next((c for n in nombres for c in columnas if norm[c] == n and c not in usadas), None)
         if col:
-            mapeo.setdefault("atributos", {})[a["clave"]] = col
+            destino = "contacto_atributos" if a.get("ambito") == "contacto" else "atributos"
+            mapeo.setdefault(destino, {})[a["clave"]] = col
             usadas.add(col)
     numeros_tel = {}
     for c in columnas:
@@ -99,10 +117,11 @@ def sugerir_mapeo(columnas: list[str], atributos: list[dict] | None = None) -> d
 
 def columnas_de_mapeo(mapeo: dict) -> set[str]:
     cols = set()
-    for k in CAMPOS_MAPEO:
+    for k in CAMPOS_MAPEO + CAMPOS_CONTACTO:
         if mapeo.get(k):
             cols.add(mapeo[k])
     cols |= set(mapeo.get("telefonos") or [])
+    cols |= {c for c in (mapeo.get("contacto_atributos") or {}).values() if c}
     for o in (mapeo.get("origenes_telefono") or {}).values():
         if o.get("columna"):
             cols.add(o["columna"])
@@ -111,16 +130,12 @@ def columnas_de_mapeo(mapeo: dict) -> set[str]:
 
 
 def limpiar_mapeo(mapeo: dict) -> tuple[dict, list[str]]:
-    """Quita los campos vacíos y los de contacto (con aviso). Acepta telefonos como lista de columnas
-    o de objetos {columna, origen_columna | origen_fijo}."""
+    """Quita los campos vacíos. Acepta telefonos como lista de columnas o de objetos
+    {columna, origen_columna | origen_fijo}. Los campos de contacto se usan (D-d, F3.2)."""
     avisos = []
     m = {}
-    contacto = [k for k in CAMPOS_CONTACTO if (mapeo or {}).get(k)]
-    if contacto:
-        avisos.append("La plantilla tenía campos de contacto (" + ", ".join(contacto) + "): se ignoran. "
-                      "Los contactos se cargan con las respuestas del campo (.sav).")
     for k, v in (mapeo or {}).items():
-        if k in CAMPOS_CONTACTO or not v:
+        if not v:
             continue
         m[k] = v
     tels, ot = [], dict(m.get("origenes_telefono") or {})
@@ -137,27 +152,32 @@ def limpiar_mapeo(mapeo: dict) -> tuple[dict, list[str]]:
         else:
             tels.append(t)
     m["telefonos"] = tels
-    ot = {k: v for k, v in ot.items() if k in tels and v and (v.get("columna") or v.get("fijo"))}
+    ot = {k: v for k, v in ot.items() if (k in tels or k == m.get("contacto_telefono"))
+          and v and (v.get("columna") or v.get("fijo"))}
     if ot:
         m["origenes_telefono"] = ot
     else:
         m.pop("origenes_telefono", None)
-    if m.get("atributos"):
-        m["atributos"] = {k: v for k, v in m["atributos"].items() if v}
+    for k in ("atributos", "contacto_atributos"):
+        if m.get(k):
+            m[k] = {a: v for a, v in m[k].items() if v}
     return m, avisos
 
 
-def _validar_mapeo(conn, mapeo: dict, columnas: list[str]):
-    if not mapeo.get("rut"):
-        raise HTTPException(422, "El mapeo tiene que indicar la columna del RUT")
+def _validar_mapeo(conn, mapeo: dict, columnas: list[str], destino: str = "definitiva"):
+    if not mapeo.get("rut") and destino != "provisoria":
+        raise HTTPException(422, "El mapeo tiene que indicar la columna del RUT (o elegí el destino «Base provisoria»)")
     for campo in mapeo:
         if campo not in CLAVES_MAPEO:
             raise HTTPException(422, f"Campo de destino desconocido: {campo}")
     for c in columnas_de_mapeo(mapeo):
         if c not in columnas:
             raise HTTPException(422, f"La columna '{c}' no está en el archivo")
+    contacto = [k for k in CAMPOS_CONTACTO if mapeo.get(k)] + list(mapeo.get("contacto_atributos") or {})
+    if contacto and not mapeo.get("contacto_nombre"):
+        raise HTTPException(422, "Para cargar contactos, indicá la columna con el nombre del contacto")
     activos = {o["codigo"] for o in catalogos.origenes(conn, activos=True)}
-    if mapeo.get("telefonos"):
+    if mapeo.get("telefonos") or mapeo.get("contacto_telefono"):
         if not mapeo.get("origen_defecto"):
             raise HTTPException(422, "Elegí el origen por defecto de los teléfonos de esta carga")
         if mapeo["origen_defecto"] not in activos:
@@ -166,16 +186,17 @@ def _validar_mapeo(conn, mapeo: dict, columnas: list[str]):
             if o.get("fijo") and o["fijo"] not in activos:
                 raise HTTPException(422, f"Origen de teléfono desconocido o inactivo: {o['fijo']}")
     defs = {a["clave"]: a for a in catalogos.atributos(conn)}
-    for clave in mapeo.get("atributos") or {}:
-        if clave not in defs:
-            raise HTTPException(422, f"Atributo desconocido: {clave}")
-        if not defs[clave]["activo"]:
-            raise HTTPException(422, f"El atributo {defs[clave]['nombre']} está desactivado")
+    for bloque, ambito in (("atributos", "empresa"), ("contacto_atributos", "contacto")):
+        for clave in mapeo.get(bloque) or {}:
+            if clave not in defs or defs[clave]["ambito"] != ambito:
+                raise HTTPException(422, f"Atributo de {ambito} desconocido: {clave}")
+            if not defs[clave]["activo"]:
+                raise HTTPException(422, f"El atributo {defs[clave]['nombre']} está desactivado")
     tr = mapeo.get("traducciones") or {}
     for valor, cod in (tr.get("origen") or {}).items():
         if cod is not None and cod not in activos:
             raise HTTPException(422, f"La traducción de «{valor}» apunta a un origen desconocido o inactivo: {cod}")
-    for clave, col in (mapeo.get("atributos") or {}).items():
+    for clave, col in {**(mapeo.get("atributos") or {}), **(mapeo.get("contacto_atributos") or {})}.items():
         for valor, op in (tr.get(catalogos.PREFIJO + clave) or {}).items():
             if op is not None and op not in (defs[clave]["opciones"] or []):
                 raise HTTPException(422, f"La traducción de «{valor}» no es una opción de {defs[clave]['nombre']}")
@@ -194,10 +215,17 @@ def analizar(conn, archivo: dict, tipo_fuente: str | None) -> dict:
     atributos = catalogos.atributos(conn, activos=True)
     plantilla = None
     if tipo_fuente:
-        plantilla = conn.execute("SELECT mapeo FROM carga_plantilla WHERE tipo_fuente = %s", (tipo_fuente,)).fetchone()
+        plantilla = conn.execute("SELECT mapeo, destino, reglas FROM carga_plantilla WHERE tipo_fuente = %s",
+                                 (tipo_fuente,)).fetchone()
     avisos = []
     if plantilla:
         mapeo_p, avisos = limpiar_mapeo(plantilla["mapeo"])
+    if plantilla:  # F4.2: un atributo fusionado se reemplaza por el que lo absorbió
+        fusionados = {r["clave"]: r["destino"] for r in conn.execute(
+            "SELECT a.clave, b.clave AS destino FROM atributo a JOIN atributo b ON b.id = a.fusionado_en")}
+        for bloque in ("atributos", "contacto_atributos"):
+            if mapeo_p.get(bloque):
+                mapeo_p[bloque] = {fusionados.get(k, k): v for k, v in mapeo_p[bloque].items()}
     if plantilla and columnas_de_mapeo(mapeo_p) <= set(columnas):
         mapeo, origen = mapeo_p, "plantilla"
         activos = {a["clave"] for a in atributos}
@@ -215,10 +243,33 @@ def analizar(conn, archivo: dict, tipo_fuente: str | None) -> dict:
         "archivo_id": archivo["id"], "nombre": archivo["nombre"], "tipo": archivo["tipo"],
         "columnas": columnas, "n_filas": len(filas), "ejemplos": filas[:8],
         "mapeo": mapeo, "origen_mapeo": origen, "avisos": avisos,
-        "campos": {"empresa": CAMPOS_NUCLEO, "sucursal": CAMPOS_SUCURSAL},
+        "sugerencias_atributos": sugerir_atributos(conn, columnas, mapeo),
+        "destino": (plantilla or {}).get("destino") or "definitiva",
+        "reglas": (plantilla or {}).get("reglas") or provisorias.REGLAS_DEFECTO,
+        "criterios_fusion": list(provisorias.CRITERIOS),
+        "umbral_fusion_flexible": float(config.vigente(conn)[1].get("umbral_fusion_flexible", 0.85)),
+        "campos": {"empresa": CAMPOS_NUCLEO, "sucursal": CAMPOS_SUCURSAL, "contacto": CAMPOS_CONTACTO},
         "atributos": atributos, "origenes": catalogos.origenes(conn, activos=True),
         "plantillas": [r["tipo_fuente"] for r in conn.execute("SELECT tipo_fuente FROM carga_plantilla ORDER BY 1")],
     }
+
+
+def sugerir_atributos(conn, columnas: list[str], mapeo: dict) -> list[dict]:
+    """F4.1: cada columna sin mapear que se parece a un atributo existente (nombre o sinónimos, con pg_trgm).
+    Al aceptar la sugerencia, el nombre de la columna queda como sinónimo del atributo."""
+    usadas = columnas_de_mapeo(mapeo)
+    libres = [c for c in columnas if c not in usadas and not _TEL.match(_norm_col(c)) and not _ORIGEN.match(_norm_col(c))]
+    if not libres:
+        return []
+    ya = set(mapeo.get("atributos") or {}) | set(mapeo.get("contacto_atributos") or {})
+    ambito = None if mapeo.get("contacto_nombre") else "empresa"
+    out = []
+    for col, lista in catalogos.parecidos(conn, libres, ambito, excluir=ya).items():
+        mejor = lista[0]
+        out.append({"columna": col, "atributo_id": mejor["id"], "clave": mejor["clave"], "nombre": mejor["nombre"],
+                    "ambito": mejor["ambito"], "similitud": mejor["similitud"], "por": mejor["por"],
+                    "otros": [{"clave": x["clave"], "nombre": x["nombre"], "similitud": x["similitud"]} for x in lista[1:3]]})
+    return sorted(out, key=lambda x: -x["similitud"])
 
 
 def _valor(fila: dict, mapeo: dict, campo: str):
@@ -312,7 +363,7 @@ def valores(conn, archivo_id: int, mapeo: dict) -> dict:
             ya = (tr.get("origen") or {})
             salida["origen"].append({"valor": v, "filas": n, "sugerido": _sugerencia(v, opciones),
                                      "traduccion": ya.get(v), "traducido": v in ya})
-    for clave, col in (mapeo.get("atributos") or {}).items():
+    for clave, col in {**(mapeo.get("atributos") or {}), **(mapeo.get("contacto_atributos") or {})}.items():
         a = t.defs.get(clave)
         if not a or a["tipo"] != "lista":
             continue
@@ -320,41 +371,30 @@ def valores(conn, archivo_id: int, mapeo: dict) -> dict:
         cuenta.pop(None, None)
         cuenta.pop("", None)
         ya = tr.get(catalogos.PREFIJO + clave) or {}
-        pendientes = [{"valor": v, "filas": n, "sugerido": _sugerencia(v, [(o, o) for o in a["opciones"]]),
-                       "traduccion": ya.get(v), "traducido": v in ya}
-                      for v, n in cuenta.most_common() if v not in a["opciones"]]
+        # F4.1: «SI», «si» y «Sí » son la opción «Sí»: no piden traducción
+        faltan = [(v, n) for v, n in cuenta.most_common() if not catalogos.opcion_equivalente(a["opciones"], v)]
+        sim = catalogos.similitudes(conn, [catalogos.normalizar(v) for v, _ in faltan],
+                                    [catalogos.normalizar(o) for o in a["opciones"]])
+        umbral = float(config.vigente(conn)[1].get("umbral_similitud_atributos", 0.6))
+
+        def parecida(v):
+            nv = catalogos.normalizar(v)
+            mejor = max(((sim.get((nv, catalogos.normalizar(o)), 0.0), o) for o in a["opciones"]), default=(0.0, None))
+            return (mejor[1], round(mejor[0], 2)) if mejor[0] >= umbral else (None, None)
+        pendientes = []
+        for v, n in faltan:
+            sug = _sugerencia(v, [(o, o) for o in a["opciones"]])
+            pct = None
+            if sug is None:  # «Exportadora» se parece a «Exportador»: se sugiere, nunca se aplica sola
+                sug, pct = parecida(v)
+            pendientes.append({"valor": v, "filas": n, "sugerido": sug, "similitud": pct,
+                               "traduccion": ya.get(v), "traducido": v in ya})
         if pendientes:
             salida["atributos"].append({"clave": clave, "nombre": a["nombre"], "opciones": a["opciones"],
                                         "valores": pendientes})
     salida["pendientes"] = sum(1 for x in salida["origen"] if not x["traducido"]) + sum(
         1 for a in salida["atributos"] for x in a["valores"] if not x["traducido"])
     return salida
-
-
-def _buscar_candidata(conn, regla: str, datos: dict, tels: list) -> dict | None:
-    if regla == "telefono":
-        e164s = [t.e164 for t in tels if t.e164]
-        if not e164s:
-            return None
-        return conn.execute(
-            "SELECT e.* FROM empresa e JOIN telefono_vinculo v ON v.empresa_id = e.id JOIN telefono t ON t.id = v.telefono_id"
-            " WHERE t.e164 = ANY(%s) AND e.baja IS NULL ORDER BY e.id LIMIT 1", (e164s,)).fetchone()
-    if regla == "razon_social":
-        clave = razon_normalizada(datos.get("razon_social"))
-        if not clave:
-            return None
-        for e in conn.execute("SELECT * FROM empresa WHERE baja IS NULL AND translate(lower(razon_social), 'áéíóúüñ', 'aeiouun') LIKE %s",
-                              (f"%{clave.split(' ')[0]}%",)).fetchall():
-            if razon_normalizada(e["razon_social"]) == clave:
-                return e
-        return None
-    if regla == "dominio":
-        d = dominio(datos.get("web")) or dominio(datos.get("email"))
-        if not d:
-            return None
-        return conn.execute("SELECT * FROM empresa WHERE baja IS NULL AND web IS NOT NULL AND"
-                            " (lower(web) LIKE %s) ORDER BY id LIMIT 1", (f"%{d}%",)).fetchone()
-    return None
 
 
 def procesar(conn, carga: dict, filas: list[dict], cfg: dict, actor: str, real: bool,
@@ -367,22 +407,33 @@ def procesar(conn, carga: dict, filas: list[dict], cfg: dict, actor: str, real: 
     por_telefonos = Counter()
     por_origen: dict[str, Counter] = {}
     por_atributo: dict[str, Counter] = {k: Counter() for k in (mapeo.get("atributos") or {})}
+    por_atributo.update({k: Counter() for k in (mapeo.get("contacto_atributos") or {})})
     rechazos, conflictos_muestra, ruts_vistos = [], [], set()
     telefonos_tocados: set[int] = set()
+    # F6.1 / F6.2: destino, opciones, reglas en cascada y decisiones tomadas en el preview
+    destino = carga.get("destino") or "definitiva"
+    opciones = carga.get("opciones") or {}
+    sin_rut_a_provisoria = destino == "provisoria" or bool(opciones.get("sin_rut_a_provisoria"))
+    con_rut_a_definitiva = destino == "definitiva" or opciones.get("con_rut_a_definitiva", True) is not False
+    reglas = carga.get("reglas") or provisorias.REGLAS_DEFECTO
+    decisiones = carga.get("decisiones") or {}
+    coincidencias = []
     total = len(filas)
     for i, fila in enumerate(filas):
         nfila = i + 2
         if tarea_id and i % 200 == 0:
             tareas.progreso(tarea_id, i, total)
-        r, motivo = rutmod.validar(fila.get(mapeo["rut"]))
-        if r is None:
+        crudo_rut = texto(fila.get(mapeo["rut"])) if mapeo.get("rut") else None
+        r, motivo = rutmod.validar(crudo_rut) if crudo_rut else (None, "sin RUT")
+        if r is None and not sin_rut_a_provisoria:
             rechazos.append((nfila, motivo, fila))
             c["rechazos"] += 1
             continue
-        if r in ruts_vistos:
+        if r and r in ruts_vistos:
             c["conflictos"] += 1
             c["rut_repetido_en_archivo"] += 1
-        ruts_vistos.add(r)
+        if r:
+            ruts_vistos.add(r)
         datos = {k: _valor(fila, mapeo, k) for k in CAMPOS_MAPEO}
         if datos.get("naturaleza"):
             cod = empresas.resolver_naturaleza(conn, datos["naturaleza"])
@@ -418,38 +469,71 @@ def procesar(conn, carga: dict, filas: list[dict], cfg: dict, actor: str, real: 
             attrs[clave] = v
             por_atributo[clave]["invalidos" if v["invalido"] else "cargados"] += 1
 
-        emp = conn.execute("SELECT * FROM empresa WHERE rut = %s", (r,)).fetchone()
+        if r is None and crudo_rut:  # un identificador que no es RUT válido no se pierde (atributo de sistema)
+            attrs["id_informado"] = {"valor": crudo_rut, "invalido": False}
+        emp = conn.execute("SELECT * FROM empresa WHERE rut = %s", (r,)).fetchone() if r else None
         while emp and emp["baja"] == "fusionada" and emp["fusionada_en"]:
             emp = conn.execute("SELECT * FROM empresa WHERE id = %s", (emp["fusionada_en"],)).fetchone()
         es_alta = False
         if emp is None:
-            if carga["regla_fusion"] != "rut":
-                cand = _buscar_candidata(conn, carga["regla_fusion"], datos, [t for t, _ in tels])
-                if cand is not None:
+            email_c = _valor(fila, mapeo, "contacto_email") or datos.get("email")
+            m = provisorias.cascada(conn, reglas, r, datos, [t.e164 for t, _ in tels if t.e164], email_c)
+            if m and m["accion"] == "consultar":
+                decision = decisiones.get(str(nfila))
+                cand = m["candidata"]
+                if len(coincidencias) < 500:
+                    coincidencias.append({
+                        "fila": nfila, "rut": r, "datos": {k: v for k, v in datos.items() if v},
+                        "telefonos": [t.e164 or t.crudo for t, _ in tels], "candidata": provisorias._resumen(cand),
+                        "candidatas": m["candidatas"], "criterio": m["regla"]["criterio"], "tipo": m["regla"]["tipo"],
+                        "similitud": m["similitud"], "decision": decision})
+                c["coincidencias"] += 1
+                if decision == "fusionar":
+                    emp = cand
+                    c["fusiones_decididas"] += 1
+                elif decision == "otra":
+                    c["otra_empresa"] += 1
+                else:  # «Decidir después» o sin decisión: a la bandeja de Revisión de fusiones
                     c["revision"] += 1
                     if real:
                         conn.execute(
-                            "INSERT INTO revision_fusion (carga_id, fila, datos, criterio, candidata_id)"
-                            " VALUES (%s,%s,%s,%s,%s)",
-                            (cid, nfila, Jsonb({"rut": r, **{k: v for k, v in datos.items() if v},
+                            "INSERT INTO revision_fusion (carga_id, fila, datos, criterio, candidata_id, similitud)"
+                            " VALUES (%s,%s,%s,%s,%s,%s)",
+                            (cid, nfila, Jsonb({"rut": r, "id_informado": None if r else crudo_rut,
+                                                **{k: v for k, v in datos.items() if v},
                                                 "telefonos": [{"crudo": t.crudo, "origen": o} for t, o in tels],
                                                 "atributos": attrs}),
-                             carga["regla_fusion"], cand["id"]),
+                             m["regla"]["criterio"] + ("" if m["regla"]["tipo"] == "exacta" else " (flexible)"),
+                             cand["id"], m["similitud"]),
                         )
                     continue
-            emp = conn.execute("INSERT INTO empresa (rut, carga_alta_id) VALUES (%s, %s) RETURNING *",
-                               (r, cid)).fetchone()
+            elif m and m["accion"] == "fusionar":
+                emp = m["candidata"]
+                c[f"fusion_por_{m['regla']['criterio']}"] += 1
+        if emp is None:
+            base = "definitiva" if r and con_rut_a_definitiva else "provisoria"
+            emp = conn.execute("INSERT INTO empresa (rut, base, carga_alta_id) VALUES (%s, %s, %s) RETURNING *",
+                               (r, base, cid)).fetchone()
             es_alta = True
+            c[f"altas_{base}"] += 1
         elif emp["baja"] == "anulada":
             conn.execute("UPDATE empresa SET baja = NULL, carga_alta_id = %s WHERE id = %s", (cid, emp["id"]))
             es_alta = True
-
+            c[f"altas_{emp['base']}"] += 1
+        elif r and emp["base"] == "provisoria" and not emp["rut"] and con_rut_a_definitiva:
+            # La fila trae el RUT de una provisoria que coincidió por otra regla: pasa a la definitiva
+            emp = provisorias.promover(conn, emp, r, actor, "carga", cid, carga_id=cid if real else None)
+            c["promovidas"] += 1
         hubo_cambio = aplicar_fila(conn, emp, datos, tels, cid, confianza, actor, c, conflictos_muestra,
                                    telefonos_tocados, attrs, por_origen)
+        if mapeo.get("contacto_nombre"):
+            hubo_cambio = aplicar_contacto(conn, emp, fila, mapeo, traductor, prefijos, cid, actor, c, por_atributo,
+                                           telefonos_tocados) or hubo_cambio
         if es_alta:
             c["altas"] += 1
         elif hubo_cambio:
             c["actualizaciones"] += 1
+            c[f"actualizaciones_{emp['base']}"] += 1
         else:
             c["sin_cambios"] += 1
 
@@ -470,7 +554,61 @@ def procesar(conn, carga: dict, filas: list[dict], cfg: dict, actor: str, real: 
                                        for o, n in sorted(por_origen.items())}
     conteos["atributos"] = {k: {"cargados": n.get("cargados", 0), "invalidos": n.get("invalidos", 0),
                                 "sin_dato": n.get("sin_dato", 0)} for k, n in por_atributo.items()}
+    conteos["coincidencias_a_decidir"] = coincidencias
+    conteos["destino"] = destino
     return conteos, rechazos
+
+
+def aplicar_contacto(conn, emp, fila, mapeo, traductor, prefijos, cid, actor, c, por_atributo, telefonos_tocados) -> bool:
+    """Un contacto por fila (F3.2): se identifica por nombre normalizado o email dentro de la empresa;
+    si ya existe se completan los campos vacíos. Su teléfono se vincula a la empresa con el origen de la
+    fila y queda como «número del contacto»."""
+    v = {k: _valor(fila, mapeo, k) for k in CAMPOS_CONTACTO}
+    attrs = {}
+    for clave, col in (mapeo.get("contacto_atributos") or {}).items():
+        crudo = texto(fila.get(col))
+        if crudo:
+            attrs[clave] = crudo
+    if not v["contacto_nombre"]:
+        if any(v[k] for k in CAMPOS_CONTACTO[1:]) or attrs:
+            c["contactos_sin_nombre"] += 1
+        return False
+    email = contactos.normalizar_email(v["contacto_email"])
+    if email and not contactos.EMAIL.match(email):
+        c["contactos_email_invalido"] += 1
+        email = None
+    contacto, nuevo = empresas.contacto(conn, emp["id"], v["contacto_nombre"], v["contacto_cargo"], v["contacto_area"],
+                                        email, "carga", cid, actor=actor, solo_vacios=True)
+    hubo = nuevo or bool(contacto.get("_cambios"))
+    if v["contacto_telefono"]:
+        origen, _ = traductor.origen(fila, mapeo["contacto_telefono"])
+        for crudo in telmod.separar(v["contacto_telefono"]) or [v["contacto_telefono"]]:
+            n = telmod.normalizar(crudo, prefijos)
+            if n.tipo == "interno":
+                c["telefonos_invalidos"] += 1
+                continue
+            fila_tel, n, creado = empresas.telefono(conn, crudo, prefijos)
+            if fila_tel is None:
+                continue
+            if creado:
+                c["telefonos_nuevos"] += 1
+            _, vnuevo = empresas.vincular(conn, fila_tel["id"], emp["id"], "carga", cid, actor, origen=origen)
+            if vnuevo and n.e164:
+                telefonos_tocados.add(fila_tel["id"])
+            if contactos.relacionar_telefono(conn, contacto["id"], fila_tel["id"], "del_contacto", "carga", cid):
+                c["contactos_telefonos"] += 1
+                contactos.historia(conn, contacto, "telefono", n.e164 or n.crudo, "carga", cid, actor)
+                hubo = True
+    for clave, crudo in attrs.items():
+        a = traductor.atributo(clave, crudo)
+        if a is None:
+            por_atributo[clave]["sin_dato"] += 1
+            continue
+        por_atributo[clave]["invalidos" if a["invalido"] else "cargados"] += 1
+        if catalogos.aplicar_atributo_contacto(conn, contacto, clave, a["valor"], "carga", cid, actor):
+            hubo = True
+    c["contactos_nuevos" if nuevo else "contactos_actualizados" if hubo else "contactos_sin_cambios"] += 1
+    return hubo
 
 
 def aplicar_fila(conn, emp, datos, tels, cid, confianza, actor, c, conflictos_muestra, telefonos_tocados,
@@ -485,7 +623,7 @@ def aplicar_fila(conn, emp, datos, tels, cid, confianza, actor, c, conflictos_mu
     if conflictos:
         c["conflictos"] += 1
         if len(conflictos_muestra) < 30:
-            conflictos_muestra.append({"rut": emp["rut"], "campos": conflictos})
+            conflictos_muestra.append({"rut": emp["codigo"], "campos": conflictos})
     sucursal_id = None
     if datos.get("sucursal_direccion") or datos.get("sucursal_localidad"):
         dir_ = datos.get("sucursal_direccion")
@@ -528,16 +666,31 @@ class _Preview(Exception):
     pass
 
 
-def crear(conn, archivo_id: int, fuente: str, tipo_fuente: str, licencia: str, regla_fusion: str,
-          confianza: int | None, mapeo: dict, guardar_plantilla: bool, actor: str) -> dict:
+DESTINOS = ("definitiva", "provisoria")
+
+
+def crear(conn, archivo_id: int, fuente: str, tipo_fuente: str, licencia: str, regla_fusion: str | None,
+          confianza: int | None, mapeo: dict, guardar_plantilla: bool, actor: str, destino: str = "definitiva",
+          reglas: list | None = None, opciones: dict | None = None) -> dict:
     version, cfg = config.vigente(conn)
-    if regla_fusion not in cfg["reglas_fusion"]:
-        raise HTTPException(422, f"La regla de fusión '{regla_fusion}' no está habilitada en la configuración")
+    if destino not in DESTINOS:
+        raise HTTPException(422, "Destino de la carga: definitiva o provisoria")
+    if reglas is None:  # API anterior: una sola regla (D43: pasa a ser una lista)
+        regla_fusion = regla_fusion or "rut"
+        if regla_fusion not in cfg["reglas_fusion"]:
+            raise HTTPException(422, f"La regla de fusión '{regla_fusion}' no está habilitada en la configuración")
+        reglas = [{"criterio": "rut", "tipo": "exacta"}] + (
+            [{"criterio": provisorias.LEGADO[regla_fusion], "tipo": "exacta"}] if regla_fusion != "rut" else [])
+    reglas = provisorias.normalizar_reglas(reglas, float(cfg.get("umbral_fusion_flexible", 0.85)))
+    regla_fusion = next((r for r in ("telefono", "razon_social", "dominio")
+                         if any(x["criterio"] == provisorias.LEGADO[r] for x in reglas)), "rut")
+    opciones = {"con_rut_a_definitiva": (opciones or {}).get("con_rut_a_definitiva", True) is not False,
+                "sin_rut_a_provisoria": bool((opciones or {}).get("sin_rut_a_provisoria"))}
     if not licencia or not licencia.strip():
         raise HTTPException(422, "Indicá la licencia de uso de la fuente")
     archivo, columnas, filas = _leer(conn, archivo_id)
     mapeo, _ = limpiar_mapeo(mapeo)
-    _validar_mapeo(conn, mapeo, columnas)
+    _validar_mapeo(conn, mapeo, columnas, destino)
     pend = valores(conn, archivo_id, mapeo)
     if pend["pendientes"]:
         ejemplos = [x["valor"] for x in pend["origen"] if not x["traducido"]] + [
@@ -547,18 +700,21 @@ def crear(conn, archivo_id: int, fuente: str, tipo_fuente: str, licencia: str, r
     if confianza is None:
         confianza = cfg["confianza_fuentes"].get("carga", 50)
     carga = conn.execute(
-        "INSERT INTO carga (archivo_id, fuente, tipo_fuente, licencia, responsable, regla_fusion, confianza, mapeo, config_version)"
-        " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
-        (archivo_id, fuente, tipo_fuente, licencia, actor, regla_fusion, confianza, Jsonb(mapeo), version),
+        "INSERT INTO carga (archivo_id, fuente, tipo_fuente, licencia, responsable, regla_fusion, confianza, mapeo, config_version,"
+        " destino, reglas, opciones) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
+        (archivo_id, fuente, tipo_fuente, licencia, actor, regla_fusion, confianza, Jsonb(mapeo), version,
+         destino, Jsonb(reglas), Jsonb(opciones)),
     ).fetchone()
-    if guardar_plantilla:
+    if guardar_plantilla:  # el destino y las reglas quedan en la plantilla (F6.1, F6.2)
         conn.execute(
-            "INSERT INTO carga_plantilla (tipo_fuente, mapeo, autor) VALUES (%s,%s,%s)"
-            " ON CONFLICT (tipo_fuente) DO UPDATE SET mapeo = EXCLUDED.mapeo, autor = EXCLUDED.autor, actualizado = now()",
-            (tipo_fuente, Jsonb(mapeo), actor),
+            "INSERT INTO carga_plantilla (tipo_fuente, mapeo, autor, destino, reglas) VALUES (%s,%s,%s,%s,%s)"
+            " ON CONFLICT (tipo_fuente) DO UPDATE SET mapeo = EXCLUDED.mapeo, autor = EXCLUDED.autor, destino = EXCLUDED.destino,"
+            " reglas = EXCLUDED.reglas, actualizado = now()",
+            (tipo_fuente, Jsonb(mapeo), actor, destino, Jsonb(reglas)),
         )
     auditoria.registrar(conn, actor, "carga.crear", "carga", carga["id"],
-                        {"archivo": archivo["nombre"], "fuente": fuente, "regla_fusion": regla_fusion})
+                        {"archivo": archivo["nombre"], "fuente": fuente, "destino": destino, "reglas": reglas,
+                         "opciones": opciones})
     tarea_id = tareas.crear(conn, "carga.preview", {"carga_id": carga["id"]}, actor)
     return {"carga_id": carga["id"], "tarea_id": tarea_id, "n_filas": len(filas)}
 
@@ -589,6 +745,28 @@ def _guardar_rechazos(conn, carga_id, rechazos):
     with conn.cursor() as cur:
         cur.executemany("INSERT INTO carga_rechazo (carga_id, fila, motivo, datos) VALUES (%s,%s,%s,%s)",
                         [(carga_id, n, m, Jsonb(f)) for n, m, f in rechazos])
+
+
+DECISIONES = ("fusionar", "otra", "despues")
+
+
+def guardar_decisiones(conn, carga_id: int, decisiones: dict, actor: str) -> dict:
+    """«Coincidencias a decidir» (F6.2): por fila, fusionar, es otra empresa o decidir después.
+    La confirmación las usa y quedan en el linaje de la carga."""
+    carga = conn.execute("SELECT * FROM carga WHERE id = %s FOR UPDATE", (carga_id,)).fetchone()
+    if carga is None:
+        raise HTTPException(404, "Carga inexistente")
+    if carga["estado"] != "preview":
+        raise HTTPException(409, "Las coincidencias se deciden en el preview")
+    filas = {str(x["fila"]) for x in (carga["conteos"] or {}).get("coincidencias_a_decidir") or []}
+    malas = [k for k, v in decisiones.items() if v not in DECISIONES or str(k) not in filas]
+    if malas:
+        raise HTTPException(422, f"Decisiones inválidas para las filas {', '.join(map(str, malas[:10]))}")
+    nuevas = {**(carga["decisiones"] or {}), **{str(k): v for k, v in decisiones.items()}}
+    conn.execute("UPDATE carga SET decisiones = %s WHERE id = %s", (Jsonb(nuevas), carga_id))
+    auditoria.registrar(conn, actor, "carga.decidir", "carga", carga_id,
+                        {"decisiones": {d: sum(1 for v in nuevas.values() if v == d) for d in DECISIONES}})
+    return {"decisiones": nuevas}
 
 
 def confirmar(conn, carga_id: int, actor: str) -> int:
@@ -644,13 +822,18 @@ def deshacer(conn, carga_id: int, actor: str) -> dict:
         raise HTTPException(409, f"No se puede deshacer: {en_muestra} empresas de esta carga ya entraron a una muestra."
                                  " Un administrador puede usar «Borrar carga», que la elimina junto con su paso por las muestras.")
     conn.execute("UPDATE carga SET estado = 'deshecha', deshecha = now() WHERE id = %s", (carga_id,))
+    # Las provisorias que esta carga pasó a la definitiva (agregó el RUT) vuelven a la provisoria
+    for p in conn.execute("SELECT * FROM carga_promocion WHERE carga_id = %s ORDER BY id DESC", (carga_id,)).fetchall():
+        conn.execute("UPDATE empresa SET rut = %s, base = %s WHERE id = %s", (p["rut_anterior"], p["base_anterior"], p["empresa_id"]))
     # El origen que esta carga sumó a vínculos que ya existían
     conn.execute("DELETE FROM telefono_vinculo_origen WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))
-    vincs = conn.execute("DELETE FROM telefono_vinculo WHERE fuente_tipo = 'carga' AND fuente_id = %s RETURNING id",
-                         (carga_id,)).fetchall()
-    conn.execute("UPDATE telefono_vinculo SET contacto_id = NULL WHERE contacto_id IN "
-                 "(SELECT id FROM contacto WHERE fuente_tipo = 'carga' AND fuente_id = %s)", (carga_id,))
-    conn.execute("DELETE FROM contacto WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))
+    vincs = conn.execute("DELETE FROM telefono_vinculo WHERE fuente_tipo = 'carga' AND fuente_id = %s"
+                         " RETURNING id, telefono_id", (carga_id,)).fetchall()
+    # Los contactos que trajo la carga se borran (con su historia); los que solo completó vuelven a recalcularse
+    contactos.borrar(conn, [r["id"] for r in conn.execute(
+        "SELECT id FROM contacto WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))])
+    conn.execute("DELETE FROM contacto_telefono WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))
+    conn.execute("DELETE FROM contacto_atributo WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))
     conn.execute("UPDATE telefono_vinculo SET sucursal_id = NULL WHERE sucursal_id IN "
                  "(SELECT id FROM sucursal WHERE fuente_tipo = 'carga' AND fuente_id = %s)", (carga_id,))
     conn.execute("DELETE FROM sucursal WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))
@@ -668,6 +851,10 @@ def deshacer(conn, carga_id: int, actor: str) -> dict:
         if quedan == 0:
             conn.execute("UPDATE empresa SET baja = 'anulada' WHERE id = %s", (eid,))
             anuladas += 1
+    intermediarios.reevaluar(conn, [v["telefono_id"] for v in vincs]
+                             + [r["telefono_id"] for r in conn.execute(
+                                 "SELECT DISTINCT telefono_id FROM telefono_vinculo WHERE empresa_id = ANY(%s)", (ids,))],
+                             actor)
     resumen = {"estado": "deshecha", "empresas_anuladas": anuladas, "empresas_recalculadas": len(ids), "vinculos_borrados": len(vincs)}
     auditoria.registrar(conn, actor, "carga.deshacer", "carga", carga_id, resumen)
     return resumen
@@ -695,7 +882,7 @@ def obtener(conn, carga_id: int) -> dict:
 
 def listar(conn) -> list[dict]:
     return conn.execute(
-        "SELECT c.id, c.fuente, c.tipo_fuente, c.licencia, c.responsable, c.regla_fusion, c.estado, c.conteos, c.fecha,"
+        "SELECT c.id, c.fuente, c.tipo_fuente, c.licencia, c.responsable, c.regla_fusion, c.destino, c.reglas, c.estado, c.conteos, c.fecha,"
         " c.confirmada, c.deshecha, c.descartada, a.nombre AS archivo_nombre FROM carga c JOIN archivo a ON a.id = c.archivo_id"
         " ORDER BY c.id DESC LIMIT 200").fetchall()
 
@@ -706,7 +893,7 @@ def listar(conn) -> list[dict]:
 
 def revision_pendiente(conn) -> list[dict]:
     return conn.execute(
-        "SELECT r.*, e.rut AS candidata_rut, e.razon_social AS candidata_razon, e.web AS candidata_web,"
+        "SELECT r.*, e.codigo AS candidata_rut, e.base AS candidata_base, e.razon_social AS candidata_razon, e.web AS candidata_web,"
         " c.fuente FROM revision_fusion r JOIN empresa e ON e.id = r.candidata_id JOIN carga c ON c.id = r.carga_id"
         " WHERE r.estado = 'pendiente' ORDER BY r.id").fetchall()
 
@@ -723,12 +910,21 @@ def resolver_revision(conn, revision_id: int, accion: str, actor: str) -> dict:
             else (telmod.normalizar(t["crudo"]), t.get("origen") or catalogos.SIN_DATO) for t in datos.pop("telefonos", [])]
     atributos = datos.pop("atributos", None) or {}
     c = Counter()
+    id_informado = datos.pop("id_informado", None)
+    if id_informado:
+        atributos = {**atributos, "id_informado": {"valor": id_informado, "invalido": False}}
     if accion == "alta":
-        emp = conn.execute("INSERT INTO empresa (rut, carga_alta_id) VALUES (%s, %s) ON CONFLICT (rut) DO NOTHING"
-                           " RETURNING *", (datos["rut"], carga["id"])).fetchone()
-        emp = emp or conn.execute("SELECT * FROM empresa WHERE rut = %s", (datos["rut"],)).fetchone()
+        if datos.get("rut"):
+            emp = conn.execute("INSERT INTO empresa (rut, carga_alta_id) VALUES (%s, %s) ON CONFLICT (rut) DO NOTHING"
+                               " RETURNING *", (datos["rut"], carga["id"])).fetchone()
+            emp = emp or conn.execute("SELECT * FROM empresa WHERE rut = %s", (datos["rut"],)).fetchone()
+        else:  # fila sin RUT: alta en la base provisoria
+            emp = conn.execute("INSERT INTO empresa (rut, base, carga_alta_id) VALUES (NULL, 'provisoria', %s) RETURNING *",
+                               (carga["id"],)).fetchone()
     elif accion == "actualizar_candidata":
         emp = conn.execute("SELECT * FROM empresa WHERE id = %s", (r["candidata_id"],)).fetchone()
+        if datos.get("rut") and emp["base"] == "provisoria" and not emp["rut"]:
+            emp = provisorias.promover(conn, emp, datos["rut"], actor, "carga", carga["id"], carga_id=carga["id"])
     elif accion == "descartada":
         emp = None
     else:

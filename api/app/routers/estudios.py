@@ -115,12 +115,16 @@ def marco(criterios: dict, conn=Depends(get_conn), u: Usuario = Depends(usuario_
 
 
 @router.get("/muestras")
-def listar_muestras(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+def listar_muestras(estado: str | None = None, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+    """Lista de muestras; con estado=activa es la lista a la que lleva el contador de Inicio (F1.1)."""
     return conn.execute(
         "SELECT m.id, m.nombre, m.estado, m.semilla, m.config_version, m.sorteada, m.estudio_id, e.nombre AS estudio_nombre,"
         " (SELECT count(*) FROM muestra_item i WHERE i.muestra_id = m.id) AS n_items,"
-        " (SELECT count(*) FROM muestra_item i WHERE i.muestra_id = m.id AND i.liberado) AS n_liberados"
-        " FROM muestra m JOIN estudio e ON e.id = m.estudio_id ORDER BY m.id DESC").fetchall()
+        " (SELECT count(*) FROM muestra_item i WHERE i.muestra_id = m.id AND i.liberado) AS n_liberados,"
+        " (SELECT t.estado FROM tarea t WHERE t.tipo = 'muestra.borrar' AND (t.payload->>'borrar_muestra_id')::int = m.id"
+        "   ORDER BY t.id DESC LIMIT 1) AS tarea_borrado"
+        " FROM muestra m JOIN estudio e ON e.id = m.estudio_id"
+        " WHERE (%s::text IS NULL OR m.estado = %s) ORDER BY m.id DESC", (estado, estado)).fetchall()
 
 
 @router.get("/muestras/{muestra_id}")
@@ -144,8 +148,10 @@ def borrar_muestra(muestra_id: int, u: Usuario = Depends(requiere("admin"))):
 
 
 @router.get("/muestras/{muestra_id}/items")
-def items(muestra_id: int, estrato: str | None = None, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
-    return muestras.items(conn, muestra_id, estrato)
+def items(muestra_id: int, estrato: str | None = None, rol: str | None = None, liberado: bool | None = None,
+          parte_id: int | None = None, estado: str | None = None, q: str | None = None, pagina: int = 1,
+          por_pagina: int = muestras.POR_PAGINA, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+    return muestras.items(conn, muestra_id, estrato, rol, liberado, parte_id, estado, q, pagina, por_pagina)
 
 
 class Sorteo(BaseModel):
@@ -179,20 +185,26 @@ def cerrar(muestra_id: int, conn=Depends(get_conn), u: Usuario = Depends(requier
 
 
 class Exportacion(BaseModel):
-    origenes: list[str] = []
-    orden: str = "prioridad"
+    origenes: list[str] | None = None
+    orden: str | None = None
+    numeros: str | None = None
+    atributos_excluidos: list[str] | None = None
+    contactos: bool | None = None
+    contacto_campos: list[str] | None = None
+    atributos_contacto_excluidos: list[str] | None = None
 
 
 @router.put("/muestras/{muestra_id}/exportacion")
 def exportacion_opciones(muestra_id: int, body: Exportacion, conn=Depends(get_conn),
                          u: Usuario = Depends(requiere("coordinador", "jefe"))):
     """Orígenes a exportar y orden de los teléfonos del CSV (queda guardado en la muestra)."""
-    return muestras.guardar_exportacion(conn, muestra_id, body.model_dump(), u.email)
+    return muestras.guardar_exportacion(conn, muestra_id, body.model_dump(exclude_unset=True), u.email)
 
 
 @router.get("/muestras/{muestra_id}/csv")
-def csv(muestra_id: int, parte_id: int, conn=Depends(get_conn), u: Usuario = Depends(requiere("coordinador", "jefe"))):
-    nombre, contenido, resumen = exportacion.generar_csv(conn, muestra_id, parte_id, u)
+def csv(muestra_id: int, parte_id: int, formato: str = "ucontact", conn=Depends(get_conn),
+        u: Usuario = Depends(requiere("coordinador", "jefe"))):
+    nombre, contenido, resumen = exportacion.generar_csv(conn, muestra_id, parte_id, u, formato)
     return Response(
         content=contenido.encode("utf-8-sig"), media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{nombre}"',
@@ -203,5 +215,6 @@ def csv(muestra_id: int, parte_id: int, conn=Depends(get_conn), u: Usuario = Dep
 
 @router.get("/muestras/{muestra_id}/csv/resumen")
 def csv_resumen(muestra_id: int, parte_id: int, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
-    filas, ctx = exportacion.filas_csv(conn, muestra_id, parte_id, False)
-    return {**ctx["resumen"], "ejemplo": filas[:5], "columnas": ctx["cfg"]["csv_ucontact"]["columnas"]}
+    filas, ctx = exportacion.filas_csv(conn, muestra_id, parte_id, u.exportar_contactos)
+    return {**ctx["resumen"], "columnas": ctx["cfg"]["csv_ucontact"]["columnas"],
+            "puede_exportar_contactos": u.exportar_contactos}

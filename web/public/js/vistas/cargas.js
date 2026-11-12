@@ -4,11 +4,17 @@ import { $, $$, esc, main, toast, num, fecha, fechaHora, rutFmt, est, etiqueta, 
   pedirTexto, confirmar, confirmarEscrito, seguirTarea, archivoDrop, activarDrop, tabs } from '../ui.js';
 import { actualizarContadores } from '../app.js';
 
+const CRIT_TXT = { rut: 'RUT', razon_social: 'razón social', telefono: 'teléfono', dominio_web: 'dominio web', direccion: 'dirección', email: 'email' };
+const reglasTxt = (c) => (c.reglas || []).map(r => `${CRIT_TXT[r.criterio] || r.criterio} ${r.tipo}${r.tipo === 'flexible' ? ` ${Math.round((r.umbral || 0.85) * 100)} %` : ''}`).join(' → ')
+  || (REGLAS[c.regla_fusion] || c.regla_fusion);
+
 const CAMPOS = {
   rut: 'RUT', razon_social: 'Razón social', fantasia: 'Nombre de fantasía', naturaleza: 'Naturaleza jurídica (código o nombre)',
   ciiu: 'CIIU / rubro', tamano: 'Tamaño', departamento: 'Departamento', localidad: 'Localidad', direccion: 'Dirección', web: 'Web',
   email: 'Email (para el dominio)', estado: 'Estado (activa / cerrada)',
   sucursal_direccion: 'Dirección de la sucursal', sucursal_departamento: 'Departamento de la sucursal', sucursal_localidad: 'Localidad de la sucursal',
+  contacto_nombre: 'Nombre del contacto', contacto_cargo: 'Cargo', contacto_area: 'Área', contacto_email: 'Email del contacto',
+  contacto_telefono: 'Teléfono del contacto',
 };
 const REGLAS = { rut: 'RUT (por defecto)', telefono: 'Teléfono', razon_social: 'Razón social normalizada', dominio: 'Dominio web' };
 // C10: qué significa cada estado y qué sigue
@@ -30,7 +36,7 @@ export async function lista(ctx) {
     card('Historial de cargas', tabla([
       { t: '#', f: c => `<a class="link" href="#/cargas/${c.id}">${c.id}</a>` },
       { t: 'Fuente', f: c => `<span class="td-strong">${esc(c.fuente)}</span><div class="small muted">${esc(c.archivo_nombre)}</div>` },
-      { t: 'Tipo', k: 'tipo_fuente' }, { t: 'Fusión', f: c => esc(REGLAS[c.regla_fusion] || c.regla_fusion) }, { t: 'Estado', f: c => estCarga(c.estado) },
+      { t: 'Tipo', k: 'tipo_fuente' }, { t: 'Fusión', f: c => `${esc(reglasTxt(c))}${c.destino === 'provisoria' ? ` ${est('sospechoso', 'a provisoria')}` : ''}` }, { t: 'Estado', f: c => estCarga(c.estado) },
       { t: 'Altas', cls: 'num', f: c => num(c.conteos.altas || 0) }, { t: 'Act.', cls: 'num', f: c => num(c.conteos.actualizaciones || 0) },
       { t: 'Rechazos', cls: 'num', f: c => num(c.conteos.rechazos || 0) }, { t: 'Responsable', k: 'responsable' }, { t: 'Fecha', f: c => fechaHora(c.fecha) },
     ], cargas, 'Todavía no hay cargas'), '', true) +
@@ -66,8 +72,10 @@ export async function nueva(ctx) {
 // ── 2 · Mapeo (C3, C4) ──
 function estadoInicial(a) {
   const m = a.mapeo || {};
-  const st = { nucleo: {}, sucursal: {}, atributos: { ...(m.atributos || {}) }, tels: [], origen_defecto: m.origen_defecto || '',
+  const st = { nucleo: {}, sucursal: {}, contacto: {}, atributos: { ...(m.atributos || {}) },
+    contacto_atributos: { ...(m.contacto_atributos || {}) }, tels: [], origen_defecto: m.origen_defecto || '',
     traducciones: m.traducciones || {} };
+  (a.campos.contacto || []).forEach(k => { st.contacto[k] = m[k] || ''; });
   a.campos.empresa.forEach(k => { if (m[k] || k === 'rut') st.nucleo[k] = m[k] || ''; });
   a.campos.sucursal.forEach(k => { st.sucursal[k] = m[k] || ''; });
   (m.telefonos || []).forEach(col => {
@@ -79,9 +87,11 @@ function estadoInicial(a) {
 
 function mapeoDe(st) {
   const m = { telefonos: [], traducciones: st.traducciones };
-  Object.entries({ ...st.nucleo, ...st.sucursal }).forEach(([k, v]) => { if (v) m[k] = v; });  // sin columna no se guarda
+  Object.entries({ ...st.nucleo, ...st.sucursal, ...st.contacto }).forEach(([k, v]) => { if (v) m[k] = v; });  // sin columna no se guarda
   const at = Object.fromEntries(Object.entries(st.atributos).filter(([, v]) => v));
   if (Object.keys(at).length) m.atributos = at;
+  const ac = Object.fromEntries(Object.entries(st.contacto_atributos).filter(([, v]) => v));
+  if (Object.keys(ac).length) m.contacto_atributos = ac;
   const ot = {};
   st.tels.filter(t => t.col).forEach(t => {
     m.telefonos.push(t.col);
@@ -99,12 +109,14 @@ function columnasUsadas(m) {
   (m.telefonos || []).forEach(c => u.add(c));
   Object.values(m.origenes_telefono || {}).forEach(o => o.columna && u.add(o.columna));
   Object.values(m.atributos || {}).forEach(c => u.add(c));
+  Object.values(m.contacto_atributos || {}).forEach(c => u.add(c));
   return u;
 }
 
 function mapeo(ctx, a, tipoFuente, params) {
   const st = estadoInicial(a);
-  const atributos = Object.fromEntries(a.atributos.map(x => [x.clave, x]));
+  const atributos = Object.fromEntries(a.atributos.filter(x => (x.ambito || 'empresa') === 'empresa').map(x => [x.clave, x]));
+  const atrContacto = Object.fromEntries(a.atributos.filter(x => x.ambito === 'contacto').map(x => [x.clave, x]));
   const opts = (sel, vacio = '— no usar —') => `<option value="">${vacio}</option>` + a.columnas.map(c => `<option ${c === sel ? 'selected' : ''}>${esc(c)}</option>`).join('');
   const quitar = (attr, k) => `<button class="btn btn-outline btn-sm btn-del" ${attr}="${esc(k)}" title="Quitar">×</button>`;
   $('.steps').outerHTML = pasos(2);
@@ -112,23 +124,49 @@ function mapeo(ctx, a, tipoFuente, params) {
     <div class="alert alert-info"><span>Mapeo ${a.origen_mapeo === 'plantilla' ? `cargado de la plantilla <strong>${esc(tipoFuente)}</strong>` : 'sugerido por los nombres de columna'}.
       Se muestran solo los campos que se reconocieron en el archivo: <strong>todo es opcional salvo el RUT</strong>. Los demás se agregan con «+ Agregar».</span></div>
     ${(a.avisos || []).map(x => `<div class="alert alert-warn"><span>${esc(x)}</span></div>`).join('')}
+    <div id="c-parecidos"></div>
     <div class="grid-2"><div id="c-bloques"></div>
     <div><div class="form-group"><label>Nombre de la fuente</label><input type="text" id="c-fuente" value="${esc(a.nombre.replace(/\.[^.]+$/, ''))}" /></div>
       <div class="form-group"><label>Licencia de uso</label><input type="text" id="c-licencia" placeholder="p. ej. base propia, uso interno" /></div>
-      <div class="form-row"><div class="form-group"><label>Regla de fusión</label><select class="fselect" id="c-regla">${
-        params.reglas_fusion.map(r => `<option value="${r}">${esc(REGLAS[r] || r)}</option>`).join('')}</select>
-        <div class="field-hint">Las coincidencias que no son por RUT van a la bandeja de revisión.</div></div>
-        <div class="form-group"><label>Confianza (0–100)</label><input type="number" id="c-conf" min="0" max="100" value="${params.confianza_fuentes.carga ?? 50}" /></div></div>
+      <div class="form-group"><label>Destino</label><select class="fselect" id="c-destino">
+        <option value="definitiva" ${a.destino !== 'provisoria' ? 'selected' : ''}>Base definitiva (la columna RUT es obligatoria)</option>
+        <option value="provisoria" ${a.destino === 'provisoria' ? 'selected' : ''}>Base provisoria (la columna RUT es opcional)</option></select>
+        <label class="check" id="c-op-def"><input type="checkbox" id="c-con-rut" checked /> Las filas con RUT válido van a la base definitiva</label>
+        <label class="check" id="c-op-prov"><input type="checkbox" id="c-sin-rut" /> Enviar las filas sin RUT válido a la base provisoria (en lugar de rechazarlas)</label></div>
+      <div class="form-group"><label>Reglas de fusión, en orden</label><div id="c-reglas"></div>
+        <div class="field-hint">Se prueban en orden y gana la primera que da resultado; el RUT siempre va primero. Exacta: si hay una sola candidata se fusiona sola.
+        Flexible: similitud igual o mayor al umbral y <strong>siempre se consulta</strong>. Comparan contra las dos bases.</div></div>
+      <div class="form-row"><div class="form-group"><label>Confianza (0–100)</label><input type="number" id="c-conf" min="0" max="100" value="${params.confianza_fuentes.carga ?? 50}" /></div><div></div></div>
       <label class="check"><input type="checkbox" id="c-plantilla" checked /> Guardar el mapeo y las traducciones como plantilla de "${esc(tipoFuente || 'sin tipo')}"</label>
       <div class="mt"><button class="btn btn-orange" id="c-siguiente">Siguiente</button></div><div id="c-prog" class="mt"></div></div></div>`) +
     `<div id="c-traduccion"></div>` +
     card('Primeras filas del archivo', `<div class="table-wrap"><table><thead><tr>${a.columnas.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead>
       <tbody>${a.ejemplos.map(f => `<tr>${a.columnas.map(c => `<td>${esc(f[c] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`, '', true);
 
+  // F4.1: columnas que se parecen a un atributo existente → se ofrece usarlo (y la columna queda como sinónimo)
+  const sugerencias = [...(a.sugerencias_atributos || [])];
+  const pintarParecidos = () => {
+    const m = mapeoDe(st), usadas = columnasUsadas(m);
+    const vivas = sugerencias.filter(x => !usadas.has(x.columna) && !(x.clave in st.atributos) && !(x.clave in st.contacto_atributos));
+    $('#c-parecidos').innerHTML = vivas.length ? `<div class="alert alert-warn"><div><strong>Columnas parecidas a atributos que ya existen</strong>
+      <ul class="aviso-lista">${vivas.map(x => `<li>«${esc(x.columna)}» se parece a <strong>${esc(x.nombre)}</strong>${x.ambito === 'contacto' ? ' (de contacto)' : ''}
+        (${Math.round(x.similitud * 100)} %). <button class="btn btn-outline btn-sm" data-usar-attr="${esc(x.columna)}">Usar ese atributo</button>
+        <button class="btn btn-outline btn-sm" data-ignorar-attr="${esc(x.columna)}">No</button></li>`).join('')}</ul>
+      <div class="small">Al usarlo, el nombre de la columna queda como sinónimo del atributo y la próxima base lo reconoce sola.</div></div></div>` : '';
+    $$('[data-usar-attr]').forEach(b => b.onclick = async () => {
+      const x = sugerencias.find(y => y.columna === b.dataset.usarAttr);
+      try { await api.post(`/atributos/${x.atributo_id}/sinonimo`, { texto: x.columna }); } catch (e) { toast(e.message, 'err'); return; }
+      (x.ambito === 'contacto' ? st.contacto_atributos : st.atributos)[x.clave] = x.columna;
+      toast(`«${x.columna}» se carga como ${x.nombre}`, 'ok'); dibujar();
+    });
+    $$('[data-ignorar-attr]').forEach(b => b.onclick = () => { sugerencias.splice(sugerencias.findIndex(y => y.columna === b.dataset.ignorarAttr), 1); pintarParecidos(); });
+  };
   const dibujar = () => {
     const sinUsar = (obj, todos) => todos.filter(k => !(k in obj));
     const faltanNucleo = sinUsar(st.nucleo, a.campos.empresa);
     const faltanAttr = sinUsar(st.atributos, Object.keys(atributos));
+    const faltanAttrC = sinUsar(st.contacto_atributos, Object.keys(atrContacto));
+    const hayContacto = Object.values(st.contacto).some(Boolean) || Object.keys(st.contacto_atributos).length;
     const origenOpts = (sel) => `<option value="" ${!sel ? 'selected' : ''}>Origen por defecto de la carga</option>
       <optgroup label="Columna del archivo">${a.columnas.map(c => `<option value="col:${esc(c)}" ${sel === 'col:' + c ? 'selected' : ''}>columna «${esc(c)}»</option>`).join('')}</optgroup>
       <optgroup label="Origen fijo">${a.origenes.map(o => `<option value="fijo:${esc(o.codigo)}" ${sel === 'fijo:' + o.codigo ? 'selected' : ''}>${esc(o.nombre)}</option>`).join('')}</optgroup>`;
@@ -157,6 +195,15 @@ function mapeo(ctx, a, tipoFuente, params) {
       <details class="map-bloque" ${Object.values(st.sucursal).some(Boolean) ? 'open' : ''}><summary>4 · Sucursal (opcional)</summary>
         <p class="field-hint">Un local de la empresa con dirección distinta de la fiscal. Si se completa, los teléfonos de la fila quedan asociados a esa sucursal.</p>
         ${Object.keys(st.sucursal).map(k => `<div class="map-fila"><span class="td-strong">${esc(CAMPOS[k])}</span><select class="fselect" data-suc="${k}">${opts(st.sucursal[k])}</select><span></span></div>`).join('')}</details>
+      <details class="map-bloque" ${hayContacto ? 'open' : ''}><summary>5 · Contacto (opcional)</summary>
+        <p class="field-hint">Un contacto por fila. Se reconoce dentro de la empresa por el nombre o el email: si ya existe, se completan sus campos vacíos.
+          Su teléfono se vincula a la empresa con el origen por defecto y queda como «número del contacto». Las filas con datos de contacto pero sin nombre se ignoran.</p>
+        ${Object.keys(st.contacto).map(k => `<div class="map-fila"><span class="td-strong">${esc(CAMPOS[k])}${k === 'contacto_nombre' && hayContacto ? ' <span class="est est-error">obligatorio</span>' : ''}</span>
+          <select class="fselect" data-cont="${k}">${opts(st.contacto[k])}</select><span></span></div>`).join('')}
+        ${Object.keys(st.contacto_atributos).map(k => `<div class="map-fila"><span class="td-strong">${esc(atrContacto[k].nombre)} <span class="small muted">${esc(atrContacto[k].tipo)}</span></span>
+          <select class="fselect" data-attr-c="${esc(k)}">${opts(st.contacto_atributos[k])}</select>${quitar('data-quitar-attr-c', k)}</div>`).join('')}
+        ${faltanAttrC.length ? `<div class="map-agregar"><select class="fselect" id="c-add-attr-c"><option value="">+ Agregar atributo de contacto…</option>${
+          faltanAttrC.map(k => `<option value="${esc(k)}">${esc(atrContacto[k].nombre)}</option>`).join('')}</select></div>` : ''}</details>
       <div class="no-usadas">${noUsadas.length ? `<strong>Columnas que no se van a cargar:</strong> ${noUsadas.map(esc).join(', ')}` : 'Se usan todas las columnas del archivo.'}</div>`;
     $$('[data-nucleo]').forEach(s => s.onchange = () => { st.nucleo[s.dataset.nucleo] = s.value; dibujar(); });
     $$('[data-quitar-nucleo]').forEach(b => b.onclick = () => { delete st.nucleo[b.dataset.quitarNucleo]; dibujar(); });
@@ -170,8 +217,40 @@ function mapeo(ctx, a, tipoFuente, params) {
     $('#c-add-tel').onclick = () => { st.tels.push({ col: '', origen: '' }); dibujar(); };
     $('#c-origen-defecto').onchange = (e) => { st.origen_defecto = e.target.value; };
     $$('[data-suc]').forEach(s => s.onchange = () => { st.sucursal[s.dataset.suc] = s.value; dibujar(); });
+    $$('[data-cont]').forEach(s => s.onchange = () => { st.contacto[s.dataset.cont] = s.value; dibujar(); });
+    $$('[data-attr-c]').forEach(s => s.onchange = () => { st.contacto_atributos[s.dataset.attrC] = s.value; dibujar(); });
+    $$('[data-quitar-attr-c]').forEach(b => b.onclick = () => { delete st.contacto_atributos[b.dataset.quitarAttrC]; dibujar(); });
+    if ($('#c-add-attr-c')) $('#c-add-attr-c').onchange = (e) => { st.contacto_atributos[e.target.value] = ''; dibujar(); };
+    pintarParecidos();
   };
   dibujar();
+
+  // F6.2: reglas en cascada (lista ordenada de criterio + tipo + umbral)
+  const CRIT = { rut: 'RUT', razon_social: 'Razón social', telefono: 'Teléfono', dominio_web: 'Dominio web', direccion: 'Dirección (+ departamento)', email: 'Email de contacto' };
+  let reglas = (a.reglas || [{ criterio: 'rut', tipo: 'exacta' }]).map(r => ({ ...r }));
+  const pintarReglas = () => {
+    $('#c-reglas').innerHTML = reglas.map((r, i) => `<div class="map-fila regla">
+      <span class="small muted">${i + 1}.</span>
+      <select class="fselect" data-rg-c="${i}" ${r.criterio === 'rut' ? 'disabled' : ''}>${(a.criterios_fusion || Object.keys(CRIT)).map(c => `<option value="${c}" ${c === r.criterio ? 'selected' : ''}>${CRIT[c] || c}</option>`).join('')}</select>
+      <select class="fselect" data-rg-t="${i}" ${r.criterio === 'rut' ? 'disabled' : ''}><option value="exacta" ${r.tipo === 'exacta' ? 'selected' : ''}>exacta</option><option value="flexible" ${r.tipo === 'flexible' ? 'selected' : ''}>flexible</option></select>
+      ${r.tipo === 'flexible' ? `<input type="number" data-rg-u="${i}" min="0.5" max="1" step="0.01" value="${r.umbral ?? a.umbral_fusion_flexible ?? 0.85}" style="width:80px" title="Umbral de similitud" />` : '<span></span>'}
+      ${r.criterio === 'rut' ? '<span></span>' : `<span class="gap"><button class="btn btn-outline btn-sm" data-rg-sub="${i}" title="Subir" ${i <= 1 ? 'disabled' : ''}>↑</button><button class="btn btn-outline btn-sm btn-del" data-rg-x="${i}" title="Quitar">×</button></span>`}</div>`).join('') +
+      `<button class="btn btn-outline btn-sm" id="c-rg-add">+ Agregar regla</button>`;
+    $$('[data-rg-c]').forEach(x => x.onchange = () => { reglas[+x.dataset.rgC].criterio = x.value; pintarReglas(); });
+    $$('[data-rg-t]').forEach(x => x.onchange = () => { reglas[+x.dataset.rgT].tipo = x.value; pintarReglas(); });
+    $$('[data-rg-u]').forEach(x => x.onchange = () => { reglas[+x.dataset.rgU].umbral = +x.value; });
+    $$('[data-rg-x]').forEach(x => x.onclick = () => { reglas.splice(+x.dataset.rgX, 1); pintarReglas(); });
+    $$('[data-rg-sub]').forEach(x => x.onclick = () => { const i = +x.dataset.rgSub; [reglas[i - 1], reglas[i]] = [reglas[i], reglas[i - 1]]; pintarReglas(); });
+    $('#c-rg-add').onclick = () => { reglas.push({ criterio: 'razon_social', tipo: 'flexible', umbral: a.umbral_fusion_flexible || 0.85 }); pintarReglas(); };
+  };
+  pintarReglas();
+  const verDestino = () => {
+    const prov = $('#c-destino').value === 'provisoria';
+    $('#c-op-def').style.display = prov ? '' : 'none';
+    $('#c-op-prov').style.display = prov ? 'none' : '';
+  };
+  $('#c-destino').onchange = verDestino;
+  verDestino();
 
   const crear = async () => {
     const m = mapeoDe(st);
@@ -179,8 +258,9 @@ function mapeo(ctx, a, tipoFuente, params) {
     try {
       const r = await api.post('/cargas', {
         archivo_id: a.archivo_id, fuente: $('#c-fuente').value.trim() || a.nombre, tipo_fuente: tipoFuente || 'sin tipo',
-        licencia: $('#c-licencia').value.trim(), regla_fusion: $('#c-regla').value, confianza: +$('#c-conf').value,
-        mapeo: m, guardar_plantilla: $('#c-plantilla').checked,
+        licencia: $('#c-licencia').value.trim(), destino: $('#c-destino').value, reglas,
+        opciones: { con_rut_a_definitiva: $('#c-con-rut').checked, sin_rut_a_provisoria: $('#c-sin-rut').checked },
+        confianza: +$('#c-conf').value, mapeo: m, guardar_plantilla: $('#c-plantilla').checked,
       });
       await seguirTarea(r.tarea_id, $('#c-prog'), { texto: 'Calculando el preview' });
       ctx.ir('cargas/' + r.carga_id);
@@ -189,8 +269,10 @@ function mapeo(ctx, a, tipoFuente, params) {
 
   $('#c-siguiente').onclick = async () => {
     const m = mapeoDe(st);
-    if (!m.rut) return toast('Indicá la columna del RUT', 'err');
-    if (m.telefonos.length && !m.origen_defecto) return toast('Elegí el origen por defecto de los teléfonos', 'err');
+    if (!m.rut && $('#c-destino').value !== 'provisoria') return toast('Indicá la columna del RUT (o elegí el destino «Base provisoria»)', 'err');
+    if ((m.telefonos.length || m.contacto_telefono) && !m.origen_defecto) return toast('Elegí el origen por defecto de los teléfonos', 'err');
+    if (!m.contacto_nombre && (['contacto_cargo', 'contacto_area', 'contacto_email', 'contacto_telefono'].some(k => m[k]) || m.contacto_atributos))
+      return toast('Para cargar contactos, indicá la columna con el nombre del contacto', 'err');
     if (!$('#c-licencia').value.trim()) return toast('Indicá la licencia de uso de la fuente', 'err');
     try {
       const v = await api.post('/cargas/valores', { archivo_id: a.archivo_id, mapeo: m });
@@ -223,7 +305,7 @@ function traduccion(ctx, a, st, v, crear) {
       La traducción queda en la plantilla del tipo de fuente.</span></div>
       ${grupos.map(g => `<div class="card-header-title mb mt">${esc(g.titulo)}</div>${tabla([
         { t: 'Valor en el archivo', f: x => `<span class="td-strong">${esc(x.valor)}</span>` }, { t: 'Filas', cls: 'num', f: x => num(x.filas) },
-        { t: 'Sugerido', f: x => x.sugerido ? esc(nombreDe(g, x.sugerido)) : '<span class="muted">—</span>' },
+        { t: 'Sugerido', f: x => x.sugerido ? esc(nombreDe(g, x.sugerido)) + (x.similitud ? ` <span class="small muted">(se parece: ${Math.round(x.similitud * 100)} %)</span>` : '') : '<span class="muted">—</span>' },
         { t: 'Traducir a', f: (x, i) => sel(g, x, i) }], g.valores)}`).join('')}
       <div class="mt gap"><button class="btn btn-outline" id="c-sugerencias">Usar sugerencias</button>
       <button class="btn btn-orange" id="c-preview">Ver preview</button></div>`);
@@ -296,11 +378,23 @@ export async function detalle(ctx, id) {
       ${ctx.puede() ? 'Podés usar «Borrar carga» y volver a cargar el archivo.' : 'Un administrador puede borrar la carga.'}</span></div>` : '') +
     (enCurso ? card('Procesando', `<div id="c-prog"></div>`) : '') +
     (c.estado === 'preview' ? `<div class="alert alert-info"><span>Esto es un preview: la base todavía no cambió. Los conteos son exactamente los que se aplican al confirmar.</span></div>` : '') +
+    (k.altas_provisoria || k.actualizaciones_provisoria || c.destino === 'provisoria' ? `<div class="card mb"><div class="card-body small">
+      <strong>Por base:</strong> altas en la definitiva ${num(k.altas_definitiva || 0)} · altas en la provisoria ${num(k.altas_provisoria || 0)} ·
+      actualizaciones en la definitiva ${num(k.actualizaciones_definitiva || 0)} · en la provisoria ${num(k.actualizaciones_provisoria || 0)}
+      ${k.promovidas ? ` · ${num(k.promovidas)} provisorias pasaron a la definitiva` : ''} · destino ${est(c.destino === 'provisoria' ? 'sospechoso' : 'ok', c.destino === 'provisoria' ? 'base provisoria' : 'base definitiva')}</div></div>` : '') +
     stats([[k.filas || 0, 'Filas', 's-total'], [k.altas || 0, 'Altas', 's-ok'], [k.actualizaciones || 0, 'Actualizaciones', 's-free'],
       [k.sin_cambios || 0, 'Sin cambios', ''], [k.conflictos || 0, 'Conflictos', 's-warn'], [k.rechazos || 0, 'Rechazos', 's-bad'],
       [k.revision || 0, 'A revisión', 's-warn'], [k.nuevos_sospechosos || 0, 'Nuevos sospechosos', 's-bad'],
       [k.telefonos_nuevos || 0, 'Teléfonos nuevos', 's-free'],
       ...(k.contactos_nuevos ? [[k.contactos_nuevos, 'Contactos nuevos', 's-free']] : [])]) +
+    (k.contactos_nuevos || k.contactos_actualizados || k.contactos_sin_nombre || k.contactos_sin_cambios
+      ? `<div class="card mb"><div class="card-body small"><strong>Contactos:</strong> ${num(k.contactos_nuevos || 0)} nuevos ·
+        ${num(k.contactos_actualizados || 0)} actualizados (se completaron campos vacíos) · ${num(k.contactos_sin_cambios || 0)} sin cambios
+        ${k.contactos_telefonos ? ` · ${num(k.contactos_telefonos)} teléfonos de contacto` : ''}
+        ${k.contactos_sin_nombre ? ` · <span class="est est-sospechoso">${num(k.contactos_sin_nombre)}</span> filas con datos de contacto pero sin nombre (se ignoran)` : ''}
+        ${k.contactos_email_invalido ? ` · <span class="est est-sospechoso">${num(k.contactos_email_invalido)}</span> emails con formato inválido (no se guardaron)` : ''}
+        <div class="muted">Deshacer o borrar la carga quita los contactos que trajo.</div></div></div>` : '') +
+    `<div id="c-coinc"></div>` +
     (fpt || porOrigen.length || porAtributo.length ? `<div class="grid-2 mb">${card('Teléfonos', (fpt ? `<div class="card-body">${stats([[fpt['0'], 'Filas sin teléfono', fpt['0'] ? 's-warn' : ''],
         [fpt['1'], 'Con 1', ''], [fpt['2'], 'Con 2', ''], [fpt['3+'], 'Con 3 o más', '']]) +
         (fpt['0'] ? `<p class="small muted">Las filas sin teléfono se cargan igual: la empresa queda no disponible por «sin teléfono discable» si esa regla está activa.</p>` : '')}</div>` : '') +
@@ -314,7 +408,7 @@ export async function detalle(ctx, id) {
         `<div class="card-body small muted">Un número o una fecha que no se puede interpretar no rechaza la fila: el valor queda como crudo y se cuenta como inválido.</div>`, '', true)}</div>` : '') +
     `<div class="grid-2">${card('Datos del lote', `<dl class="kv">
       <dt>Fuente</dt><dd>${esc(c.fuente)}</dd><dt>Tipo de fuente</dt><dd>${esc(c.tipo_fuente)}</dd><dt>Licencia</dt><dd>${esc(c.licencia)}</dd>
-      <dt>Responsable</dt><dd>${esc(c.responsable)}</dd><dt>Regla de fusión</dt><dd>${esc(REGLAS[c.regla_fusion] || c.regla_fusion)}</dd>
+      <dt>Responsable</dt><dd>${esc(c.responsable)}</dd><dt>Reglas de fusión</dt><dd>${esc(reglasTxt(c))}</dd><dt>Destino</dt><dd>${c.destino === 'provisoria' ? 'base provisoria' : 'base definitiva'}</dd>
       <dt>Confianza</dt><dd>${c.confianza}</dd><dt>Origen por defecto</dt><dd>${esc(nombreO[(c.mapeo || {}).origen_defecto] || '—')}</dd>
       <dt>Configuración</dt><dd>versión ${c.config_version}</dd><dt>Creada</dt><dd>${fechaHora(c.fecha)}</dd>
       <dt>Confirmada</dt><dd>${fechaHora(c.confirmada)}</dd>${c.descartada ? `<dt>Descartada</dt><dd>${fechaHora(c.descartada)}</dd>` : ''}
@@ -339,6 +433,40 @@ export async function detalle(ctx, id) {
   if (enCurso && c.tarea) {
     seguirTarea(c.tarea.id, $('#c-prog'), { texto: c.estado === 'analizando' ? 'Calculando el preview' : 'Aplicando la carga' })
       .then(() => borrando || recargar()).catch(e => { if (borrando) return; toast(e.message, 'err'); recargar(); });
+  }
+  // F6.2: «Coincidencias a decidir» (preview): fusionar, es otra empresa o decidir después (va a Revisión de fusiones)
+  const co = k.coincidencias_a_decidir || [];
+  if (co.length && $('#c-coinc')) {
+    const editable = c.estado === 'preview' && ctx.puede('steward');
+    const dec = { ...(c.decisiones || {}) };
+    const fila = (x) => `<div class="small">${x.rut ? `<span class="mono">${rutFmt(x.rut)}</span> · ` : '<span class="muted">sin RUT</span> · '}<strong>${esc(x.datos.razon_social || '—')}</strong></div>
+      <div class="small muted">${esc([x.datos.direccion, x.datos.departamento, x.datos.web].filter(Boolean).join(' · '))}${x.telefonos.length ? ' · ' + esc(x.telefonos.join(' / ')) : ''}</div>`;
+    const cand = (x) => `<div class="small"><a class="link mono" href="#/empresas/${x.candidata.codigo}">${rutFmt(x.candidata.codigo)}</a>${x.candidata.base === 'provisoria' ? ` ${est('sospechoso', 'provisoria')}` : ''} · <strong>${esc(x.candidata.razon_social || '—')}</strong></div>
+      <div class="small muted">${esc([x.candidata.direccion, x.candidata.departamento, x.candidata.web].filter(Boolean).join(' · '))}${x.candidatas.length > 1 ? ` · ${x.candidatas.length - 1} ${x.candidatas.length === 2 ? 'candidata' : 'candidatas'} más` : ''}</div>`;
+    const pintar = () => {
+      const n = (d) => co.filter(x => (dec[x.fila] || 'despues') === d).length;
+      $('#c-coinc').innerHTML = card(`Coincidencias a decidir (${num(co.length)})`, `<div class="card-body small">
+        Cada fila coincidió con una empresa por una regla flexible, por varias candidatas o por un RUT distinto: no se fusionan solas.
+        Lo que quede en «Decidir después» va a la bandeja de Revisión de fusiones al confirmar.
+        <div class="mt"><strong>${num(n('fusionar'))}</strong> a fusionar · <strong>${num(n('otra'))}</strong> otra empresa · <strong>${num(n('despues'))}</strong> decidir después</div>
+        ${editable ? `<div class="gap mt"><button class="btn btn-outline btn-sm" id="cc-95">Fusionar todas las de similitud ≥ 95 %</button>
+          <button class="btn btn-outline btn-sm" id="cc-ninguna">Ninguna (todas «decidir después»)</button></div>` : ''}</div>` +
+        tabla([
+          { t: 'Fila', cls: 'num', k: 'fila' }, { t: 'Lo que llegó', f: fila }, { t: 'Empresa existente', f: cand },
+          { t: 'Regla', f: x => `${esc(CRIT_TXT[x.criterio] || x.criterio)} <span class="small muted">${esc(x.tipo)}</span>` },
+          { t: 'Similitud', cls: 'num', f: x => `<strong>${Math.round(x.similitud * 100)} %</strong>` },
+          { t: 'Decisión', f: x => editable ? `<select class="fselect" data-cc="${x.fila}" style="width:auto">${[['fusionar', 'Fusionar'], ['otra', 'Es otra empresa'], ['despues', 'Decidir después']].map(([v, t]) =>
+            `<option value="${v}" ${(dec[x.fila] || 'despues') === v ? 'selected' : ''}>${t}</option>`).join('')}</select>` : esc({ fusionar: 'fusionar', otra: 'otra empresa', despues: 'decidir después' }[dec[x.fila] || 'despues']) },
+        ], co), '', true);
+      const guardar = async (cambios) => {
+        try { Object.assign(dec, (await api.put(`/cargas/${id}/decisiones`, { decisiones: cambios })).decisiones); } catch (e) { toast(e.message, 'err'); }
+        pintar();
+      };
+      $$('[data-cc]').forEach(x => x.onchange = () => guardar({ [x.dataset.cc]: x.value }));
+      if ($('#cc-95')) $('#cc-95').onclick = () => guardar(Object.fromEntries(co.filter(x => x.similitud >= 0.95).map(x => [x.fila, 'fusionar'])));
+      if ($('#cc-ninguna')) $('#cc-ninguna').onclick = () => guardar(Object.fromEntries(co.map(x => [x.fila, 'despues'])));
+    };
+    pintar();
   }
   if ($('#c-confirmar')) $('#c-confirmar').onclick = async () => {
     if (!await confirmar('Confirmar carga', `Se aplican ${num(k.altas || 0)} altas y ${num(k.actualizaciones || 0)} actualizaciones. La carga se puede deshacer mientras ninguna de sus empresas entre a una muestra.`, 'Confirmar', 'btn-green')) return;
@@ -407,13 +535,13 @@ export async function intermediarios(ctx, params) {
 // ── Revisión de fusiones ──
 export async function revision(ctx) {
   const items = await api.get('/revision');
-  main().innerHTML = pageHeader('Revisión', 'de fusiones', 'Filas de cargas que coinciden con una empresa existente por teléfono, razón social o dominio, pero con otro RUT. No se fusionan solas.') +
+  main().innerHTML = pageHeader('Revisión', 'de fusiones', 'Filas de cargas que coinciden con una empresa existente y no se fusionan solas: por una regla flexible, por varias candidatas o con otro RUT. También las que quedaron en «Decidir después».') +
     card(`${items.length} pendientes`, tabla([
       { t: 'Carga', f: r => `<a class="link" href="#/cargas/${r.carga_id}">#${r.carga_id}</a> <span class="small muted">fila ${r.fila}</span><div class="small muted">${esc(r.fuente)}</div>` },
-      { t: 'Criterio', f: r => est('preview', etiqueta(r.criterio)) },
-      { t: 'Fila que llegó', f: r => `<span class="mono">${rutFmt(r.datos.rut)}</span><div class="td-strong">${esc(r.datos.razon_social || '—')}</div>
+      { t: 'Criterio', f: r => est('preview', etiqueta(r.criterio)) + (r.similitud ? `<div class="small muted">similitud ${Math.round(r.similitud * 100)} %</div>` : '') },
+      { t: 'Fila que llegó', f: r => `${r.datos.rut ? `<span class="mono">${rutFmt(r.datos.rut)}</span>` : '<span class="muted small">sin RUT (alta en la provisoria)</span>'}<div class="td-strong">${esc(r.datos.razon_social || '—')}</div>
         <div class="small muted">${esc((r.datos.telefonos || []).join(' · '))}${r.datos.web ? ' · ' + esc(r.datos.web) : ''}</div>` },
-      { t: 'Empresa existente', f: r => `<a class="link mono" href="#/empresas/${r.candidata_rut}">${rutFmt(r.candidata_rut)}</a>
+      { t: 'Empresa existente', f: r => `<a class="link mono" href="#/empresas/${r.candidata_rut}">${rutFmt(r.candidata_rut)}</a>${r.candidata_base === 'provisoria' ? ` ${est('sospechoso', 'provisoria')}` : ''}
         <div class="td-strong">${esc(r.candidata_razon || '—')}</div><div class="small muted">${esc(r.candidata_web || '')}</div>` },
       { t: '', f: r => ctx.puede('steward') ? `<div class="td-actions">
         <button class="btn btn-orange btn-sm" data-r="${r.id}" data-a="alta" title="Crear como empresa nueva con su RUT">Alta nueva</button>

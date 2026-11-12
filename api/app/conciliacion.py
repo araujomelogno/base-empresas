@@ -20,7 +20,7 @@ def listar(conn, tipo: str | None = None, estado: str = "pendiente") -> list[dic
                 " JOIN parte p ON p.id = s.parte_id WHERE s.id = %s", (f["objeto_id"],)).fetchone()
         ids = (f["candidatos"] or {}).get("items") or []
         f["candidatos_detalle"] = conn.execute(
-            "SELECT i.id, i.estrato, m.nombre AS muestra, e.rut, e.razon_social FROM muestra_item i"
+            "SELECT i.id, i.estrato, m.nombre AS muestra, e.codigo AS rut, e.razon_social FROM muestra_item i"
             " JOIN muestra m ON m.id = i.muestra_id JOIN empresa e ON e.id = i.empresa_id WHERE i.id = ANY(%s)",
             (ids,)).fetchall() if ids else []
     return filas
@@ -54,14 +54,16 @@ def resolver(conn, conciliacion_id: int, accion: str, item_id: int | None, actor
         if estudio_item != parte["estudio_id"]:
             raise HTTPException(422, "El ítem no pertenece al estudio de la parte")
         _, cfg = config.vigente(conn)
-        v, _ = sav.valores_mapeados(fila["valores"], ing["mapeo"])
+        v, _ = sav.valores_mapeados(fila["valores"], sav.limpiar_mapeo(ing["mapeo"]))
         fecha = sav._fecha(v.get("fecha"), ing["fecha"])
         linaje = {"estudio_id": parte["estudio_id"], "parte_id": parte["id"], "ingesta_id": ing["id"],
                   "response_id": fila["response_id"], "encuestador": v.get("encuestador"), "fecha": fecha,
                   "conciliado_por": actor}
         aplicado = resultados.aplicar(conn, item, parte, v, linaje, cfg, actor)
-        conn.execute("UPDATE sav_fila SET item_id = %s, aplicado = %s, motivo = NULL, actualizado = now() WHERE id = %s",
-                     (item_id, Jsonb(aplicado), fila["id"]))
+        avisos = [a for a in (fila.get("avisos") or []) if a.get("motivo") != sav.SIN_ITEM]
+        conn.execute("UPDATE sav_fila SET item_id = %s, aplicado = %s, motivo = NULL, avisos = %s, fecha = %s,"
+                     " encuestador = %s, actualizado = now() WHERE id = %s",
+                     (item_id, Jsonb(aplicado), Jsonb(avisos), fecha, v.get("encuestador"), fila["id"]))
     conn.execute("UPDATE conciliacion SET estado = 'resuelta', resolucion = %s, resuelto_por = %s, resuelto = now()"
                  " WHERE id = %s", (Jsonb({"item_id": item_id}), actor, conciliacion_id))
     auditoria.registrar(conn, actor, "conciliacion.asociar", "conciliacion", conciliacion_id,

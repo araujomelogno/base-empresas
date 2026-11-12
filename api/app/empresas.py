@@ -5,6 +5,8 @@ reciente. Un dato confirmado por la sala (fuente 'sala' o 'sav') nunca lo pisa u
 La historia es append-only: deshacer una carga o una fusión no borra filas, las anula
 (el cálculo del valor vigente ignora las filas de cargas deshechas y fusiones deshechas).
 """
+import re
+
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
@@ -173,11 +175,26 @@ def aplicar_valores(conn, empresa_id: int, valores: dict, fuente_tipo: str, fuen
     return cambios, conflictos
 
 
-def por_rut(conn, rut: str, seguir_fusion: bool = True) -> dict | None:
-    r, _ = rutmod.validar(rut)
-    if r is None:
+CODIGO_PROVISORIO = re.compile(r"^\s*P-?\s*0*(\d{1,9})\s*$", re.IGNORECASE)
+
+
+def codigo(emp: dict | None) -> str | None:
+    """RUT en la base definitiva; «P-» + id en la provisoria (F6.1)."""
+    if not emp:
         return None
-    emp = conn.execute("SELECT * FROM empresa WHERE rut = %s", (r,)).fetchone()
+    return emp.get("codigo") or emp.get("rut") or f"P-{emp['id']:06d}"
+
+
+def por_rut(conn, rut: str, seguir_fusion: bool = True) -> dict | None:
+    """La empresa por RUT o por código provisorio (P-000123)."""
+    m = CODIGO_PROVISORIO.match(str(rut or ""))
+    if m:
+        emp = conn.execute("SELECT * FROM empresa WHERE id = %s AND rut IS NULL", (int(m.group(1)),)).fetchone()
+    else:
+        r, _ = rutmod.validar(rut)
+        if r is None:
+            return None
+        emp = conn.execute("SELECT * FROM empresa WHERE rut = %s", (r,)).fetchone()
     vistos = set()
     while seguir_fusion and emp and emp["baja"] == "fusionada" and emp["fusionada_en"] and emp["id"] not in vistos:
         vistos.add(emp["id"])
@@ -188,7 +205,7 @@ def por_rut(conn, rut: str, seguir_fusion: bool = True) -> dict | None:
 def obtener_o_404(conn, rut: str) -> dict:
     emp = por_rut(conn, rut, seguir_fusion=False)
     if emp is None:
-        raise HTTPException(404, f"No existe la empresa con RUT {rut}")
+        raise HTTPException(404, f"No existe la empresa {rut}")
     return emp
 
 
@@ -270,23 +287,35 @@ def cambiar_estado_vinculo(conn, vinculo: dict, estado: str, fuente_tipo: str, f
 
 
 def contacto(conn, empresa_id: int, nombre: str, cargo, area, email, fuente_tipo, fuente_id,
-             detalle=None, sucursal_id=None) -> tuple[dict, bool]:
-    """Crea o actualiza un contacto de la empresa (se identifica por nombre normalizado)."""
-    clave = razon_normalizada(nombre)
-    for c in conn.execute("SELECT * FROM contacto WHERE empresa_id = %s", (empresa_id,)).fetchall():
-        if razon_normalizada(c["nombre"]) == clave:
-            conn.execute(
-                "UPDATE contacto SET cargo = coalesce(%s, cargo), area = coalesce(%s, area),"
-                " email = coalesce(%s, email), actualizado = now() WHERE id = %s",
-                (cargo, area, email, c["id"]),
-            )
-            return c, False
+             detalle=None, sucursal_id=None, actor: str | None = None, solo_vacios: bool = False) -> tuple[dict, bool]:
+    """Crea o actualiza un contacto de la empresa (se identifica por nombre normalizado o por email).
+    La sala actualiza los campos que trae; una carga (solo_vacios) completa solo los vacíos.
+    Cada alta y cada cambio queda en contacto_historia (F2.4)."""
+    from . import contactos
+
+    email = contactos.normalizar_email(email)
+    c = contactos.buscar(conn, empresa_id, nombre, email)
+    nuevos = {"cargo": cargo, "area": area, "email": email, "sucursal_id": sucursal_id}
+    if c is not None:
+        cambios = {k: v for k, v in nuevos.items() if v not in (None, "") and v != c[k]
+                   and not (solo_vacios and c[k] not in (None, ""))}
+        if cambios:
+            conn.execute(f"UPDATE contacto SET {', '.join(f'{k} = %s' for k in cambios)}, actualizado = now() WHERE id = %s",
+                         (*cambios.values(), c["id"]))
+            for k, v in cambios.items():
+                contactos.historia(conn, c, k, v, fuente_tipo, fuente_id, actor, detalle)
+            c = {**c, **cambios}
+        return {**c, "_cambios": list(cambios)}, False
     c = conn.execute(
         "INSERT INTO contacto (empresa_id, sucursal_id, nombre, cargo, area, email, fuente_tipo, fuente_id, detalle)"
         " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
         (empresa_id, sucursal_id, nombre.strip(), cargo, area, email, fuente_tipo, fuente_id,
-         Jsonb(detalle) if detalle else None),
+         Jsonb(contactos._json(detalle)) if detalle else None),
     ).fetchone()
+    contactos.historia(conn, c, "alta", c["nombre"], fuente_tipo, fuente_id, actor, detalle)
+    for k in ("cargo", "area", "email"):
+        if c[k]:
+            contactos.historia(conn, c, k, c[k], fuente_tipo, fuente_id, actor, detalle)
     return c, True
 
 
@@ -356,8 +385,11 @@ def fusionar(conn, absorbente: dict, absorbida: dict, actor: str, motivo: str | 
     )
     conn.execute("UPDATE empresa SET baja = 'fusionada', fusionada_en = %s, actualizado = now() WHERE id = %s", (a, b))
     conn.execute("UPDATE empresa_fusion SET movidos = %s WHERE id = %s", (Jsonb(movidos), fusion_id))
-    auditoria.registrar(conn, actor, "empresa.fusionar", "empresa", absorbente["rut"],
-                        {"fusion_id": fusion_id, "absorbida": absorbida["rut"], "motivo": motivo})
+    auditoria.registrar(conn, actor, "empresa.fusionar", "empresa", codigo(absorbente),
+                        {"fusion_id": fusion_id, "absorbida": codigo(absorbida), "motivo": motivo,
+                         "base_absorbida": absorbida.get("base")})
+    from . import intermediarios  # import circular: intermediarios usa este módulo
+    intermediarios.reevaluar(conn, [v["telefono_id"] for v in movidos["vinculos_borrados"]], actor)
     return fusion_id
 
 
@@ -395,5 +427,5 @@ def deshacer_fusion(conn, fusion_id: int, actor: str):
                  (m.get("ultimo_contacto_efectivo"), a))
     conn.execute("UPDATE empresa SET baja = NULL, fusionada_en = NULL, actualizado = now() WHERE id = %s", (b,))
     recalcular(conn, a)
-    rut_a = conn.execute("SELECT rut FROM empresa WHERE id = %s", (a,)).fetchone()["rut"]
+    rut_a = conn.execute("SELECT codigo FROM empresa WHERE id = %s", (a,)).fetchone()["codigo"]
     auditoria.registrar(conn, actor, "empresa.deshacer_fusion", "empresa", rut_a, {"fusion_id": fusion_id})

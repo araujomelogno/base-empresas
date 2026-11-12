@@ -20,7 +20,7 @@ import logging
 import psycopg
 from fastapi import HTTPException
 
-from . import auditoria, empresas, storage, tareas
+from . import auditoria, contactos as contmod, empresas, intermediarios, storage, tareas
 
 log = logging.getLogger(__name__)
 
@@ -93,14 +93,17 @@ def borrar_empresas(conn, ids: list[int], accion: str = "empresa.borrar", actor:
 
     # Base: revisión, fusiones, atributos, historia, contactos, sucursales, no llamar
     x("DELETE FROM revision_fusion WHERE candidata_id = ANY(%s)", (ids,))
+    x("DELETE FROM carga_promocion WHERE empresa_id = ANY(%s)", (ids,))
+    x("DELETE FROM provisoria_descarte WHERE empresa_id = ANY(%s) OR candidata_id = ANY(%s)", (ids, ids))
+    x("DELETE FROM provisoria_rut_propuesto WHERE empresa_id = ANY(%s)", (ids,))
     x("DELETE FROM empresa_fusion WHERE absorbente_id = ANY(%s) OR absorbida_id = ANY(%s)", (ids, ids))
     x("DELETE FROM empresa_atributo WHERE empresa_id = ANY(%s)", (ids,))
     x("DELETE FROM telefono_vinculo_historia WHERE empresa_id = ANY(%s)", (ids,))
     x("DELETE FROM empresa_campo_historia WHERE empresa_id = ANY(%s)", (ids,))
-    x("DELETE FROM contacto WHERE id = ANY(%s)", (contactos,))
+    contmod.borrar(conn, contactos)
+    x("DELETE FROM contacto_historia WHERE empresa_id = ANY(%s)", (ids,))  # contactos ya movidos o borrados
     x("DELETE FROM sucursal WHERE empresa_id = ANY(%s)", (ids,))
-    x("DELETE FROM no_llamar WHERE (alcance = 'empresa' AND objeto_id = ANY(%s))"
-      " OR (alcance = 'contacto' AND objeto_id = ANY(%s))", (ids, contactos))
+    x("DELETE FROM no_llamar WHERE alcance = 'empresa' AND objeto_id = ANY(%s)", (ids,))
     x("UPDATE empresa SET fusionada_en = NULL WHERE id = ANY(%s)", (ids,))
     x("DELETE FROM empresa WHERE id = ANY(%s)", (ids,))
 
@@ -113,6 +116,7 @@ def borrar_empresas(conn, ids: list[int], accion: str = "empresa.borrar", actor:
           AND NOT EXISTS (SELECT 1 FROM no_llamar l WHERE l.alcance = 'telefono' AND l.objeto_id = t.id)
         RETURNING t.id""", (tels,))
     n["telefonos"] = len(huerfanos)
+    intermediarios.reevaluar(conn, tels, actor)
     return n
 
 
@@ -126,8 +130,8 @@ def borrar_empresa(conn, rut: str, actor: str) -> dict:
     conn.execute("SELECT id FROM empresa WHERE id = %s FOR UPDATE", (emp["id"],))
     n = borrar_empresas(conn, [emp["id"]], "empresa.borrar", actor)
     items_borrados = n.pop("_items_borrados")
-    detalle = {"rut": emp["rut"], "razon_social": emp["razon_social"], **n}
-    _vincular_auditoria(conn, items_borrados, auditoria.registrar(conn, actor, "empresa.borrar", "empresa", emp["rut"], detalle))
+    detalle = {"rut": emp["codigo"], "razon_social": emp["razon_social"], **n}
+    _vincular_auditoria(conn, items_borrados, auditoria.registrar(conn, actor, "empresa.borrar", "empresa", emp["codigo"], detalle))
     return detalle
 
 
@@ -219,11 +223,10 @@ def _borrar_carga(conn, carga, tarea_id):
     x("DELETE FROM telefono_vinculo_origen WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,))
     tels = [r["telefono_id"] for r in x(
         "DELETE FROM telefono_vinculo WHERE fuente_tipo = 'carga' AND fuente_id = %s RETURNING telefono_id", (cid,))]
-    x("UPDATE telefono_vinculo SET contacto_id = NULL WHERE contacto_id IN "
-      "(SELECT id FROM contacto WHERE fuente_tipo = 'carga' AND fuente_id = %s)", (cid,))
-    x("DELETE FROM no_llamar WHERE alcance = 'contacto' AND objeto_id IN "
-      "(SELECT id FROM contacto WHERE fuente_tipo = 'carga' AND fuente_id = %s)", (cid,))
-    x("DELETE FROM contacto WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,))
+    contmod.borrar(conn, _ids(conn, "SELECT id FROM contacto WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,)))
+    x("DELETE FROM contacto_historia WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,))
+    x("DELETE FROM contacto_telefono WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,))
+    x("DELETE FROM contacto_atributo WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,))
     x("UPDATE telefono_vinculo SET sucursal_id = NULL WHERE sucursal_id IN "
       "(SELECT id FROM sucursal WHERE fuente_tipo = 'carga' AND fuente_id = %s)", (cid,))
     x("UPDATE contacto SET sucursal_id = NULL WHERE sucursal_id IN "
@@ -248,6 +251,7 @@ def _borrar_carga(conn, carga, tarea_id):
           AND NOT EXISTS (SELECT 1 FROM intento i WHERE i.telefono_id = t.id)
           AND NOT EXISTS (SELECT 1 FROM item_parte_estado p WHERE p.telefono_id = t.id)
           AND NOT EXISTS (SELECT 1 FROM no_llamar l WHERE l.alcance = 'telefono' AND l.objeto_id = t.id)""", (tels,))
+    intermediarios.reevaluar(conn, tels, actor)
 
     # 3. La carga, sus tareas y su archivo
     x("DELETE FROM revision_fusion WHERE carga_id = %s", (cid,))

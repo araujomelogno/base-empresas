@@ -62,7 +62,8 @@ export async function detalle(ctx, id) {
       { t: 'Respondente objetivo', k: 'respondente_objetivo' },
       { t: 'Link base', f: p => p.link_base ? `<span class="small mono">${esc(p.link_base)}</span>` : '<span class="muted">—</span>' },
       { t: 'Plantilla .sav', f: p => p.tiene_plantilla ? est('ok', 'sí') : est('pendiente', 'no') },
-      { t: 'Estados', f: p => Object.entries(p.estados || {}).map(([s, n]) => est(s, `${etiqueta(s)} ${n}`)).join(' ') || '—' },
+      { t: 'Completas (.sav)', cls: 'num', f: p => `${num(p.completas_sav)}${p.completas_sin_asociar ? `<div class="small muted">${num(p.completas_sin_asociar)} sin asociar</div>` : ''}` },
+      { t: 'Estados de los ítems', f: p => Object.entries(p.estados || {}).map(([s, n]) => est(s, `${etiqueta(s)} ${n}`)).join(' ') || '—' },
       { t: '', f: p => ctx.puede('jefe') ? `<button class="btn btn-outline btn-sm" data-editar="${p.id}">Editar</button>` : '' },
     ], e.partes, 'Sin partes'), ctx.puede('jefe') ? `<button class="btn btn-outline btn-sm" id="es-parte">+ Parte</button>` : '', true) +
     card('Muestras', tabla([
@@ -152,7 +153,9 @@ export async function nuevaMuestra(ctx, estudioId) {
         <div class="field-hint">Vacío = todos. Sin filtros, entra toda la base disponible.</div></div>
       ${filtrables.length ? `<div class="card-header-title mb mt">Atributos</div>${filtrables.map(filtroAtributo).join('')}` : ''}
       <div class="form-group mt"><label>Origen de los teléfonos</label>${chips('origenes', origenes.map(o => [o.codigo, o.nombre]))}
-        <div class="field-hint">Solo empresas con al menos un teléfono discable de estos orígenes. Sin selección, no filtra.</div></div>`)}
+        <div class="field-hint">Solo empresas con al menos un teléfono discable de estos orígenes. Sin selección, no filtra.</div></div>
+      <label class="check mt"><input type="checkbox" id="m-provisoria" /> Incluir la base provisoria (empresas sin RUT)</label>
+      <div class="field-hint">Desmarcado por defecto: no cambia el marco de los estudios en curso. Las provisorias entran con su estrato y las mismas reglas de disponibilidad.</div>`)}
     ${card('2 · Estratos', `<div class="form-group"><label>Estratificar por</label>${chips('por', estratif)}</div>
       <button class="btn btn-dark" id="m-marco">Ver marco disponible</button><div id="m-marco-res" class="mt"></div>`)}</div>
     <div id="m-estratos"></div>`;
@@ -163,7 +166,7 @@ export async function nuevaMuestra(ctx, estudioId) {
     const ciiu = $('#m-ciiu').value.split(/[,\s]+/).filter(Boolean);
     if (ciiu.length) f.ciiu = ciiu;
     return { filtros: f, atributos: leerFiltrosAtributo(filtrables), origenes: chipsSel(main(), 'origenes'),
-      estratificar_por: chipsSel(main(), 'por') };
+      estratificar_por: chipsSel(main(), 'por'), ...($('#m-provisoria').checked ? { incluir_provisoria: true } : {}) };
   };
   $('#m-marco').onclick = async () => {
     const c = criteriosBase();
@@ -202,6 +205,43 @@ export async function nuevaMuestra(ctx, estudioId) {
 }
 
 // ── Muestra ──
+// F1.1: la lista a la que lleva el contador «Muestras activas» de Inicio
+export async function muestras(ctx, params) {
+  const estado = params.get('estado') || 'activa';
+  const lista = await api.get('/muestras', { estado });
+  const titulo = { activa: 'Muestras activas', cerrada: 'Muestras cerradas', borrador: 'Muestras en borrador' }[estado] || 'Muestras';
+  const sinEmpresas = lista.filter(m => m.estado === 'activa' && !m.n_items).length;
+  main().innerHTML = pageHeader(titulo, '', 'Las muestras activas bloquean a sus empresas para otras muestras.') +
+    (sinEmpresas ? `<div class="alert alert-warn"><span><strong>${sinEmpresas === 1 ? 'Una muestra activa no tiene' : `${num(sinEmpresas)} muestras activas no tienen`} empresas:</strong>
+      se borraron todas sus empresas (borrar empresa o borrar carga). Cerrala o borrala desde acá.</span></div>` : '') +
+    card(titulo, tabla([
+      { t: 'Estudio', f: m => `<a class="link" href="#/estudios/${m.estudio_id}">${esc(m.estudio_nombre)}</a>` },
+      { t: 'Muestra', f: m => `<a class="link td-strong" href="#/muestras/${m.id}">${esc(m.nombre)}</a>` },
+      { t: 'Estado', f: m => (m.estado === 'activa' && !m.n_items ? est('sospechoso', 'activa, sin empresas') : estDe('muestra', m.estado)) +
+        (['error', 'cancelada'].includes(m.tarea_borrado) ? ` ${est('error', 'borrado sin terminar')}` : '') },
+      { t: 'Ítems', cls: 'num', f: m => num(m.n_items) }, { t: 'Liberados', cls: 'num', f: m => num(m.n_liberados) },
+      { t: 'Sorteada', f: m => m.sorteada ? fechaHora(m.sorteada) : '—' },
+      { t: '', f: m => m.estado === 'activa' && !m.n_items ? `<span class="gap">
+        ${ctx.puede('jefe') ? `<button class="btn btn-outline btn-sm" data-cerrar="${m.id}">Cerrar</button>` : ''}
+        ${ctx.puede() ? `<button class="btn btn-danger btn-sm" data-borrar="${m.id}" data-nombre="${esc(m.nombre)}">Borrar</button>` : ''}</span>` : '' },
+    ], lista, estado === 'activa' ? 'No hay muestras activas' : 'No hay muestras'), '', true);
+  $$('[data-cerrar]').forEach(b => b.onclick = async () => {
+    if (!await confirmar('Cerrar muestra', 'La muestra no tiene empresas. Al cerrarla deja de contar como activa.', 'Cerrar', 'btn-danger')) return;
+    await api.post(`/muestras/${b.dataset.cerrar}/cerrar`);
+    toast('Muestra cerrada', 'ok'); muestras(ctx, params);
+  });
+  $$('[data-borrar]').forEach(b => b.onclick = async () => {
+    const ok = await confirmarEscrito({ titulo: `Borrar muestra «${b.dataset.nombre}»`, palabra: 'BORRAR',
+      cuerpo: '<p>La muestra no tiene empresas. Se elimina junto con su marco congelado. <strong>No se puede deshacer.</strong> Queda el registro en Auditoría.</p>' });
+    if (!ok) return;
+    try {
+      await borrarConTarea(`/muestras/${b.dataset.borrar}`, 'Borrar muestra', 'Borrando la muestra');
+      toast('Muestra borrada', 'ok');
+    } catch (err) { toast(err.message, 'err'); }
+    muestras(ctx, params);
+  });
+}
+
 function criteriosTexto(c, atributos, origenes) {
   const nombreA = Object.fromEntries(atributos.map(a => [a.clave, a.nombre]));
   const nombreO = Object.fromEntries(origenes.map(o => [o.codigo, o.nombre]));
@@ -222,6 +262,10 @@ export async function muestra(ctx, id) {
     `<button class="btn btn-outline" id="mu-verificar">Verificar reproducibilidad</button>` +
     (m.estado === 'activa' && ctx.puede('jefe') ? `<button class="btn btn-outline btn-del" id="mu-cerrar">Cerrar muestra</button>` : '') +
     (ctx.puede() ? `<button class="btn btn-danger" id="mu-borrar">Borrar muestra</button>` : '')) +
+    (m.borrado_fallido ? `<div class="alert alert-error"><span><strong>El borrado de esta muestra no terminó</strong>
+      (tarea #${m.borrado_fallido.id}, ${esc(etiqueta(m.borrado_fallido.estado))}${m.borrado_fallido.terminado ? ` el ${fechaHora(m.borrado_fallido.terminado)}` : ''}${m.borrado_fallido.error ? `: ${esc(m.borrado_fallido.error)}` : ''}).
+      La muestra sigue existiendo${m.estado === 'activa' ? ' y cuenta como activa' : ''}. Volvé a usar «Borrar muestra».</span></div>` : '') +
+    (m.estado === 'activa' && !m.avance.length ? `<div class="alert alert-warn"><span><strong>Activa, sin empresas:</strong> se borraron todas sus empresas. Cerrala o borrala para que deje de contar como activa.</span></div>` : '') +
     (m.n_items_borrados ? `<div class="alert alert-warn"><span><strong>${num(m.n_items_borrados)} empresa${m.n_items_borrados > 1 ? 's' : ''}
       borrada${m.n_items_borrados > 1 ? 's' : ''} después del sorteo.</strong> El marco congelado no cambia: «Verificar reproducibilidad» las tiene en cuenta.</span></div>` : '') +
     (r.avisos && r.avisos.length ? `<div class="alert alert-warn"><div><strong>Avisos del sorteo</strong><ul class="aviso-lista">${r.avisos.map(a => `<li>${esc(a)}</li>`).join('')}</ul></div></div>` : '') +
@@ -236,9 +280,23 @@ export async function muestra(ctx, id) {
       <div class="form-group"><label>Orden de los teléfonos</label><select class="fselect" id="mu-orden">
         <option value="prioridad" ${exp.orden === 'prioridad' ? 'selected' : ''}>Prioridad de origen y, dentro de cada origen, verificados primero</option>
         <option value="verificados" ${exp.orden === 'verificados' ? 'selected' : ''}>Verificados primero, sin mirar el origen</option></select></div>
+      <details class="map-bloque" id="mu-incluir"><summary>Qué incluir</summary>
+        <div class="form-group"><label>Atributos de empresa <span class="small muted">(<a class="link" href="javascript:void 0" data-todos="atr">todos</a> · <a class="link" href="javascript:void 0" data-ninguno="atr">ninguno</a>)</span></label>
+          ${atributos.filter(a => (a.ambito || 'empresa') === 'empresa' && a.activo).map(a => `<label class="check"><input type="checkbox" data-inc-atr="${esc(a.clave)}" ${exp.atributos_excluidos.includes(a.clave) ? '' : 'checked'} /> ${esc(a.nombre)}</label>`).join('') || '<div class="small muted">No hay atributos de empresa activos.</div>'}</div>
+        <div class="form-group"><label>Números</label><select class="fselect" id="mu-numeros">
+          <option value="discables" ${exp.numeros === 'discables' ? 'selected' : ''}>Todos los discables (verificados y sin verificar)</option>
+          <option value="verificados" ${exp.numeros === 'verificados' ? 'selected' : ''}>Solo los verificados</option></select></div>
+        ${ctx.me.exportar_contactos ? `<div class="form-group"><label class="check"><input type="checkbox" id="mu-contactos" ${exp.contactos ? 'checked' : ''} /> <strong>Contactos</strong> (dato personal: tu usuario tiene el permiso)</label>
+          <div class="chips-inline">${[['nombre', 'Nombre'], ['cargo', 'Cargo'], ['area', 'Área'], ['email', 'Email'], ['telefonos', 'Teléfonos del contacto']].map(([k, t]) =>
+            `<label class="check"><input type="checkbox" data-inc-ccampo="${k}" ${exp.contacto_campos.includes(k) ? 'checked' : ''} /> ${t}</label>`).join('')}
+          ${atributos.filter(a => a.ambito === 'contacto' && a.activo).map(a => `<label class="check"><input type="checkbox" data-inc-catr="${esc(a.clave)}" ${exp.atributos_contacto_excluidos.includes(a.clave) ? '' : 'checked'} /> ${esc(a.nombre)}</label>`).join('')}</div>
+          <div class="field-hint">Van en columnas contacto_1_*, contacto_2_*… (hasta ${num(m.contactos_por_empresa_csv || 3)} por empresa; primero el que coincide con el respondente objetivo de la parte).</div></div>` : ''}
+        <div class="field-hint">La elección queda guardada en la muestra para la próxima exportación.</div></details>
+      <div class="form-group"><label>Formato</label><select class="fselect" id="mu-formato">
+        <option value="ucontact">uContact: un renglón por teléfono</option><option value="planilla">Planilla de la muestra: un renglón por empresa</option></select></div>
       <div id="mu-csv-res" class="small muted mb"></div>
       <button class="btn btn-orange" id="mu-csv">Descargar CSV</button>
-      <p class="field-hint mt">Un renglón por teléfono discable de cada ítem liberado y pendiente en la parte. Nunca incluye intermediarios, inexistentes, "no corresponde" ni no llamar.${ctx.me.exportar_contactos ? '' : ' Tu usuario no tiene permiso para exportar contactos personales: la columna de contacto sale vacía.'}</p>`
+      <p class="field-hint mt">Un renglón por teléfono discable de cada ítem liberado y pendiente en la parte. Nunca incluye intermediarios, inexistentes, "no corresponde" ni no llamar.${ctx.me.exportar_contactos ? '' : ' Tu usuario no tiene permiso para exportar contactos personales: no salen en el archivo.'}</p>`
       : '<div class="muted small">Solo se exporta una muestra activa, con rol coordinador o jefe de proyecto.</div>')}</div>` +
     card('Avance por estrato', tabla([
       { t: 'Estrato', f: x => `<span class="td-strong">${esc(x.estrato)}</span>` }, { t: 'Titulares', cls: 'num', k: 'titulares' },
@@ -249,21 +307,41 @@ export async function muestra(ctx, id) {
       { t: '', f: x => m.estado === 'activa' && ctx.puede('jefe') && x.reemplazos > x.reemplazos_liberados
         ? `<button class="btn btn-outline btn-sm" data-liberar="${esc(x.estrato)}" data-max="${x.reemplazos - x.reemplazos_liberados}">Liberar reemplazos</button>` : '' },
     ], m.avance), '', true) +
-    `<div class="card mt"><div class="card-header"><div class="card-header-title">Ítems</div><div class="gap">
-      <select class="fselect" id="mu-estrato" style="width:auto"><option value="">Todos los estratos</option>${m.avance.map(x => `<option>${esc(x.estrato)}</option>`).join('')}</select></div></div>
-      <div class="card-body tight" id="mu-items"></div></div>`;
+    `<div class="card mt"><div class="card-header"><div class="card-header-title">Empresas de la muestra <span class="muted small" id="mu-total"></span></div></div>
+      <div class="card-body"><div class="toolbar">
+      <input type="search" class="grow" id="mu-q" style="min-width:260px" placeholder="RUT, razón social o EC_ID_ITEM…" />
+      <select class="fselect" id="mu-estrato" style="width:auto"><option value="">Todos los estratos</option>${m.avance.map(x => `<option>${esc(x.estrato)}</option>`).join('')}</select>
+      <select class="fselect" id="mu-rol" style="width:auto"><option value="">Titulares y reemplazos</option><option value="titular">Titulares</option><option value="reemplazo">Reemplazos</option></select>
+      <select class="fselect" id="mu-liberado" style="width:auto"><option value="">Liberados o no</option><option value="true">Liberados</option><option value="false">No liberados</option></select>
+      <select class="fselect" id="mu-eparte" style="width:auto"><option value="">En cualquier parte</option>${m.partes.map(p => `<option value="${p.id}">${esc(p.nombre)}</option>`).join('')}</select>
+      <select class="fselect" id="mu-estado" style="width:auto"><option value="">Cualquier estado</option>${['pendiente', 'en_curso', 'completa', 'rechazo', 'no_contactable', 'fuera_de_marco'].map(x => `<option value="${x}">${esc(etiqueta(x))}</option>`).join('')}</select>
+      </div></div>
+      <div class="card-body tight" id="mu-items"></div><div class="card-body gap" style="justify-content:space-between" id="mu-pag"></div></div>`;
 
+  let pagina = 1;
   const items = async () => {
-    const lista = await api.get(`/muestras/${id}/items`, { estrato: $('#mu-estrato').value });
+    const r = await api.get(`/muestras/${id}/items`, { estrato: $('#mu-estrato').value, rol: $('#mu-rol').value,
+      liberado: $('#mu-liberado').value, parte_id: $('#mu-eparte').value, estado: $('#mu-estado').value,
+      q: $('#mu-q').value.trim(), pagina });
+    const lista = r.items;
+    $('#mu-total').textContent = `· ${num(r.total)} empresa${r.total === 1 ? '' : 's'}`;
+    $('#mu-pag').innerHTML = `<span class="small muted">${num(r.total)} empresas · página ${r.pagina} de ${r.paginas} · ${r.por_pagina} por página</span>
+      <span class="gap"><button class="btn btn-outline btn-sm" id="mu-ant" ${r.pagina <= 1 ? 'disabled' : ''}>‹ Anterior</button>
+      <button class="btn btn-outline btn-sm" id="mu-sig" ${r.pagina >= r.paginas ? 'disabled' : ''}>Siguiente ›</button></span>`;
+    $('#mu-ant').onclick = () => { pagina--; items(); };
+    $('#mu-sig').onclick = () => { pagina++; items(); };
     $('#mu-items').innerHTML = tabla([
-      { t: 'Ítem', cls: 'num', k: 'id' }, { t: 'Estrato', k: 'estrato' }, { t: 'Orden', cls: 'num', k: 'orden' }, { t: 'Rol', f: i => est(i.rol) },
+      { t: 'EC_ID_ITEM', cls: 'num', k: 'id' }, { t: 'Estrato', k: 'estrato' }, { t: 'Orden', cls: 'num', k: 'orden' }, { t: 'Rol', f: i => est(i.rol) },
       { t: 'Empresa', f: i => `<a class="link" href="#/empresas/${i.rut}">${esc(i.razon_social || i.rut)}</a>` },
       { t: 'Liberado', f: i => i.liberado ? `sí <span class="small muted">${esc(i.liberado_motivo || '')}</span>` : 'no' },
       { t: 'Intentos', cls: 'num', k: 'intentos' },
       { t: 'Estado por parte', f: i => Object.entries(i.estados || {}).map(([p, s]) => `<span class="small muted">${esc(p)}:</span> ${est(s)}`).join(' ') || '—' },
-    ], lista, 'Sin ítems');
+    ], lista, 'Ninguna empresa con esos filtros');
   };
-  $('#mu-estrato').onchange = items;
+  const filtrar = () => { pagina = 1; items(); };  // los filtros se mantienen al cambiar de página
+  ['#mu-estrato', '#mu-rol', '#mu-liberado', '#mu-eparte', '#mu-estado'].forEach(sel => { $(sel).onchange = filtrar; });
+  $('#mu-q').addEventListener('keydown', e => { if (e.key === 'Enter') filtrar(); });
+  $('#mu-q').addEventListener('search', filtrar);
   items();
   const recargar = () => muestra(ctx, id);
   $('#mu-verificar').onclick = async () => {
@@ -309,20 +387,29 @@ export async function muestra(ctx, id) {
     const resumen = async () => {
       const s = await api.get(`/muestras/${id}/csv/resumen`, { parte_id: $('#mu-parte').value });
       $('#mu-csv-res').innerHTML = `${num(s.renglones)} renglones para ${num(s.items)} de ${num(s.items_pendientes)} ítems pendientes en la parte · ${s.items_sin_telefono ? `<strong>${num(s.items_sin_telefono)} sin teléfono discable</strong>` : "todos tienen teléfono"}` +
-        (s.items_sin_telefono_por_origen ? ` · <strong>${num(s.items_sin_telefono_por_origen)} sin teléfono exportable por el filtro de origen</strong>` : '');
+        (s.items_sin_telefono_por_origen ? ` · <strong>${num(s.items_sin_telefono_por_origen)} sin teléfono exportable por el filtro de origen</strong>` : '') +
+        (s.columnas_extra && s.columnas_extra.length ? `<div>Columnas agregadas: ${esc(s.columnas_extra.filter(c => !/^contacto_[2-9]/.test(c)).join(', '))}${s.columnas_extra.some(c => c.startsWith('contacto_2')) ? ', …' : ''}</div>` : '');
     };
     const guardarExportacion = async () => {
-      try {
-        await api.put(`/muestras/${id}/exportacion`, { origenes: chipsSel(main(), 'exp-origenes'), orden: $('#mu-orden').value });
-      } catch (e) { toast(e.message, 'err'); }
+      const d = { origenes: chipsSel(main(), 'exp-origenes'), orden: $('#mu-orden').value, numeros: $('#mu-numeros').value,
+        atributos_excluidos: $$('[data-inc-atr]').filter(x => !x.checked).map(x => x.dataset.incAtr) };
+      if ($('#mu-contactos')) Object.assign(d, { contactos: $('#mu-contactos').checked,
+        contacto_campos: $$('[data-inc-ccampo]').filter(x => x.checked).map(x => x.dataset.incCcampo),
+        atributos_contacto_excluidos: $$('[data-inc-catr]').filter(x => !x.checked).map(x => x.dataset.incCatr) });
+      try { await api.put(`/muestras/${id}/exportacion`, d); } catch (e) { toast(e.message, 'err'); }
       resumen();
     };
+    $$('#mu-incluir input, #mu-numeros').forEach(x => { x.onchange = guardarExportacion; });
+    $$('[data-todos], [data-ninguno]').forEach(a => a.onclick = () => {
+      $$('[data-inc-atr]').forEach(x => { x.checked = !!a.dataset.todos; });
+      guardarExportacion();
+    });
     activarChips($('#mu-csv').closest('.card'), guardarExportacion);
     $('#mu-orden').onchange = guardarExportacion;
     $('#mu-parte').onchange = resumen;
     resumen();
     $('#mu-csv').onclick = async () => {
-      const r = await api.descargar(`/muestras/${id}/csv`, { parte_id: $('#mu-parte').value });
+      const r = await api.descargar(`/muestras/${id}/csv`, { parte_id: $('#mu-parte').value, formato: $('#mu-formato').value });
       toast(`Descargado ${r.nombre} (${r.headers.get('X-Renglones')} renglones)`, 'ok');
     };
   }

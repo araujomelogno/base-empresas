@@ -182,7 +182,7 @@ def main():
                      {"estrato": "Pequeña", "n": 20, "reemplazos": 8}, {"estrato": "Micro", "n": 20, "reemplazos": 8}]}}))
     ok(api.post(f"/api/muestras/{m['id']}/sortear", headers=H["jefe"], json={"semilla": 20261029}))
     parte_a = ok(api.get(f"/api/estudios/{est['id']}", headers=H["jefe"]))["partes"][0]
-    items = ok(api.get(f"/api/muestras/{m['id']}/items", headers=H["jefe"]))
+    items = ok(api.get(f"/api/muestras/{m['id']}/items", params={"por_pagina": 500}, headers=H["jefe"]))["items"]
     ok(api.post(f"/api/muestras/{m['id']}/liberar", headers=H["jefe"], json={"estrato": "Grande", "cantidad": 2,
                                                                               "motivo": "Dos rechazos en la primera semana"}))
     # Llamadas del CDR: teléfonos de la muestra, internos y números fuera de la base

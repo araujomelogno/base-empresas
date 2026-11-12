@@ -124,7 +124,9 @@ def test_sav_propuesta_conteos_y_aplicacion(api, sql):
     assert m["identificador"] == {"variable": "EC_ID_ITEM", "tipo": "id_item"}
     assert m["variables"]["calidad_tel"] == "EC_CALIDAD_TEL" and m["variables"]["fecha"] == "datesubmitted"
     assert m["valores"]["calidad_tel"]["3"] == "intermediario" and m["valores"]["calidad_tel"]["2"] == "no_corresponde"
-    assert m["valores"]["resultado"]["1"] == "completa"
+    # D39: el resultado y el estado de Alchemer ya no se mapean (toda fila es una completa)
+    assert "resultado" not in m["variables"] and "estado_alchemer" not in m["variables"]
+    assert "resultado" not in m["valores"] and "estado_alchemer" not in m["valores"]
     k = a["conteos"]
     assert (k["asociadas"], k["sin_asociar"]) == (3, 1)
     assert "calidad_tel: el 99 quedó sin mapear: 1 filas" in k["avisos"]
@@ -146,11 +148,13 @@ def test_sav_propuesta_conteos_y_aplicacion(api, sql):
     ficha1 = api.get(f"/empresas/{items[1]['rut']}").json()
     tel1 = {t["e164"]: t for t in ficha1["telefonos"]}
     assert tel1["+59829000001"]["estado"] == "intermediario" and tel1["+59829000001"]["intermediario"] == "confirmado"
-    assert tel1["+59899777888"]["estado"] == "sin_verificar" and tel1["+59899777888"]["fuente_tipo"] == "sala"
+    # F2.1: el número adicional queda verificado con origen sala
+    assert tel1["+59899777888"]["estado"] == "verificado" and tel1["+59899777888"]["fuente_tipo"] == "sala"
+    assert [o["codigo"] for o in tel1["+59899777888"]["origenes"]] == ["sala"]
+    # D39: toda fila asociada deja el ítem «completa», diga lo que diga EC_RESULTADO
     estados = {r["item_id"]: r["estado"] for r in sql.execute("SELECT item_id, estado FROM item_parte_estado WHERE parte_id = %s",
                                                                (parte["id"],))}
-    assert estados[items[0]["id"]] == "completa" and estados[items[1]["id"]] == "fuera_de_marco"
-    assert estados[items[2]["id"]] == "rechazo"
+    assert [estados[it["id"]] for it in items[:3]] == ["completa"] * 3
     # linaje del cambio de vínculo: estudio, parte, encuestador, fecha
     h = sql.execute("SELECT detalle FROM telefono_vinculo_historia WHERE fuente_tipo = 'sala' AND estado = 'intermediario'").fetchone()
     assert h["detalle"]["estudio_id"] == e["id"] and h["detalle"]["parte_id"] == parte["id"]
@@ -179,20 +183,22 @@ def test_sav_plantilla_precargada_y_remapeo(api, sql):
     e, mid, items = preparar(api, sql, n=2)
     parte = e["partes"][0]
     # sin etiquetas en el archivo: el mapeo declarado gana
-    filas = [fila_sav(1, items[0], EC_RESULTADO=7), fila_sav(2, items[1], EC_RESULTADO=8)]
+    filas = [fila_sav(1, items[0], EC_TEL_USADO="29000000", EC_CALIDAD_TEL=7),
+             fila_sav(2, items[1], EC_TEL_USADO="29000001", EC_CALIDAD_TEL=8)]
     a, ing = ingerir(api, parte["id"], hacer_sav(filas, etiquetas=False))
-    assert ing["conteos"]["sin_mapear"]["resultado"] == {"7": 1, "8": 1}
+    assert ing["conteos"]["sin_mapear"]["calidad_tel"] == {"7": 1, "8": 1}
     # el crudo quedó guardado: se corrige el mapeo sin volver a subir el archivo
     m = ing["mapeo"]
-    m["valores"]["resultado"] = {"7": "completa", "8": "rechazo"}
+    m["valores"]["calidad_tel"].update({"7": "corresponde", "8": "no_corresponde"})
     r = api.post(f"/sav/{a['ingesta_id']}/remapear", rol="coordinador", json={"ingesta_id": a["ingesta_id"], "mapeo": m})
     assert r.status_code == 200, r.text
-    estados = {r["estado"] for r in sql.execute("SELECT estado FROM item_parte_estado WHERE parte_id = %s", (parte["id"],))}
-    assert estados == {"completa", "rechazo"}
+    estados = {r["estado"] for r in sql.execute("SELECT v.estado FROM telefono_vinculo v JOIN telefono t ON t.id = v.telefono_id"
+                                                " WHERE t.e164 IN ('+59829000000', '+59829000001')")}
+    assert estados == {"verificado", "no_corresponde"}
     # la próxima ola trae el mapeo precargado
-    a2 = api.subir(f"/partes/{parte['id']}/sav/analizar", "ola2.sav", hacer_sav([fila_sav(3, items[0], EC_RESULTADO=7)], etiquetas=False),
+    a2 = api.subir(f"/partes/{parte['id']}/sav/analizar", "ola2.sav", hacer_sav([fila_sav(3, items[0], EC_CALIDAD_TEL=7)], etiquetas=False),
                    rol="coordinador").json()
-    assert a2["origen_mapeo"] == "plantilla de la parte" and a2["mapeo"]["valores"]["resultado"]["7"] == "completa"
+    assert a2["origen_mapeo"] == "plantilla de la parte" and a2["mapeo"]["valores"]["calidad_tel"]["7"] == "corresponde"
 
 
 def test_sav_sin_id_item_usa_rut(api, sql):

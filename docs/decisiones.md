@@ -46,6 +46,11 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 | D36 | Borrado definitivo de empresas y cargas, solo administrador | Vigente (11/11/2026; ajustada por D37) |
 | D37 | Borrar estudios y muestras, cancelar tareas al borrar y verificar la reproducibilidad con borrados (marco inmutable) | Vigente (11/11/2026) |
 | D38 | Qué es una llamada y cómo se cuentan las llamadas a empresas (criterios del dashboard, sin filtro de campaña, filtro por empresa) | Vigente (11/11/2026) |
+| D39 | Toda fila del .sav es una encuesta completa; el número usado y el adicional quedan verificados | Vigente (12/11/2026) |
+| D40 | Los contactos como entidad: cargas, alta y edición manual, atributos de contacto y borrado definitivo | Vigente (12/11/2026; cambia lo dicho sobre contactos en D34) |
+| D41 | Normalización y fusión de atributos (clave automática, similitud con pg_trgm, «Fusionar con…») | Vigente (12/11/2026) |
+| D42 | Base provisoria: empresas sin RUT, sorteables, que pasan a la definitiva al tener RUT o al fusionarse | Vigente (12/11/2026) |
+| D43 | Reglas de fusión en cascada, exactas o flexibles, con las coincidencias decididas en el preview | Vigente (12/11/2026) |
 
 ## D01 — Cloud SQL Postgres como núcleo
 
@@ -340,7 +345,7 @@ La configuración inicial usa 6 meses de enfriamiento desde el último contacto 
 - **El origen del teléfono es evidencia del vínculo**, no un atributo del teléfono: `telefono_vinculo_origen` (vínculo, origen, carga, fecha), único por vínculo y origen. Un número que llega de dos orígenes queda con los dos; un teléfono cuenta en cada origen y los totales lo cuentan una vez. El catálogo `origen_telefono` tiene prioridad (el orden del CSV) y tres orígenes de sistema: **Sala** (`EC_TEL_ALT`), **Manual** (ficha) y **Sin dato** (vínculos anteriores al cambio, que la migración deja así).
 - **Origen por columna o fijo, con origen por defecto obligatorio.** El mapeo guarda `origenes_telefono` ({columna de teléfono: {columna} | {fijo}}) y `origen_defecto`; `telefonos` sigue siendo la lista de columnas, así las plantillas viejas siguen abriendo.
 - **Traducción de valores confirmada, nunca automática.** Los valores de origen y de atributos de lista que no coinciden exactamente con el catálogo se listan con su cantidad de filas; se sugiere sin mayúsculas, tildes ni espacios, pero la API rechaza la carga mientras quede alguno sin traducir. Es el criterio de la ingesta del .sav (D23). La traducción queda en la plantilla del tipo de fuente.
-- **Sin contactos en las cargas.** Se generan en el campo (`EC_RESP_*` del .sav). Una plantilla vieja con campos de contacto se abre y esos campos se ignoran con un aviso.
+- ~~**Sin contactos en las cargas.** Se generan en el campo (`EC_RESP_*` del .sav). Una plantilla vieja con campos de contacto se abre y esos campos se ignoran con un aviso.~~ **Cambiado por D40 (D-d, 12/11/2026):** los contactos pueden venir en una carga (bloque «Contacto», uno por fila) y las plantillas viejas con campos de contacto pasan a usarlos.
 - **«Descartada» ≠ «deshecha».** Descartar una carga en preview o en error la deja `descartada`; `deshecha` queda solo para una carga confirmada que se anuló. La migración 0006 pasa a `descartada` las deshechas que nunca se confirmaron. Deshacer también borra el origen que la carga sumó a vínculos que ya existían.
 - **Sorteo y CSV.** Los filtros por atributo y por origen quedan en `muestra.criterios` y entran al snapshot (D18), así la muestra se reproduce con su semilla. El filtro de origen es una regla más del cuadro de exclusiones (`filtro_origen`). La exportación guarda en `muestra.exportacion` los orígenes elegidos y el orden (por prioridad de origen y después verificados, por defecto), y suma la columna `origen_telefono`.
 - **Fusiones.** El vínculo que sobrevive hereda los orígenes del que se borra; deshacer la fusión los devuelve.
@@ -413,6 +418,85 @@ La configuración inicial usa 6 meses de enfriamiento desde el último contacto 
 - **Guardar todas las llamadas del CDR, también las que no cruzan:** no se guardan (no son de empresas de la base); por eso las llamadas por encuestador del tablero siguen contando solo las llamadas a empresas (P1.1 queda para cuando se decida guardarlas).
 
 **Consecuencias.** Migración `0009_conteo_llamadas.sql` (tabla e índices). El conteo nuevo vive en el job: hay que desplegar `api` y `cdr`. Sin costo de infraestructura.
+
+## D39 — Toda fila del .sav es una encuesta completa
+
+**Contexto.** En la primera ingesta real el .sav no traía `EC_RESULTADO` ni el `status` de Alchemer mapeados: las filas quedaron sin resultado, no contaron como encuestas, no marcaron el ítem ni actualizaron el último contacto efectivo. Además el número con el que se habló (`EC_TEL_USADO`) y el adicional (`EC_TEL_ALT`) entraban «sin verificar», y una fila sin aplicar no decía por qué. (Spec: `specs/SPEC_mejoras_sav_contactos_atributos_identidad.md`, decisiones D-a y D-b de Germán Araújo, 12/11/2026.)
+
+**Decisión.**
+
+- **Toda fila del .sav con response_id es una encuesta completa** (Alchemer exporta solo las completas). El mapeo ya no pide «resultado» ni «estado de Alchemer»: los mapeos y plantillas viejos que los tienen se limpian al usarlos. Si la fila está asociada a un ítem, el ítem queda «completa» en la parte (el estado más avanzado, no retrocede), y la empresa actualiza su último contacto efectivo con la fecha de la fila, haya o no `contacto_efectivo` en la configuración.
+- **«Encuestas completas» cuenta las filas del .sav, asociadas o no** (tablero de Actividad, por encuestador con `EC_ENCUESTADOR` o «(sin encuestador)», detalle del estudio por parte y detalle de la ingesta). Los filtros de estudio toman las filas de las partes de ese estudio sin depender del ítem; con una muestra cuentan las filas asociadas a sus ítems; el período usa la fecha de la fila. La fila guarda fecha y encuestador (`sav_fila.fecha`, `sav_fila.encuestador`) para contarlas sin releer el archivo.
+- **Teléfonos de la sala:** `EC_TEL_USADO` y `EC_TEL_ALT` se crean si no existen, se vinculan con origen «sala» y quedan **verificados**, con historia del vínculo y el linaje de la fila. Se normalizan con los prefijos de salida de la configuración. **Q1: una calidad negativa explícita gana** («no corresponde», «intermediario», «inexistente» para el número usado): ese número no se verifica. Un intermediario confirmado por el data steward no se verifica (decisión humana).
+- **Motivo por fila** (`sav_fila.avisos`): «fila sin ítem asociado: en Conciliación», «EC_TEL_USADO no normalizable» (con el valor), «EC_TEL_USADO vacío», «EC_TEL_ALT vacío». El detalle de la ingesta los lista con conteos y filas de ejemplo. Al conciliar, la fila se aplica completa (teléfonos y contacto incluidos) y sale el aviso de «sin ítem».
+- **Contacto–teléfono** (`contacto_telefono`): el contacto queda relacionado con el número por el que se habló («se habló el …», con estudio y parte) y con `EC_TEL_ALT` («número del contacto»). Reemplaza `telefono_vinculo.contacto_id`, que admitía un contacto por número (se migró). Volver a ingerir no suma «veces».
+- **Línea de tiempo** con historia de contactos (`contacto_historia`, append-only con la misma excepción de purga que la historia de empresa) y lo que trajo cada ingesta agrupado en una línea desplegable («Ingesta .sav #12 (Estudio, Parte): 1 contacto nuevo, 1 teléfono verificado, ítem completo»).
+- **Migración de lo ya ingerido:** «Corregir mapeo → Reaplicar» (`sav.remapear`) aplica la regla nueva a cada ingesta existente.
+
+**Descartado.** Seguir buscando el resultado en una variable (Alchemer no exporta parciales); verificar igual un número que la sala marcó como que no corresponde (Q1).
+
+**Consecuencias.** Migración `0010_sav_contactos.sql`. Hay que reaplicar las ingestas existentes después de desplegar (guía `docs/despliegue_mejoras_sav_contactos.md`).
+
+## D40 — Los contactos como entidad
+
+**Contexto.** Los contactos solo los creaba el .sav: no se podían cargar, agregar, editar ni borrar, ni tenían atributos. D34 había decidido que las bases no traen contactos; en la práctica sí los traen (D-d).
+
+**Decisión.**
+
+- **Alta, edición y borrado manual** en la pestaña Contactos de la ficha, para administrador y data steward (coordinador y lectura reciben 403). Campos: nombre (obligatorio), cargo, área, email (validado), sucursal, teléfonos (de la empresa o uno nuevo, que se vincula como manual) y atributos de contacto. Cada campo que cambia queda en `contacto_historia` con fuente manual y el usuario. Si el nombre normalizado coincide con otro contacto de la empresa, se avisa y se ofrece editar el existente.
+- **Borrado definitivo** (dato personal, Ley 18.331): el contacto, su historia (purga), sus teléfonos de contacto, sus atributos y su «no llamar». En Auditoría queda `contacto.borrar` con el RUT de la empresa y el id del contacto, **sin el nombre**.
+- **Contactos en la carga** (bloque «Contacto» del mapeo): un contacto por fila; se identifica dentro de la empresa por nombre normalizado o email; si existe, se completan solo los campos vacíos; su teléfono se vincula con el origen de la fila y queda como «número del contacto». Sin nombre, la fila se ignora con aviso. Deshacer o borrar la carga quita los contactos que trajo. Con un contacto en el archivo, una columna «Email» genérica se propone como email del contacto.
+- **Atributos de contacto:** el catálogo tiene ámbito (`empresa` | `contacto`) y dos pestañas. Los valores van en `contacto_atributo` con historia. Se cargan desde la carga, desde el .sav (cualquier variable, con traducción de valores para las listas) y desde la ficha. No filtran ni estratifican el sorteo (P2). El ámbito no cambia después.
+- El rol de lectura sigue viendo «(dato personal oculto)», también en la línea de tiempo.
+
+**Descartado.** Deduplicar contactos entre empresas (fuera de alcance); varios contactos por fila de carga (P1).
+
+**Consecuencias.** Tablas `contacto_historia`, `contacto_telefono`, `contacto_atributo` (migración 0010).
+
+## D41 — Normalización y fusión de atributos
+
+**Contexto.** La clave de un atributo se escribía a mano, nada detectaba que «Cant. empleados» y «Cantidad de empleados» eran el mismo atributo y los valores de lista distinguían mayúsculas.
+
+**Decisión.**
+
+- **Solo nombre y tipo son obligatorios.** Una lista puede quedar sin opciones (se completan en la carga). **La clave se genera sola** del nombre (minúsculas, sin tildes, guiones bajos, hasta 40 caracteres; `_2`, `_3` si existe) y no cambia si cambia el nombre. La API sigue aceptando una clave explícita; la web nunca la pide.
+- **Atributos parecidos** con `pg_trgm` (extensión incluida en Cloud SQL): al mapear una carga, cada columna que no se reconoce se compara con nombres, claves y sinónimos (sin mayúsculas, tildes, puntuación ni palabras vacías como «de», «la», «cant.»), con umbral configurable (`umbral_similitud_atributos`, 0,6). Se ofrece «Usar ese atributo»: el nombre de la columna queda como sinónimo y la próxima base se mapea sola. Al crear un atributo parecido a otro se avisa.
+- **Valores de lista** sin distinguir mayúsculas, tildes ni espacios («SI», «si» y «Sí » son «Sí», sin pedir traducción); los parecidos («Exportadora» / «Exportador») se sugieren en la traducción, nunca se aplican solos. **Texto:** se recortan espacios y se puede normalizar a mayúscula inicial o MAYÚSCULAS por atributo.
+- **«Fusionar con…»** (solo administrador): A dentro de B, mismo ámbito, mismo tipo o B de texto. Los valores de A pasan a B como historia nueva (fuente `fusion`, `detalle.fusionado_de`) y se recalcula el vigente; nombres y sinónimos de A pasan a B; las opciones se unifican; A queda inactivo con la nota «fusionado en B» y nunca vuelve a tener valor vigente propio; las plantillas que usaban A se mapean a B. Bloqueado si A filtra o estratifica una muestra activa (se dice cuál). Auditoría `atributo.fusionar`.
+- El atributo de sistema `id_informado` (D42) no se edita, borra ni fusiona.
+
+**Consecuencias.** `CREATE EXTENSION pg_trgm` en la migración 0010 (lo crea el dueño de la base; ver la guía si Cloud SQL lo rechaza). Sin costo adicional.
+
+## D42 — Base provisoria: empresas sin RUT
+
+**Contexto.** Una base sin RUT (un directorio, un relevamiento web) se rechazaba entera aunque fueran empresas reales, y una fila con otro identificador se perdía (D-c).
+
+**Decisión.**
+
+- **Dos bases en la misma tabla** (`empresa.base`: `definitiva` | `provisoria`), para no duplicar teléfonos, contactos, muestras, CDR ni .sav. `rut` admite NULL **solo** en la provisoria (CHECK). Cada provisoria tiene un **código `P-` + id** (columna generada `codigo`, que en la definitiva es el RUT): sirve en la URL de la ficha, el buscador, la exportación y el .sav.
+- **Cargas:** destino «Base definitiva» (como siempre) o «Base provisoria» (RUT opcional). En la provisoria, una fila con RUT válido va a la definitiva (opción activada por defecto). En la definitiva, la opción «Enviar las filas sin RUT válido a la provisoria» (desactivada por defecto) evita rechazarlas. Un identificador que no es RUT válido queda en el atributo de sistema `id_informado`. Las reglas comparan contra las dos bases. El destino queda en la carga y en la plantilla.
+- **Pantalla «Base provisoria»** (data steward y administrador): código, razón social, teléfonos, carga, muestras, candidatas en la definitiva (teléfono, razón social y dirección parecidas, dominio, y el RUT que propuso el .sav), «Agregar RUT», «Fusionar con…», «Es otra empresa» y completar RUT por archivo `codigo_provisorio;rut` con preview. Inicio cuenta la provisoria aparte; «Empresas» sigue contando solo la definitiva.
+- **Pasar a la definitiva:** «Agregar RUT» con un RUT válido nuevo (`empresa.promover`, con historia del campo `rut`); si el RUT existe, se ofrece fusionar la provisoria dentro de esa empresa (fusión existente, reversible). Los ítems de muestra y las llamadas de la absorbida se ven desde la absorbente.
+- **Uso:** filtro «Base» en el buscador (definitiva por defecto); **Q2: «Incluir la base provisoria» viene desmarcado** en el sorteo (no cambia el marco de los estudios en curso; solo se guarda si se marca); las provisorias pasan por las mismas reglas de disponibilidad. La exportación agrega `EC_ID_EMPRESA` (código) y deja `EC_RUT` vacío; el .sav se asocia por `EC_ID_ITEM`. Un `EC_RUT` válido para una provisoria queda propuesto, no se aplica solo.
+
+**Descartado.** Una tabla aparte para la provisoria (duplicaba todo el modelo); enriquecer el RUT automáticamente (P2).
+
+**Consecuencias.** Migración `0011_base_provisoria.sql`. Las consultas que mostraban o enlazaban por RUT usan el código.
+
+## D43 — Reglas de fusión en cascada
+
+**Contexto.** La carga admitía una sola regla de fusión (`carga.regla_fusion`); hace falta una cascada (RUT, nombre, dirección…) y decidir los casos dudosos.
+
+**Decisión.**
+
+- **Lista ordenada de reglas por carga** (y en la plantilla): criterio (`rut`, `razon_social`, `telefono`, `dominio_web`, `direccion` con departamento, `email` de contacto) y tipo **exacta** (después de normalizar: tildes, mayúsculas, puntuación, sufijos societarios) o **flexible** (similitud `pg_trgm` ≥ umbral por regla, 0,85 por defecto). El RUT va siempre primero. Las cargas existentes se migran como lista de una regla.
+- **Por fila:** gana la primera regla con resultado. Exacta con una candidata: se fusiona sola. Exacta con varias, flexible, o una coincidencia que uniría dos RUT válidos distintos: **se consulta**. Ninguna: alta (en la definitiva con RUT; en la provisoria sin RUT si el destino o la opción lo permiten; si no, rechazo).
+- **«Coincidencias a decidir»** en el preview: la fila y su candidata lado a lado, regla y similitud; por fila «Fusionar», «Es otra empresa» o «Decidir después»; acciones masivas (≥ 95 %, ninguna). La confirmación usa esas decisiones, que quedan en la carga (`carga.decisiones`) y en Auditoría; lo que queda en «Decidir después» va a Revisión de fusiones con criterio y similitud.
+- **Deshacer la carga** revierte lo que se fusionó en ella (sus datos) y las provisorias que pasó a la definitiva (`carga_promocion`).
+
+**Descartado.** Fusionar sola una coincidencia flexible; unir dos RUT válidos distintos sin consultar.
+
+**Consecuencias.** Columnas `carga.reglas`, `carga.opciones`, `carga.decisiones`, `revision_fusion.similitud`; índices de trigramas sobre razón social y dirección. La API anterior (`regla_fusion`) sigue funcionando.
 
 ## Preguntas abiertas que heredan del PRD
 

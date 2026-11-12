@@ -22,12 +22,12 @@ from app import sav as savmod  # noqa: E402  (comun ya agregó api/ al path)
 
 UMBRAL = 95.0
 PLANTILLA = comun.FASE0 / "alchemer_bloque_estandar.json"
+# D39: toda fila del .sav es una encuesta completa; EC_RESULTADO ya no es parte del bloque
 BLOQUE = ["EC_ID_ITEM", "EC_RUT", "EC_TEL_USADO", "EC_CALIDAD_TEL", "EC_TEL_ALT", "EC_RESP_NOMBRE", "EC_RESP_CARGO",
-          "EC_RESP_AREA", "EC_RESULTADO"]
+          "EC_RESP_AREA"]
 # Variable del bloque → destino del mapeo de app.sav (EC_ID_ITEM es el identificador)
 DESTINO_BLOQUE = {"EC_RUT": "rut", "EC_TEL_USADO": "tel_usado", "EC_CALIDAD_TEL": "calidad_tel", "EC_TEL_ALT": "tel_alt",
-                  "EC_RESP_NOMBRE": "resp_nombre", "EC_RESP_CARGO": "resp_cargo", "EC_RESP_AREA": "resp_area",
-                  "EC_RESULTADO": "resultado"}
+                  "EC_RESP_NOMBRE": "resp_nombre", "EC_RESP_CARGO": "resp_cargo", "EC_RESP_AREA": "resp_area"}
 TEL_NOMBRES = ["EC_TEL_USADO", "tel_usado", "telefono_usado", "telefono", "tel", "phone"]
 
 
@@ -150,7 +150,8 @@ def analizar_sav(ruta, lista: Lista, plantilla=None, var_tel=None) -> dict:
         v, sm = savmod.valores_mapeados(f, mapeo)
         for destino, cod in sm.items():
             sin_mapear[(destino, cod)] += 1
-        resultados[v.get("resultado", "—")] += 1
+        if rid:
+            resultados["completa"] += 1  # D39: toda fila con response_id es una encuesta completa
         if "calidad_tel" in v:
             calidad[v["calidad_tel"]] += 1
     porcentaje = pct(c["asociadas"], c["filas"])

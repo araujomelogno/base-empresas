@@ -1,8 +1,10 @@
 """Empresas: buscador, ficha, edición manual, teléfonos, intermediarios y fusiones (R1.1, R1.2, R1.11)."""
+import re
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .. import actividad, auditoria, borrado, catalogos, config, empresas, intermediarios, rut as rutmod
+from .. import actividad, auditoria, borrado, catalogos, config, contactos, empresas, intermediarios, rut as rutmod
 from ..auth import Usuario, requiere, usuario_actual
 from ..db import get_conn
 
@@ -16,9 +18,28 @@ def me(u: Usuario = Depends(usuario_actual)):
 
 @router.get("/empresas")
 def buscar(q: str | None = None, departamento: str | None = None, tamano: str | None = None,
-           naturaleza: str | None = None, disponible: bool | None = None, pagina: int = 1,
+           naturaleza: str | None = None, disponible: bool | None = None, pagina: int = 1, base: str = "definitiva",
            conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
     where, args = ["e.baja IS NULL"], []
+    prov = empresas.CODIGO_PROVISORIO.match(q or "")
+    if base in ("definitiva", "provisoria") and not prov and _item_buscado(q) is None:
+        # F6.1: por defecto, solo la base definitiva; «ambas» no filtra. Un código P- o un #ítem van directo.
+        where.append("e.base = %s")
+        args.append(base)
+    if prov:
+        where.append("e.id = %s AND e.rut IS NULL")
+        args.append(int(prov.group(1)))
+        q = None
+    item = _item_buscado(q)
+    if item is not None:
+        # F1.4: «#1234» o «item:1234» busca por EC_ID_ITEM; si la empresa se fusionó, lleva a la que la absorbió
+        fila = conn.execute(
+            "WITH RECURSIVE c AS (SELECT e.id, e.fusionada_en, 0 AS n FROM muestra_item i JOIN empresa e ON e.id = i.empresa_id"
+            "  WHERE i.id = %s UNION ALL SELECT e.id, e.fusionada_en, c.n + 1 FROM c JOIN empresa e ON e.id = c.fusionada_en"
+            "  WHERE c.n < 20) SELECT id FROM c ORDER BY n DESC LIMIT 1", (item,)).fetchone()
+        where.append("e.id = %s")
+        args.append(fila["id"] if fila else -1)
+        q = None
     if q:
         digitos = "".join(ch for ch in q if ch.isdigit())
         if len(digitos) >= 4 and len(digitos) == len(q.replace(".", "").replace("-", "").replace(" ", "")):
@@ -41,16 +62,22 @@ def buscar(q: str | None = None, departamento: str | None = None, tamano: str | 
         args.append(disponible)
     pagina = max(1, pagina)
     filas = conn.execute(
-        "SELECT e.id, e.rut, e.razon_social, e.fantasia, e.departamento, e.tamano, e.ciiu, e.estado, n.codigo AS naturaleza,"
+        "SELECT e.id, e.codigo AS rut, e.base, e.razon_social, e.fantasia, e.departamento, e.tamano, e.ciiu, e.estado,"
+        " n.codigo AS naturaleza,"
         " e.ultimo_contacto_efectivo, d.disponible, d.reglas, d.hasta,"
         " (SELECT count(*) FROM v_vinculo_discable x WHERE x.empresa_id = e.id) AS telefonos_discables,"
         " count(*) OVER () AS total"
         " FROM empresa e LEFT JOIN naturaleza_juridica n ON n.id = e.naturaleza_id"
         " JOIN v_empresa_disponible d ON d.empresa_id = e.id"
-        f" WHERE {' AND '.join(where)} ORDER BY e.razon_social NULLS LAST, e.rut LIMIT 50 OFFSET %s",
+        f" WHERE {' AND '.join(where)} ORDER BY e.razon_social NULLS LAST, e.codigo LIMIT 50 OFFSET %s",
         (*args, (pagina - 1) * 50)).fetchall()
     total = filas[0]["total"] if filas else 0
-    return {"total": total, "pagina": pagina, "empresas": filas}
+    return {"total": total, "pagina": pagina, "empresas": filas, "item": item}
+
+
+def _item_buscado(q: str | None) -> int | None:
+    m = re.fullmatch(r"\s*(?:#|item:)\s*(\d{1,9})\s*", q or "", re.IGNORECASE)
+    return int(m.group(1)) if m else None
 
 
 @router.get("/empresas/valores")
@@ -78,7 +105,7 @@ def ficha(rut: str, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)
     e["naturaleza"] = conn.execute("SELECT codigo, nombre, excluida FROM naturaleza_juridica WHERE id = %s",
                                    (e["naturaleza_id"],)).fetchone() if e["naturaleza_id"] else None
     if e["fusionada_en"]:
-        e["fusionada_en_rut"] = conn.execute("SELECT rut FROM empresa WHERE id = %s", (e["fusionada_en"],)).fetchone()["rut"]
+        e["fusionada_en_rut"] = conn.execute("SELECT codigo FROM empresa WHERE id = %s", (e["fusionada_en"],)).fetchone()["codigo"]
     e["disponibilidad"] = conn.execute("SELECT disponible, reglas, hasta FROM v_empresa_disponible WHERE empresa_id = %s",
                                        (eid,)).fetchone()
     e["historia"] = conn.execute(
@@ -106,25 +133,37 @@ def ficha(rut: str, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)
         " FROM telefono_vinculo v JOIN telefono t ON t.id = v.telefono_id LEFT JOIN contacto c ON c.id = v.contacto_id"
         " WHERE v.empresa_id = %s ORDER BY discable DESC, t.e164", (eid,)).fetchall()
     if u.rol == "lectura":
-        e["contactos"] = [{"id": None, "nombre": "(dato personal oculto)", "cargo": None, "area": None, "email": None}
+        e["contactos"] = [{"id": None, "nombre": "(dato personal oculto)", "cargo": None, "area": None, "email": None,
+                           "telefonos": [], "atributos": []}
                           for _ in conn.execute("SELECT 1 FROM contacto WHERE empresa_id = %s", (eid,))]
+        for t in e["telefonos"]:
+            t["contacto"] = None
     else:
         e["contactos"] = conn.execute(
-            "SELECT c.*, EXISTS (SELECT 1 FROM no_llamar n WHERE n.activo AND n.alcance = 'contacto' AND n.objeto_id = c.id)"
-            " AS no_llamar FROM contacto c WHERE c.empresa_id = %s ORDER BY c.actualizado DESC", (eid,)).fetchall()
+            "SELECT c.*, concat_ws(', ', s.direccion, s.localidad, s.departamento) AS sucursal, EXISTS (SELECT 1 FROM no_llamar n WHERE n.activo AND n.alcance = 'contacto'"
+            " AND n.objeto_id = c.id) AS no_llamar FROM contacto c LEFT JOIN sucursal s ON s.id = c.sucursal_id"
+            " WHERE c.empresa_id = %s ORDER BY c.actualizado DESC", (eid,)).fetchall()
+        tels = contactos.telefonos(conn, [c["id"] for c in e["contactos"]])
+        attrs = catalogos.atributos_de_contactos(conn, [c["id"] for c in e["contactos"]])
+        for c in e["contactos"]:
+            c["telefonos"] = tels.get(c["id"], [])
+            c["atributos"] = attrs.get(c["id"], [])
     e["atributos"] = catalogos.atributos_de_empresa(conn, eid)
     e["sucursales"] = conn.execute("SELECT * FROM sucursal WHERE empresa_id = %s ORDER BY id", (eid,)).fetchall()
     e["muestras"] = conn.execute(
         "SELECT mi.id AS item_id, m.id AS muestra_id, m.nombre, m.estado, mi.estrato, mi.rol, mi.liberado, s.nombre AS estudio"
         " FROM muestra_item mi JOIN muestra m ON m.id = mi.muestra_id JOIN estudio s ON s.id = m.estudio_id"
-        " WHERE mi.empresa_id = %s ORDER BY m.id DESC", (eid,)).fetchall()
+        " WHERE mi.empresa_id = %s OR mi.empresa_id IN (WITH RECURSIVE f AS ("
+        "   SELECT id FROM empresa WHERE fusionada_en = %s"
+        "   UNION SELECT e.id FROM empresa e JOIN f ON e.fusionada_en = f.id) SELECT id FROM f)"
+        " ORDER BY m.id DESC", (eid, eid)).fetchall()
     e["fusiones"] = conn.execute(
-        "SELECT f.*, a.rut AS absorbente_rut, b.rut AS absorbida_rut FROM empresa_fusion f"
+        "SELECT f.*, a.codigo AS absorbente_rut, b.codigo AS absorbida_rut, b.base AS absorbida_base FROM empresa_fusion f"
         " JOIN empresa a ON a.id = f.absorbente_id JOIN empresa b ON b.id = f.absorbida_id"
         " WHERE f.absorbente_id = %s OR f.absorbida_id = %s ORDER BY f.id DESC", (eid, eid)).fetchall()
     e["no_llamar"] = conn.execute("SELECT * FROM no_llamar WHERE alcance = 'empresa' AND objeto_id = %s ORDER BY id DESC",
                                   (eid,)).fetchall()
-    e["linea_de_tiempo"] = actividad.linea_de_tiempo(conn, eid)
+    e["linea_de_tiempo"] = actividad.linea_de_tiempo(conn, eid, ver_contactos=u.rol != "lectura")
     return e
 
 
@@ -150,7 +189,7 @@ def editar(rut: str, body: EdicionEmpresa, conn=Depends(get_conn), u: Usuario = 
     _, cfg = config.vigente(conn)
     cambios, _ = empresas.aplicar_valores(conn, e["id"], valores, "manual", None, cfg["confianza_fuentes"].get("manual", 90),
                                           u.email, {"motivo": body.motivo} if body.motivo else None)
-    auditoria.registrar(conn, u.email, "empresa.editar", "empresa", e["rut"], {"valores": valores, "motivo": body.motivo})
+    auditoria.registrar(conn, u.email, "empresa.editar", "empresa", e["codigo"], {"valores": valores, "motivo": body.motivo})
     return {"cambios": {k: {"antes": a, "despues": d} for k, (a, d) in cambios.items()}}
 
 
@@ -194,7 +233,7 @@ def agregar_telefono(rut: str, body: NuevoTelefono, conn=Depends(get_conn), u: U
     v, nuevo = empresas.vincular(conn, fila["id"], e["id"], "manual", None, u.email, contacto_id=body.contacto_id)
     _, cfg = config.vigente(conn)
     sospechoso = intermediarios.detectar(conn, cfg["umbral_intermediario"], [fila["id"]], u.email)
-    auditoria.registrar(conn, u.email, "telefono.agregar", "empresa", e["rut"], {"numero": n.e164 or n.crudo})
+    auditoria.registrar(conn, u.email, "telefono.agregar", "empresa", e["codigo"], {"numero": n.e164 or n.crudo})
     return {"e164": n.e164, "tipo": n.tipo, "motivo": n.motivo, "nuevo_vinculo": nuevo, "sospechoso": bool(sospechoso)}
 
 

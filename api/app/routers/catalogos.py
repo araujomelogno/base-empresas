@@ -20,11 +20,22 @@ class Atributo(BaseModel):
     filtrable: bool | None = None
     estratificable: bool | None = None
     activo: bool | None = None
+    ambito: str | None = None
+    normalizar_texto: str | None = None
+
+
+class Fusion(BaseModel):
+    destino_id: int
+
+
+class Sinonimo(BaseModel):
+    texto: str
 
 
 @router.get("/atributos")
-def atributos(activos: bool | None = None, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
-    return catalogos.atributos(conn, activos)
+def atributos(activos: bool | None = None, ambito: str | None = None, conn=Depends(get_conn),
+              u: Usuario = Depends(usuario_actual)):
+    return catalogos.atributos(conn, activos, ambito)
 
 
 @router.post("/atributos")
@@ -35,6 +46,23 @@ def crear_atributo(body: Atributo, conn=Depends(get_conn), u: Usuario = Depends(
 @router.put("/atributos/{atributo_id}")
 def editar_atributo(atributo_id: int, body: Atributo, conn=Depends(get_conn), u: Usuario = Depends(requiere("admin"))):
     return catalogos.actualizar_atributo(conn, atributo_id, body.model_dump(), u.email)
+
+
+@router.get("/atributos/parecidos")
+def atributos_parecidos(texto: str, ambito: str = "empresa", conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+    """F4.1: atributos que se parecen a un nombre (para avisar antes de crear uno nuevo)."""
+    return catalogos.parecidos(conn, [texto], ambito).get(texto, [])
+
+
+@router.post("/atributos/{atributo_id}/sinonimo")
+def agregar_sinonimo(atributo_id: int, body: Sinonimo, conn=Depends(get_conn), u: Usuario = Depends(requiere("steward"))):
+    """Al aceptar en la carga que una columna es un atributo existente, el nombre de la columna queda como sinónimo."""
+    return catalogos.agregar_sinonimo(conn, atributo_id, body.texto, u.email)
+
+
+@router.post("/atributos/{atributo_id}/fusionar")
+def fusionar_atributo(atributo_id: int, body: Fusion, conn=Depends(get_conn), u: Usuario = Depends(requiere("admin"))):
+    return catalogos.fusionar_atributo(conn, atributo_id, body.destino_id, u.email)
 
 
 @router.delete("/atributos/{atributo_id}")

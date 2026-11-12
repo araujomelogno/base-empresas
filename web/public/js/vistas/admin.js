@@ -1,6 +1,6 @@
 // Configuración, naturalezas, no llamar, usuarios y auditoría (R1.4, R1.12, R1.13)
 import * as api from '../api.js';
-import { $, $$, esc, main, toast, num, fechaHora, est, pageHeader, tabla, card, modal, pedirTexto, confirmar,
+import { $, $$, esc, main, toast, num, fechaHora, est, pageHeader, tabla, card, modal, pedirTexto, confirmar, tabs,
   json } from '../ui.js';
 
 const CAMPOS_CSV = ['id_item', 'tel_e164', 'tel_nacional', 'tel_sin_mas', 'rut', 'razon_social', 'fantasia', 'contacto', 'contacto_cargo',
@@ -202,22 +202,28 @@ const NUCLEO = [['rut', 'RUT (obligatorio)'], ['razon_social', 'Razón social'],
 
 function formAtributo(a = {}) {
   const nuevo = !a.id;
-  return `<div class="form-row"><div class="form-group"><label>Nombre visible</label><input type="text" id="at-nombre" value="${esc(a.nombre || '')}" placeholder="p. ej. Cantidad de empleados" /></div>
-    <div class="form-group"><label>Clave</label><input type="text" id="at-clave" value="${esc(a.clave || '')}" ${nuevo ? '' : 'disabled'} placeholder="cantidad_empleados" />
-    <div class="field-hint">${nuevo ? 'En minúsculas, sin espacios ni tildes. No se puede cambiar después.' : 'La clave no se puede cambiar.'}</div></div></div>
-    <div class="form-row"><div class="form-group"><label>Tipo</label><select class="fselect" id="at-tipo" ${nuevo || !a.n_valores ? '' : 'disabled'}>${
+  // F1.5: la clave se genera sola a partir del nombre; acá solo se muestra (de solo lectura) al editar
+  return `<div class="form-row"><div class="form-group"><label>Nombre visible <span class="req">*</span></label><input type="text" id="at-nombre" value="${esc(a.nombre || '')}" placeholder="p. ej. Cantidad de empleados" /></div>
+    ${nuevo ? `<div class="form-group"><label>Clave</label><div class="field-hint">Se genera sola a partir del nombre (minúsculas, sin tildes, con guiones bajos). Si ya existe, se agrega _2, _3…</div></div>`
+      : `<div class="form-group"><label>Clave</label><div class="mono" style="padding:.45rem 0">${esc(a.clave)}</div><div class="field-hint">No cambia aunque cambies el nombre.</div></div>`}</div>
+    <div class="form-row"><div class="form-group"><label>Tipo <span class="req">*</span></label><select class="fselect" id="at-tipo" ${nuevo || !a.n_valores ? '' : 'disabled'}>${
       Object.entries(TIPOS_ATRIBUTO).map(([k, t]) => `<option value="${k}" ${k === (a.tipo || 'texto') ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
-    <div class="form-group" id="at-opciones-g"><label>Opciones (una por línea)</label><textarea id="at-opciones" rows="3">${esc((a.opciones || []).join('\n'))}</textarea></div></div>
+    <div class="form-group" id="at-norm-g"><label>Normalizar el texto al cargar</label><select class="fselect" id="at-norm">${
+      [['ninguna', 'Sin cambios (solo se recortan los espacios)'], ['capital', 'Mayúscula inicial'], ['mayusculas', 'MAYÚSCULAS']].map(([k, t]) =>
+        `<option value="${k}" ${k === (a.normalizar_texto || 'ninguna') ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+    <div class="form-group" id="at-opciones-g"><label>Opciones (una por línea, opcional)</label><textarea id="at-opciones" rows="3">${esc((a.opciones || []).join('\n'))}</textarea>
+    <div class="field-hint">Pueden quedar vacías: se completan en la carga, con la traducción de valores.</div></div></div>
     <div class="form-group"><label>Sinónimos para el mapeo automático (separados por coma)</label><input type="text" id="at-sinonimos" value="${esc((a.sinonimos || []).join(', '))}" placeholder="p. ej. empleados, personal, cant. empleados" />
-    <div class="field-hint">Si una columna del archivo se llama así, la carga la reconoce sola. También se reconocen el nombre y la clave.</div></div>
+    <div class="field-hint">Opcional. Si una columna del archivo se llama así, la carga la reconoce sola. También se reconocen el nombre y la clave.</div></div>
+    ${(a.ambito || 'empresa') === 'contacto' ? '<input type="hidden" id="at-filtro" /><span id="at-estrato-g"><input type="hidden" id="at-estrato" /></span>' : `
     <label class="check"><input type="checkbox" id="at-filtro" ${a.filtrable ? 'checked' : ''} /> Sirve como filtro del sorteo</label>
-    <label class="check" id="at-estrato-g"><input type="checkbox" id="at-estrato" ${a.estratificable ? 'checked' : ''} /> Sirve como estrato (solo listas)</label>
+    <label class="check" id="at-estrato-g"><input type="checkbox" id="at-estrato" ${a.estratificable ? 'checked' : ''} /> Sirve como estrato (solo listas)</label>`}
     ${nuevo ? '' : `<label class="check"><input type="checkbox" id="at-activo" ${a.activo ? 'checked' : ''} /> Activo</label>`}`;
 }
 
 function leerAtributo(b) {
   return {
-    clave: $('#at-clave', b).value.trim() || null, nombre: $('#at-nombre', b).value.trim(), tipo: $('#at-tipo', b).value,
+    nombre: $('#at-nombre', b).value.trim(), tipo: $('#at-tipo', b).value, normalizar_texto: $('#at-norm', b).value,
     opciones: $('#at-opciones', b).value.split('\n').map(s => s.trim()).filter(Boolean),
     sinonimos: $('#at-sinonimos', b).value.split(',').map(s => s.trim()).filter(Boolean),
     filtrable: $('#at-filtro', b).checked, estratificable: $('#at-estrato', b).checked,
@@ -229,6 +235,7 @@ function activarFormAtributo() {
   const ver = () => {
     const lista = $('#at-tipo').value === 'lista';
     $('#at-opciones-g').style.display = lista ? '' : 'none';
+    $('#at-norm-g').style.display = $('#at-tipo').value === 'texto' ? '' : 'none';
     $('#at-estrato-g').style.display = lista ? '' : 'none';
     if (!lista) $('#at-estrato').checked = false;
   };
@@ -236,34 +243,67 @@ function activarFormAtributo() {
   ver();
 }
 
-export async function atributos(ctx) {
-  const lista = await api.get('/atributos');
+export async function atributos(ctx, params) {
+  const ambito = (params && params.get('ambito')) === 'contacto' ? 'contacto' : 'empresa';
+  const lista = await api.get('/atributos', { ambito });
   const editable = ctx.puede('admin');
-  main().innerHTML = pageHeader('Atributos', 'de empresa', 'Datos que traen las bases y que no son campos del sistema: cantidad de empleados, exporta sí/no, cámara a la que pertenece… Un atributo nuevo se puede mapear en la próxima carga y usar para filtrar y estratificar.',
+  const deContacto = ambito === 'contacto';
+  main().innerHTML = pageHeader('Atributos', deContacto ? 'de contacto' : 'de empresa', deContacto
+    ? 'Datos de las personas de contacto: decisor sí/no, antigüedad en el cargo… Se cargan desde la carga (bloque Contacto), el .sav o la ficha, y se pueden exportar. No se usan para filtrar ni estratificar el sorteo.'
+    : 'Datos que traen las bases y que no son campos del sistema: cantidad de empleados, exporta sí/no, cámara a la que pertenece… Un atributo nuevo se puede mapear en la próxima carga y usar para filtrar y estratificar.',
     editable ? `<button class="btn btn-orange" id="at-nuevo">+ Nuevo atributo</button>` : '') +
-    card('Atributos', tabla([
+    tabs('atributos', [['empresa', 'De empresa'], ['contacto', 'De contacto']], ambito) +
+    card(deContacto ? 'Atributos de contacto' : 'Atributos de empresa', tabla([
       { t: 'Nombre', f: a => `<span class="td-strong">${esc(a.nombre)}</span><div class="small muted mono">${esc(a.clave)}</div>` },
       { t: 'Tipo', f: a => esc(TIPOS_ATRIBUTO[a.tipo]) + (a.opciones.length ? `<div class="small muted">${a.opciones.map(esc).join(' · ')}</div>` : '') },
       { t: 'Sinónimos', f: a => `<span class="small">${a.sinonimos.map(esc).join(', ') || '—'}</span>` },
-      { t: 'Filtro', f: a => a.filtrable ? est('ok', 'sí') : '—' }, { t: 'Estrato', f: a => a.estratificable ? est('ok', 'sí') : '—' },
-      { t: 'Empresas con valor', cls: 'num', f: a => num(a.n_valores) }, { t: 'Estado', f: a => a.activo ? est('activa', 'activo') : est('pendiente', 'inactivo') },
-      { t: '', f: a => editable ? `<div class="td-actions"><button class="btn btn-outline btn-sm" data-at-editar="${a.id}">Editar</button>
+      ...(deContacto ? [] : [{ t: 'Filtro', f: a => a.filtrable ? est('ok', 'sí') : '—' }, { t: 'Estrato', f: a => a.estratificable ? est('ok', 'sí') : '—' }]),
+      { t: deContacto ? 'Contactos con valor' : 'Empresas con valor', cls: 'num', f: a => num(a.n_valores) }, { t: 'Estado', f: a => a.activo ? est('activa', 'activo') : est('pendiente', 'inactivo') },
+      { t: '', f: a => editable && a.fusionado_en ? `<span class="small muted">${esc(a.nota || 'fusionado')}</span>` : editable ? `<div class="td-actions"><button class="btn btn-outline btn-sm" data-at-editar="${a.id}">Editar</button>
+        <button class="btn btn-outline btn-sm" data-at-fusionar="${a.id}">Fusionar con…</button>
         ${a.n_valores ? '' : `<button class="btn btn-outline btn-sm btn-del" data-at-borrar="${a.id}">Borrar</button>`}</div>` : '' },
     ], lista, 'Todavía no hay atributos'), '', true) +
-    card('Campos del sistema (no editables)', `<p class="small muted mb">Las reglas de disponibilidad, los estratos, la fusión y las exclusiones dependen de estos campos, por eso no se pueden borrar ni renombrar. Las cargas también aceptan teléfonos (con su origen) y los datos de una sucursal.</p>
-      <div class="chips">${NUCLEO.map(([k, t]) => `<span class="chip" title="${esc(k)}">${esc(t)}</span>`).join('')}</div>`) +
+    (deContacto ? '' : card('Campos del sistema (no editables)', `<p class="small muted mb">Las reglas de disponibilidad, los estratos, la fusión y las exclusiones dependen de estos campos, por eso no se pueden borrar ni renombrar. Las cargas también aceptan teléfonos (con su origen) y los datos de una sucursal.</p>
+      <div class="chips">${NUCLEO.map(([k, t]) => `<span class="chip" title="${esc(k)}">${esc(t)}</span>`).join('')}</div>`)) +
     `<p class="small muted mt">Desactivar un atributo lo saca del mapeo y de los filtros pero conserva sus valores. Solo se borra un atributo sin valores y que no se use en una muestra activa.</p>`;
+  $$('[data-tabs="atributos"] .tab').forEach(b => b.onclick = () => { location.hash = `#/atributos?ambito=${b.dataset.tab}`; });
   const guardar = async (a) => {
-    const r = await modal({ titulo: a ? 'Editar atributo' : 'Nuevo atributo', ancho: 640, cuerpo: formAtributo(a || {}),
-      acciones: [{ t: 'Cancelar' }, { t: 'Guardar', cls: 'btn-orange', fn: (b) => a ? api.put('/atributos/' + a.id, leerAtributo(b)) : api.post('/atributos', leerAtributo(b)) }] });
-    if (r) { toast('Atributo guardado', 'ok'); atributos(ctx); }
+    const r = await modal({ titulo: a ? 'Editar atributo' : `Nuevo atributo ${deContacto ? 'de contacto' : 'de empresa'}`, ancho: 640,
+      cuerpo: formAtributo(a || { ambito }),
+      acciones: [{ t: 'Cancelar' }, { t: 'Guardar', cls: 'btn-orange', fn: async (b) => {
+        if (a) return api.put('/atributos/' + a.id, leerAtributo(b));
+        // F4.1: si ya hay uno parecido, se avisa y se ofrece usarlo en lugar de crear otro
+        const d = leerAtributo(b);
+        const par = d.nombre ? await api.get('/atributos/parecidos', { texto: d.nombre, ambito }) : [];
+        if (par.length) {
+          const ok = await modal({ titulo: 'Ya hay un atributo parecido', cuerpo: `<p>«${esc(d.nombre)}» se parece a:</p><ul class="aviso-lista">${
+            par.map(x => `<li><strong>${esc(x.nombre)}</strong> (${Math.round(x.similitud * 100)} %${x.por !== x.nombre ? `, por «${esc(x.por)}»` : ''})</li>`).join('')}</ul>
+            <p class="small muted">Si es el mismo dato, usá el existente (podés agregarle un sinónimo). Crear otro duplica los valores.</p>`,
+            acciones: [{ t: 'Usar el existente' }, { t: 'Crear igual', cls: 'btn-orange', fn: () => true }] });
+          if (!ok) return false;
+        }
+        return api.post('/atributos', { ...d, ambito });
+      } }] });
+    if (r) { toast('Atributo guardado', 'ok'); atributos(ctx, params); }
   };
   if ($('#at-nuevo')) $('#at-nuevo').onclick = () => { guardar(null); activarFormAtributo(); };
   $$('[data-at-editar]').forEach(b => b.onclick = () => { guardar(lista.find(a => a.id === +b.dataset.atEditar)); activarFormAtributo(); });
+  $$('[data-at-fusionar]').forEach(b => b.onclick = async () => {
+    const a = lista.find(x => x.id === +b.dataset.atFusionar);
+    const destinos = lista.filter(x => x.id !== a.id && x.activo && !x.fusionado_en && (x.tipo === a.tipo || x.tipo === 'texto'));
+    if (!destinos.length) return toast('No hay otro atributo activo del mismo ámbito y de un tipo compatible', 'err');
+    const r = await modal({ titulo: `Fusionar «${a.nombre}» con…`, ancho: 600, cuerpo: `
+      <div class="form-group"><label>Atributo que queda</label><select class="fselect" id="fu-destino">${destinos.map(x => `<option value="${x.id}">${esc(x.nombre)} (${esc(TIPOS_ATRIBUTO[x.tipo])})</option>`).join('')}</select></div>
+      <ul class="aviso-lista small"><li>Los valores de «${esc(a.nombre)}» pasan al elegido como historia nueva (fuente fusión) y se recalcula el valor vigente.</li>
+      <li>Su nombre y sus sinónimos pasan a los sinónimos del elegido; las opciones de lista se unifican.</li>
+      <li>«${esc(a.nombre)}» queda inactivo, con la nota «fusionado en …». No se puede si se usa como filtro o estrato de una muestra activa.</li></ul>`,
+      acciones: [{ t: 'Cancelar' }, { t: 'Fusionar', cls: 'btn-danger', fn: (x) => api.post(`/atributos/${a.id}/fusionar`, { destino_id: +$('#fu-destino', x).value }) }] });
+    if (r) { toast(`Fusionado: ${num(r.empresas + r.contactos)} con valores pasados`, 'ok'); atributos(ctx, params); }
+  });
   $$('[data-at-borrar]').forEach(b => b.onclick = async () => {
     const a = lista.find(x => x.id === +b.dataset.atBorrar);
     if (!await confirmar('Borrar atributo', `Se borra «${a.nombre}». No tiene valores cargados.`, 'Borrar', 'btn-danger')) return;
-    try { await api.del('/atributos/' + a.id); atributos(ctx); } catch (e) { toast(e.message, 'err'); }
+    try { await api.del('/atributos/' + a.id); atributos(ctx, params); } catch (e) { toast(e.message, 'err'); }
   });
 }
 

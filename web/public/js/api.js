@@ -20,7 +20,7 @@ async function headers(extra = {}) {
 }
 
 export class ApiError extends Error {
-  constructor(status, detail) { super(detail); this.status = status; }
+  constructor(status, detail, datos) { super(detail); this.status = status; this.datos = datos || null; }
 }
 
 async function manejar(r) {
@@ -28,12 +28,17 @@ async function manejar(r) {
     const ct = r.headers.get('content-type') || '';
     return ct.includes('application/json') ? r.json() : r;
   }
-  let detail = r.statusText;
+  let detail = r.statusText, datos = null;
   try {
     const j = await r.json();
-    detail = typeof j.detail === 'string' ? j.detail : (j.detail || []).map(d => `${(d.loc || []).slice(1).join('.')}: ${d.msg}`).join('; ') || detail;
+    if (j.detail && !Array.isArray(j.detail) && typeof j.detail === 'object') {  // {mensaje, ...datos}
+      datos = j.detail;
+      detail = j.detail.mensaje || detail;
+    } else {
+      detail = typeof j.detail === 'string' ? j.detail : (j.detail || []).map(d => `${(d.loc || []).slice(1).join('.')}: ${d.msg}`).join('; ') || detail;
+    }
   } catch { /* respuesta sin JSON */ }
-  throw new ApiError(r.status, detail);
+  throw new ApiError(r.status, detail, datos);
 }
 
 export async function get(path, params) {

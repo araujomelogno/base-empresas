@@ -106,10 +106,19 @@ La pestaña **Línea de tiempo** junta todo lo que pasó con la empresa, del má
 
 ![Ficha: línea de tiempo](img/07-ficha-tiempo.png)
 
-Las pestañas **Contactos**, **Muestras** y **Fusiones y no llamar** completan la ficha. Los contactos son datos personales (Ley 18.331): el rol Lectura los ve ocultos.
+Lo que trajo cada ingesta del .sav aparece agrupado en una línea desplegable: «Ingesta .sav #12 (Estudio, Parte): 1 contacto nuevo, 1 teléfono verificado, ítem completo». Al abrirla se ven sus eventos. La línea de tiempo también muestra las altas y ediciones de contactos y «se habló con … al …».
+
+![Línea de tiempo con la ingesta agrupada](img/44-linea-tiempo-ingesta.png)
+
+Las pestañas **Contactos**, **Muestras** y **Fusiones y no llamar** completan la ficha. La pestaña **Contactos** muestra, por contacto, sus **teléfonos** («se habló el 22/10/2026 (Estudio, Parte)» o «número del contacto») y sus **atributos**. Los contactos son datos personales (Ley 18.331): el rol Lectura los ve ocultos. La pestaña **Muestras** incluye los ítems de las empresas que esta absorbió en una fusión.
+
+### Buscar por EC_ID_ITEM y por código provisorio
+
+En el buscador de **Empresas**, `#1234` o `item:1234` busca el ítem de muestra 1234 (el `EC_ID_ITEM` que figura en Alchemer) y abre la ficha de su empresa en la pestaña **Muestras**, con esa fila resaltada. Un número sin `#` sigue buscando por RUT. Un código `P-000123` abre una empresa de la base provisoria. El filtro **Base** elige entre la base definitiva (por defecto), la provisoria o ambas.
 
 ### Acciones del data steward en la ficha
 
+- **Contactos:** **+ Agregar contacto**, **Editar** y **Borrar** (ver «Contactos» más abajo).
 - **Editar datos:** corrige campos con fuente "manual". Se registran solo los campos que cambiás; indicá el motivo.
 - **Fusionar otra empresa:** cuando dos RUTs son la misma empresa, escribí el RUT de la que se absorbe. Sus teléfonos, contactos y sucursales pasan a esta; la absorbida queda guardada como "fusionada" y la fusión se puede **deshacer** desde la pestaña Fusiones.
 - **No llamar** (también administrador): registra un pedido de no llamar con motivo y quién lo pidió. Se respeta en todas las muestras y CSV desde ese momento.
@@ -136,11 +145,14 @@ Las bases (estudios anteriores, padrones, directorios) entran por **Cargas → N
 4. **Origen por defecto** (obligatorio): para las columnas sin origen propio y cuando la columna de origen viene vacía.
 5. **Sucursal** (plegado): un local con dirección distinta de la fiscal.
 6. **Columnas que no se van a cargar:** revisá que no quede afuera nada que importe.
-7. Licencia de uso (obligatoria), regla de fusión y confianza, como siempre. 8. **Siguiente.**
+7. **Contacto** (plegado): un contacto por fila, con nombre, cargo, área, email, teléfono del contacto y atributos de contacto. Si el contacto ya existe en la empresa (mismo nombre o email), se completan sus campos vacíos. Su teléfono se vincula a la empresa con el origen por defecto. Una fila con datos de contacto pero sin nombre se ignora y se avisa.
+8. Licencia de uso (obligatoria), **destino**, **reglas de fusión** y confianza (ver «Base provisoria» y «Reglas de fusión»). 9. **Siguiente.**
 
-Los contactos no se cargan desde una base: se generan en el campo, con el .sav.
+> **Atributos parecidos.** Si una columna no se reconoce pero se parece a un atributo que ya existe («Cant. Empleados» y **Cantidad de empleados**), arriba del mapeo aparece «se parece a … (82 %)». **Usar ese atributo** la mapea a ese atributo y suma el nombre de la columna como sinónimo: la próxima base se reconoce sola. **No** la deja como está.
 
-**Paso 2b — Traducción de valores.** Si la columna de origen o un atributo de lista trae valores que no coinciden exactamente con el catálogo («guia», «GUIA TEL.»), cada valor distinto aparece con cuántas filas tiene. Elegí un valor del catálogo, «Sin dato» o (administrador) «+ Crear uno nuevo». Las sugerencias no se aplican solas: «Usar sugerencias» las confirma. La traducción queda en la plantilla del tipo de fuente.
+![Sugerencia de atributo parecido](img/50-sugerencia-atributo.png)
+
+**Paso 2b — Traducción de valores.** Los valores de lista se comparan sin mayúsculas, tildes ni espacios: «SI», «si» y «Sí » se cargan como «Sí» sin pedir nada. Si la columna de origen o un atributo de lista trae valores que no coinciden con el catálogo («guia», «GUIA TEL.», «Exportadora» frente a «Exportador»), cada valor distinto aparece con cuántas filas tiene. Elegí un valor del catálogo, «Sin dato» o (administrador) «+ Crear uno nuevo». Las sugerencias no se aplican solas: «Usar sugerencias» las confirma. La traducción queda en la plantilla del tipo de fuente.
 
 ![Traducción de valores](img/36-carga-traduccion.png)
 
@@ -166,7 +178,45 @@ Los contactos no se cargan desde una base: se generan en el campo, con el .sav.
 >
 > **Borrar una carga trabada.** Una carga puede quedar «analizando» o «en proceso» para siempre si su tarea no arrancó o si se cortó a mitad de camino; el detalle avisa cuando la tarea está **trabada** (figura corriendo hace más de 30 minutos). **Borrar carga** funciona en cualquier estado: el modal dice qué tarea se cancela, la tarea se detiene **sin aplicar nada** y queda «cancelada», y después se borra la carga.
 
-Las filas con RUT inválido o sin RUT se rechazan siempre (en la fase 1 toda empresa entra con RUT válido). El motivo queda en el detalle de la carga.
+En una carga a la **base definitiva**, las filas con RUT inválido o sin RUT se rechazan (el motivo queda en el detalle de la carga), salvo que marques **Enviar las filas sin RUT válido a la base provisoria**. Deshacer o borrar una carga quita también los contactos que trajo.
+
+### Base provisoria
+
+La **base provisoria** guarda las empresas que **no traen RUT** (un directorio, un relevamiento web). Se carga, se consulta y se depura por separado, y sus empresas se pueden sortear y llamar. Cada una tiene un código **`P-000123`** que sirve en la ficha, el buscador, la exportación y el .sav.
+
+- **Cargar:** en el paso 2 de la carga, **Destino → Base provisoria** (la columna RUT pasa a ser opcional). Una fila con RUT válido va igual a la base definitiva (se puede desmarcar). Si la fila traía otro identificador (una cédula, un «RUT» de 7 dígitos), queda en el atributo **Identificador informado**.
+- **Pantalla Base provisoria** (menú Base de datos): código, razón social, teléfonos, carga, muestras y **candidatas en la definitiva** (mismo teléfono, razón social o dirección parecidas, mismo dominio, o el RUT que trajo el .sav). Por empresa: **Agregar RUT** (si es nuevo, pasa a la definitiva; si ya existe, ofrece fusionar), **Fusionar con…** (una candidata o una empresa que busques) y **Es otra empresa** (descarta las candidatas).
+- **Completar RUT con un archivo** `codigo_provisorio;rut`: primero muestra qué pasaría con cada fila y después aplica.
+- **Inicio** cuenta la base provisoria aparte; **Empresas activas** sigue contando solo la definitiva.
+- Al fusionar una provisoria con una empresa de la definitiva, sus teléfonos, contactos, atributos e historia pasan a esa empresa, y sus ítems de muestra y llamadas se ven desde ella. La fusión se puede deshacer.
+
+![Base provisoria](img/47-base-provisoria.png)
+
+### Reglas de fusión
+
+Cada carga tiene una **lista ordenada de reglas** para reconocer una empresa que ya está en la base (en las dos bases). El RUT va siempre primero. Cada regla tiene un criterio (razón social, teléfono, dominio web, dirección con departamento, email de contacto) y un tipo:
+
+- **Exacta:** coincide después de normalizar (sin tildes, mayúsculas, puntuación ni «S.A.», «SRL»). Con una sola candidata se fusiona sola.
+- **Flexible:** la similitud es igual o mayor que el umbral (0,85 por defecto). **Siempre se consulta.**
+
+Una coincidencia que uniría dos RUT válidos distintos, o una exacta con varias candidatas, también se consulta. Las reglas y el destino quedan en la plantilla del tipo de fuente.
+
+![Destino y reglas de fusión](img/48-destino-reglas.png)
+
+**Coincidencias a decidir.** En el preview, cada fila consultada aparece al lado de su candidata, con la regla y la similitud. Elegí **Fusionar**, **Es otra empresa** o **Decidir después** (o usá «Fusionar todas las de similitud ≥ 95 %»). Al confirmar se usan esas decisiones; lo que queda en «Decidir después» va a **Revisión de fusiones**. Deshacer la carga revierte también lo que se fusionó en ella.
+
+![Coincidencias a decidir](img/49-coincidencias.png)
+
+### Contactos
+
+En la pestaña **Contactos** de la ficha, el data steward y el administrador pueden **+ Agregar contacto**, **Editar** y **Borrar**:
+
+- Nombre (obligatorio), cargo, área, email (se valida el formato), sucursal, teléfonos (de la empresa o uno nuevo, que se vincula como manual) y atributos de contacto.
+- Si ya hay un contacto con ese nombre en la empresa, el sistema avisa y ofrece **editar el existente** o agregar otro igual.
+- Cada cambio queda en la línea de tiempo con el usuario.
+- **Borrar** es definitivo (dato personal): se van el contacto, su historia, sus teléfonos de contacto, sus atributos y su «no llamar». En Auditoría queda el borrado con el RUT, sin el nombre.
+
+![Agregar un contacto](img/46-contacto-form.png)
 
 ### Intermediarios
 
@@ -183,11 +233,11 @@ La sala también confirma intermediarios: cuando el encuestador responde "estudi
 
 ### Revisión de fusiones
 
-Cuando una carga usa una regla de fusión distinta del RUT, las filas que coinciden con una empresa existente (mismo teléfono, misma razón social o mismo dominio, pero otro RUT) esperan acá.
+Las filas de una carga que coinciden con una empresa existente pero no se fusionan solas esperan acá: las de una regla flexible, las de una exacta con varias candidatas, las que unirían dos RUT distintos y las que quedaron en «Decidir después». Cada una muestra el criterio y la similitud.
 
 ![Revisión de fusiones](img/13-revision.png)
 
-Comparás la fila que llegó con la empresa existente y elegís: **Alta nueva** (es otra empresa, se crea con su RUT), **Actualizar existente** (los datos se aplican a la empresa que ya estaba) o **Descartar**.
+Comparás la fila que llegó con la empresa existente y elegís: **Alta nueva** (es otra empresa: se crea con su RUT, o en la base provisoria si no trae RUT), **Actualizar existente** (los datos se aplican a la empresa que ya estaba) o **Descartar**.
 
 ## Jefe de proyecto
 
@@ -215,6 +265,8 @@ Desde el estudio, **Nueva muestra**:
 
 Al tocar **Crear y sortear** el sistema congela el marco (snapshot), aplica las reglas de la configuración vigente, sortea dentro de cada estrato y guarda la semilla y la versión de configuración. Los titulares quedan liberados; los reemplazos, en reserva y en orden.
 
+**Incluir la base provisoria.** Desmarcado por defecto: el marco es solo la base definitiva. Si lo marcás, las empresas sin RUT entran con su estrato y las mismas reglas de disponibilidad.
+
 **Filtros por atributo y por origen.** Los atributos marcados como filtro aparecen en el bloque Filtros (listas con botones, números y fechas con desde/hasta, textos con «contiene»), y los de lista marcados como estrato, en «Estratificar por». **Origen de los teléfonos** deja solo las empresas con al menos un teléfono discable de los orígenes elegidos; el cuadro de exclusiones dice cuántas dejó afuera.
 
 ![Filtros por atributo y por origen](img/38-muestra-filtros.png)
@@ -232,9 +284,13 @@ Al tocar **Crear y sortear** el sistema congela el marco (snapshot), aplica las 
 
 ### Seguir la muestra
 
-La pantalla de la muestra muestra los totales, las exclusiones del sorteo, los avisos (por ejemplo, "el estrato Grande no alcanza: pidió 10 y hay 8 disponibles"), el **avance por estrato** (llamados, contactabilidad, completas, tasa de respuesta, rechazos, fuera de marco) y la lista de ítems con su estado en cada parte.
+La pantalla de la muestra muestra los totales, las exclusiones del sorteo, los avisos (por ejemplo, "el estrato Grande no alcanza: pidió 10 y hay 8 disponibles"), el **avance por estrato** (llamados, contactabilidad, completas, tasa de respuesta, rechazos, fuera de marco) y la lista **Empresas de la muestra**, 50 por página, con el total arriba, filtros por estrato, rol, liberado y estado en cada parte, y búsqueda por RUT, razón social o EC_ID_ITEM. Los filtros se mantienen al cambiar de página.
 
 ![Muestra](img/17-muestra.png)
+
+![Empresas de la muestra](img/45-empresas-muestra.png)
+
+> **Muestras activas.** El indicador **Muestras activas** de Inicio lleva a la lista (estudio, nombre, ítems, fecha de sorteo). Una muestra activa que quedó **sin empresas** (se borraron todas) se muestra «activa, sin empresas» y se puede cerrar o borrar desde ahí. Si un «Borrar muestra» quedó con error o cancelado, el detalle de la muestra lo avisa.
 
 Mientras la muestra está activa, sus empresas no pueden salir en otra muestra. **Cerrar muestra** las libera y deja de permitir exportaciones.
 
@@ -255,7 +311,11 @@ En la muestra, en **Exportar a uContact**, elegí la parte y tocá **Descargar C
 - Sale un renglón por cada teléfono discable de cada ítem liberado que esté pendiente o en curso en esa parte.
 - Nunca salen intermediarios, números inexistentes o que no corresponden, ni nada en no llamar, aunque el pedido haya llegado después del sorteo.
 - El link de Alchemer ya trae `EC_ID_ITEM`, `EC_RUT` y `EC_TEL_USADO`.
-- La columna de contacto sugerido solo se completa si tu usuario tiene permiso para exportar contactos personales. Toda exportación queda auditada.
+- La columna de contacto sugerido solo se completa si tu usuario tiene permiso para exportar contactos personales. Toda exportación queda auditada, con las columnas incluidas.
+- **Qué incluir** (plegado): los **atributos de empresa** (uno por uno, «todos» y «ninguno»), los **números** (todos los discables o solo los verificados) y, si tu usuario tiene el permiso, los **contactos** (nombre, cargo, área, email, teléfonos y atributos de contacto). Por defecto, todo. La elección queda guardada en la muestra. Van al final del archivo: `EC_ID_EMPRESA` (el RUT o el código provisorio), `atr_<clave>` y `contacto_1_*`, `contacto_2_*`… (hasta 3 por empresa; se configura).
+- **Formato:** **uContact** (un renglón por teléfono, como siempre) o **Planilla de la muestra** (un renglón por empresa, con los teléfonos en `tel_1`, `tel_2`… y sus orígenes).
+
+![Qué incluir al exportar](img/51-que-incluir.png)
 - **Orígenes a exportar:** todos (por defecto) o solo los elegidos; un teléfono con varios orígenes pasa si alguno está elegido. **Orden de los teléfonos:** por prioridad de origen y, dentro de cada origen, primero los verificados (por defecto). Las dos opciones quedan guardadas en la muestra y el resumen dice cuántos ítems quedan sin teléfono exportable por el filtro de origen.
 
 ![Exportar por origen](img/39-muestra-exportar.png)
@@ -271,14 +331,14 @@ Para que el .sav se asocie solo y actualice la base, cada cuestionario tiene que
 | `EC_CALIDAD_TEL` | 1 corresponde · 2 no es de la empresa · 3 estudio contable o jurídico · 4 la empresa cerró · 5 inexistente |
 | `EC_TEL_ALT` | Número alternativo que dieron |
 | `EC_RESP_NOMBRE`, `EC_RESP_CARGO`, `EC_RESP_AREA` | Quién contestó |
-| `EC_RESULTADO` | 1 completa · 2 rechazo · 3 no corresponde · 4 agendada |
+| `EC_RESULTADO` | Ya no hace falta: toda fila del .sav es una encuesta completa (si el cuestionario la tiene, se ignora) |
 
 ### Ingerir el .sav
 
 Cuando cerrás una parte u ola, exportá el .sav de Alchemer y entrá a **Ingesta .sav**:
 
 1. Elegí el estudio y la parte. Si es la segunda ola de un cuestionario que ya se usó en otro estudio, podés reusar el mapeo de esa otra parte.
-2. Subí el .sav y tocá **Analizar**. El sistema lee el archivo y **propone** el mapeo: cuál es el `response_id`, cuál es el identificador (`EC_ID_ITEM` o RUT), qué variable corresponde a cada dato del sistema y, para las variables con códigos, qué valor del sistema corresponde a cada código.
+2. Subí el .sav y tocá **Analizar**. El sistema lee el archivo y **propone** el mapeo: cuál es el `response_id`, cuál es el identificador (`EC_ID_ITEM` o RUT), qué variable corresponde a cada dato del sistema y, para la calidad del número, qué valor corresponde a cada código. **Toda fila del .sav es una encuesta completa** (Alchemer exporta solo las completas): no hay que mapear un resultado ni el estado de Alchemer. Además, cualquier variable se puede guardar como **atributo del contacto** que respondió (con traducción de valores para las listas).
 
 ![Mapeo propuesto del .sav](img/19-sav-mapeo.png)
 
@@ -296,18 +356,22 @@ Qué cambia en la base al confirmar:
 | = no es de la empresa / inexistente | El vínculo pasa a **no corresponde** / **inexistente**; deja de exportarse |
 | = estudio contable o jurídico | El teléfono queda como **intermediario confirmado** |
 | = la empresa cerró | La empresa pasa a **cerrada** (dato de la sala: una carga no lo pisa) |
-| `EC_TEL_ALT` | Teléfono nuevo vinculado a la empresa, sin verificar, fuente "sala" |
-| `EC_RESP_*` | Contacto nuevo o actualizado con su cargo y área |
-| `EC_RESULTADO` | Estado del ítem en la parte (completa, rechazo, fuera de marco, en curso) |
-| Completa, parcial o rechazo | Fecha de **último contacto efectivo** (de ahí se cuenta el enfriamiento) |
+| `EC_TEL_USADO` | El número con el que se habló queda **verificado** con origen Sala, exista o no en la base (si `EC_CALIDAD_TEL` dice «no corresponde», «inexistente» o «intermediario», gana eso) |
+| `EC_TEL_ALT` | Número adicional: se crea si no existe y queda **verificado** con origen Sala |
+| `EC_RESP_*` | Contacto nuevo o actualizado con su cargo y área, relacionado con el número por el que se habló |
+| Cada fila | El ítem queda **completa** en la parte y la empresa actualiza su **último contacto efectivo** (de ahí se cuenta el enfriamiento) |
 
 Cada cambio queda con su linaje: estudio, parte, ingesta, encuestador y fecha.
+
+**Lo que no se aplicó, fila por fila.** El detalle de la ingesta dice cuántas encuestas completas trajo (asociadas a un ítem y sin asociar) y lista los motivos con conteos y ejemplos: «fila sin ítem asociado: en Conciliación», «EC_TEL_USADO no normalizable», «EC_TEL_ALT vacío».
+
+![Detalle de la ingesta: motivos por fila](img/52-ingesta-motivos.png)
 
 > **Subir el mismo .sav dos veces no duplica nada**: las respuestas se identifican por `response_id`. Podés subir el archivo acumulado de la parte cada vez que quieras.
 
 ### Corregir un mapeo
 
-Si después de confirmar te das cuenta de que un código estaba mal mapeado, abrí la ingesta y tocá **Corregir mapeo**. Se reaplica sobre los valores crudos guardados, sin volver a subir el archivo.
+Si después de confirmar te das cuenta de que un código estaba mal mapeado, abrí la ingesta y tocá **Corregir mapeo**. Se reaplica sobre los valores crudos guardados, sin volver a subir el archivo. Reaplicar una ingesta anterior a noviembre de 2026 le aplica la regla nueva: marca completos sus ítems, actualiza el último contacto efectivo y verifica los números usados.
 
 ![Detalle de una ingesta](img/21-sav-detalle.png)
 
@@ -315,14 +379,14 @@ Si después de confirmar te das cuenta de que un código estaba mal mapeado, abr
 
 Lo que no se pudo asociar solo espera en **Conciliación**:
 
-- **Filas del .sav** sin ítem (por ejemplo, un `EC_ID_ITEM` mal escrito o un RUT que no está en la muestra). Podés ver los valores crudos y asociarla a un ítem; al hacerlo, sus resultados se aplican a la base.
+- **Filas del .sav** sin ítem (por ejemplo, un `EC_ID_ITEM` mal escrito o un RUT que no está en la muestra). Ya cuentan como encuestas completas («sin asociar»). Podés ver los valores crudos y asociarla a un ítem; al hacerlo, se aplica completa: teléfonos, contacto y estado del ítem.
 - **Llamadas del CDR** cuyo número corresponde a más de un ítem de muestras activas (un número compartido). Elegís a qué ítem corresponde.
 
 ![Conciliación](img/22-conciliacion.png)
 
 ### Actividad
 
-**Actividad** muestra, filtrando por estudio, muestra, encuestador y período: intentos, teléfonos marcados, empresas llamadas, contactos efectivos, completas y qué porcentaje de las llamadas quedó asociado a un ítem; intentos por franja horaria y por día; una tabla por encuestador (intentos, teléfonos, contactos efectivos, completas, intentos por completa); las disposiciones de llamada y las **corridas del job del CDR** (cuándo corrió, si fue programada o manual, el período leído, el estado y cuántos intentos nuevos cargó).
+**Actividad** muestra, filtrando por estudio, muestra, encuestador y período: intentos, teléfonos marcados, empresas llamadas, contactos efectivos, **encuestas completas** (todas las filas del .sav: asociadas a un ítem más las sin asociar, con un enlace a Conciliación) y qué porcentaje de las llamadas quedó asociado a un ítem; intentos por franja horaria y por día; una tabla por encuestador (intentos, teléfonos, contactos efectivos, completas, intentos por completa); las disposiciones de llamada y las **corridas del job del CDR** (cuándo corrió, si fue programada o manual, el período leído, el estado y cuántos intentos nuevos cargó).
 
 ![Tablero de actividad](img/23-actividad.png)
 
@@ -398,9 +462,11 @@ Estos datos se guardan con **Guardar nueva versión**, como el resto de la confi
 
 **Correr el job a mano.** **Correr ahora** lee las llamadas nuevas sin esperar a las 4:00. **Reprocesar desde** (con **Hasta** opcional) vuelve a leer un período, por ejemplo para cargar el histórico la primera vez o recuperar días en que el job falló. Reprocesar no duplica llamadas ni hace que el job nocturno retroceda. Con **Prueba sin guardar intentos (dry-run)** el job cuenta lo que haría sin escribir nada. La tarjeta sigue la corrida y muestra el resultado al terminar; no se puede lanzar otra mientras una está en curso.
 
-### Atributos de empresa
+### Atributos de empresa y de contacto
 
-En **Administración → Atributos** se definen los datos que traen las bases y que no son campos del sistema (cantidad de empleados, exporta, cámara…): nombre, clave (no se cambia después), tipo (texto, número, fecha o lista), sinónimos para el mapeo automático, si sirve como filtro y si sirve como estrato (solo listas). Desactivar un atributo lo saca del mapeo y de los filtros pero conserva sus valores; solo se borra uno sin valores y que no se use en una muestra activa. Los campos del sistema (RUT, razón social, naturaleza, CIIU, tamaño…) no se pueden borrar ni renombrar.
+En **Administración → Atributos** hay dos pestañas: **De empresa** (cantidad de empleados, exporta, cámara…) y **De contacto** (decisor sí/no, antigüedad en el cargo…). **Solo el nombre y el tipo** (texto, número, fecha o lista) son obligatorios; la **clave se genera sola** a partir del nombre (`cantidad_de_empleados`; si ya existe, `_2`) y no cambia aunque después cambies el nombre. Una lista puede quedar sin opciones: se completan en la carga. Opcionales: sinónimos para el mapeo automático, si sirve como filtro y como estrato (solo listas de empresa) y, para los de texto, normalizar a mayúscula inicial o MAYÚSCULAS. Si al crear uno el nombre se parece a otro que ya existe, el sistema avisa y ofrece usar el existente.
+
+**Fusionar con…** junta un atributo duplicado dentro de otro del mismo ámbito y tipo compatible: sus valores pasan al que queda (se recalcula el vigente), su nombre y sus sinónimos pasan a los sinónimos, las opciones se unifican y el duplicado queda inactivo con la nota «fusionado en …». No se puede si se usa como filtro o estrato de una muestra activa. Desactivar un atributo lo saca del mapeo y de los filtros pero conserva sus valores; solo se borra uno sin valores y que no se use en una muestra activa. Los campos del sistema (RUT, razón social, naturaleza, CIIU, tamaño…) no se pueden borrar ni renombrar.
 
 ![Atributos de empresa](img/33-atributos.png)
 

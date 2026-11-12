@@ -43,7 +43,8 @@ const ETIQUETAS = {
   muestra_activa: 'en muestra activa', sin_telefono_discable: 'sin teléfono discable', enfriamiento: 'enfriamiento',
   actualizar_candidata: 'actualizó candidata', no_disponible: 'no disponible',
   vinculo: 'estado de vínculo teléfono–empresa', estado_parte: 'estado de la parte', tel_alt_nuevo: 'teléfono alternativo nuevo',
-  tel_usado_nuevo: 'teléfono usado nuevo', contacto_nuevo: 'contacto nuevo', empresa_cerrada: 'empresa marcada cerrada',
+  tel_usado_nuevo: 'teléfono usado nuevo', tel_usado_verificado: 'teléfono usado verificado', tel_alt_verificado: 'teléfono adicional verificado',
+  contacto_telefono: 'contacto relacionado con el número', atributos_contacto: 'atributos de contacto', contacto_nuevo: 'contacto nuevo', empresa_cerrada: 'empresa marcada cerrada',
   calidad_sin_telefono: 'calidad informada sin teléfono usado', intermediario_confirmado: 'intermediario confirmado por la sala',
   ultimo_contacto_efectivo: 'último contacto efectivo actualizado', total_excluidas: 'total excluidas (sin repetir)',
   baja: 'dada de baja', cerrada: 'empresa cerrada', filtro_origen: 'filtro de origen del teléfono',
@@ -68,8 +69,11 @@ export function pageHeader(titulo, acento, sub, acciones = '') {
 }
 
 export function stats(items) {
-  return `<div class="stat-grid">${items.map(([v, l, cls]) =>
-    `<div class="stat ${cls || ''}"><div class="stat-num mono">${typeof v === 'number' ? num(v) : esc(v ?? '—')}</div><div class="stat-label">${esc(l)}</div></div>`).join('')}</div>`;
+  // [valor, etiqueta, clase, enlace opcional]: con enlace, el indicador lleva a la lista que cuenta
+  return `<div class="stat-grid">${items.map(([v, l, cls, href]) => {
+    const tag = href ? 'a' : 'div';
+    return `<${tag} class="stat ${cls || ''}${href ? ' stat-link' : ''}"${href ? ` href="${esc(href)}"` : ''}><div class="stat-num mono">${typeof v === 'number' ? num(v) : esc(v ?? '—')}</div><div class="stat-label">${esc(l)}</div></${tag}>`;
+  }).join('')}</div>`;
 }
 
 export function tabla(cols, filas, vacio = 'Sin datos') {

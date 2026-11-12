@@ -41,7 +41,9 @@ def test_catalogo_de_atributos(api):
     assert api.post("/atributos", rol="steward", json={"clave": "x", "nombre": "X", "tipo": "texto"}).status_code == 403
     assert api.post("/atributos", json={"clave": "Con Espacios", "nombre": "X", "tipo": "texto"}).status_code == 422
     assert api.post("/atributos", json={"clave": "empleados", "nombre": "Otro", "tipo": "texto"}).status_code == 409
-    assert api.post("/atributos", json={"clave": "exporta", "nombre": "Exporta", "tipo": "lista"}).status_code == 422
+    # F1.5: una lista puede crearse sin opciones (se completan en la carga)
+    sin_op = api.post("/atributos", json={"clave": "exporta", "nombre": "Exporta", "tipo": "lista"})
+    assert sin_op.status_code == 200 and sin_op.json()["opciones"] == []
     assert api.post("/atributos", json={"clave": "zona", "nombre": "Zona", "tipo": "texto",
                                         "estratificable": True}).status_code == 422
     # la clave es inmutable
@@ -120,20 +122,20 @@ def test_no_se_borra_atributo_usado_en_muestra_activa(api, sql):
 
 # ─── C3 · Mapeo ───
 
-def test_mapeo_sin_contactos_y_plantilla_vieja(api, sql):
+def test_mapeo_con_contactos_y_plantilla_vieja(api, sql):
+    """D-d (SPEC_mejoras_sav_contactos, F3.2): los contactos pueden venir en una carga; las plantillas viejas los usan."""
     filas = [{"RUT": rut_valido(0), "Razón social": "X SA", "Contacto": "Ana", "Cargo": "Gerente", "Teléfono": "29001111"}]
     a = api.subir("/cargas/analizar", "x.csv", csv_bytes(filas), rol="steward", tipo_fuente="vieja").json()
-    assert not any(k.startswith("contacto") for k in a["mapeo"])
-    assert "contacto_nombre" not in a["campos"]["empresa"]
+    assert (a["mapeo"]["contacto_nombre"], a["mapeo"]["contacto_cargo"]) == ("Contacto", "Cargo")
+    assert "contacto_nombre" in a["campos"]["contacto"]
     sql.execute("INSERT INTO carga_plantilla (tipo_fuente, mapeo, autor) VALUES ('vieja', %s, 'x')",
                 (psycopg.types.json.Jsonb({"rut": "RUT", "razon_social": "Razón social", "contacto_nombre": "Contacto",
                                            "telefonos": ["Teléfono"]}),))
     b = api.subir("/cargas/analizar", "x.csv", csv_bytes(filas), rol="steward", tipo_fuente="vieja").json()
-    assert b["origen_mapeo"] == "plantilla" and "contacto_nombre" not in b["mapeo"]
-    assert any("contacto" in x for x in b["avisos"])
+    assert b["origen_mapeo"] == "plantilla" and b["mapeo"]["contacto_nombre"] == "Contacto" and b["avisos"] == []
     c = cargar(api, filas, tipo_fuente="vieja", mapeo={"contacto_nombre": "Contacto"})
-    assert c["estado"] == "confirmada" and "contactos_nuevos" not in c["conteos"]
-    assert sql.execute("SELECT count(*) AS n FROM contacto").fetchone()["n"] == 0
+    assert c["estado"] == "confirmada" and c["conteos"]["contactos_nuevos"] == 1
+    assert sql.execute("SELECT nombre FROM contacto").fetchone()["nombre"] == "Ana"
 
 
 # ─── C4 · Origen del teléfono ───
@@ -219,8 +221,9 @@ def test_traduccion_sugerida_pero_no_aplicada_sin_confirmar(api, sql):
                               "traducido": False}
     assert v["origen"][1]["sugerido"] is None
     ex = v["atributos"][0]
-    assert ex["clave"] == "exporta" and {x["valor"]: x["sugerido"] for x in ex["valores"]} == {"si": "Sí", "NO": "No", "s/d": None}
-    assert v["pendientes"] == 5
+    # F4.1: «si» y «NO» son las opciones «Sí» y «No» sin distinguir mayúsculas ni tildes: no piden traducción
+    assert ex["clave"] == "exporta" and {x["valor"]: x["sugerido"] for x in ex["valores"]} == {"s/d": None}
+    assert v["pendientes"] == 3
     body = {"archivo_id": a["archivo_id"], "fuente": "x", "tipo_fuente": "dir", "licencia": "interna", "mapeo": m}
     r = api.post("/cargas", rol="steward", json=body)
     assert r.status_code == 422 and "sin traducir" in r.json()["detail"]   # la sugerencia nunca se aplica sola
@@ -336,10 +339,10 @@ def test_sorteo_reproducible_con_filtros_nuevos(api, sql):
                  "estratificar_por": ["atributo.exporta"], "n_por_estrato": 3}
     e = estudio(api)
     m1, _ = muestra(api, e, criterios, semilla=7, nombre="A")
-    lista1 = [i["rut"] for i in api.get(f"/muestras/{m1}/items").json()]
+    lista1 = [i["rut"] for i in api.get(f"/muestras/{m1}/items").json()["items"]]
     api.post(f"/muestras/{m1}/cerrar", rol="jefe")
     m2, _ = muestra(api, e, criterios, semilla=7, nombre="B")
-    assert [i["rut"] for i in api.get(f"/muestras/{m2}/items").json()] == lista1
+    assert [i["rut"] for i in api.get(f"/muestras/{m2}/items").json()["items"]] == lista1
 
 
 # ─── C8 · CSV con origen ───
@@ -368,12 +371,13 @@ def test_csv_filtrado_y_ordenado_por_origen(api, sql):
     assert [f["tel"] for f in rut3] == sorted(f["tel"] for f in rut3)
     # solo la guía
     r = api.put(f"/muestras/{mid}/exportacion", rol="coordinador", json={"origenes": ["guia"], "orden": "prioridad"})
-    assert r.json() == {"origenes": ["guia"], "orden": "prioridad"}
+    assert {k: r.json()[k] for k in ("origenes", "orden")} == {"origenes": ["guia"], "orden": "prioridad"}
     filas = leer_csv(api.get(f"/muestras/{mid}/csv?parte_id={parte}", rol="coordinador"))
     assert {f["origen"] for f in filas} == {"Guía telefónica"} and len(filas) == 6
     s = api.get(f"/muestras/{mid}/csv/resumen?parte_id={parte}", rol="coordinador").json()
     assert s["items_sin_telefono_por_origen"] == 6 and s["items_sin_telefono"] == 0
-    assert api.get(f"/muestras/{mid}").json()["exportacion"] == {"origenes": ["guia"], "orden": "prioridad"}
+    exp = api.get(f"/muestras/{mid}").json()["exportacion"]
+    assert {k: exp[k] for k in ("origenes", "orden")} == {"origenes": ["guia"], "orden": "prioridad"}
     assert api.put(f"/muestras/{mid}/exportacion", rol="lectura", json={}).status_code == 403
     assert sum(1 for a in api.get("/auditoria").json() if a["accion"] == "muestra.exportacion") == 2
 
