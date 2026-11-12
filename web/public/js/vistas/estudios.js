@@ -278,9 +278,23 @@ export async function muestra(ctx, id) {
       <div class="form-group"><label>Orden de los teléfonos</label><select class="fselect" id="mu-orden">
         <option value="prioridad" ${exp.orden === 'prioridad' ? 'selected' : ''}>Prioridad de origen y, dentro de cada origen, verificados primero</option>
         <option value="verificados" ${exp.orden === 'verificados' ? 'selected' : ''}>Verificados primero, sin mirar el origen</option></select></div>
+      <details class="map-bloque" id="mu-incluir"><summary>Qué incluir</summary>
+        <div class="form-group"><label>Atributos de empresa <span class="small muted">(<a class="link" href="javascript:void 0" data-todos="atr">todos</a> · <a class="link" href="javascript:void 0" data-ninguno="atr">ninguno</a>)</span></label>
+          ${atributos.filter(a => (a.ambito || 'empresa') === 'empresa' && a.activo).map(a => `<label class="check"><input type="checkbox" data-inc-atr="${esc(a.clave)}" ${exp.atributos_excluidos.includes(a.clave) ? '' : 'checked'} /> ${esc(a.nombre)}</label>`).join('') || '<div class="small muted">No hay atributos de empresa activos.</div>'}</div>
+        <div class="form-group"><label>Números</label><select class="fselect" id="mu-numeros">
+          <option value="discables" ${exp.numeros === 'discables' ? 'selected' : ''}>Todos los discables (verificados y sin verificar)</option>
+          <option value="verificados" ${exp.numeros === 'verificados' ? 'selected' : ''}>Solo los verificados</option></select></div>
+        ${ctx.me.exportar_contactos ? `<div class="form-group"><label class="check"><input type="checkbox" id="mu-contactos" ${exp.contactos ? 'checked' : ''} /> <strong>Contactos</strong> (dato personal: tu usuario tiene el permiso)</label>
+          <div class="chips-inline">${[['nombre', 'Nombre'], ['cargo', 'Cargo'], ['area', 'Área'], ['email', 'Email'], ['telefonos', 'Teléfonos del contacto']].map(([k, t]) =>
+            `<label class="check"><input type="checkbox" data-inc-ccampo="${k}" ${exp.contacto_campos.includes(k) ? 'checked' : ''} /> ${t}</label>`).join('')}
+          ${atributos.filter(a => a.ambito === 'contacto' && a.activo).map(a => `<label class="check"><input type="checkbox" data-inc-catr="${esc(a.clave)}" ${exp.atributos_contacto_excluidos.includes(a.clave) ? '' : 'checked'} /> ${esc(a.nombre)}</label>`).join('')}</div>
+          <div class="field-hint">Van en columnas contacto_1_*, contacto_2_*… (hasta ${num(m.contactos_por_empresa_csv || 3)} por empresa; primero el que coincide con el respondente objetivo de la parte).</div></div>` : ''}
+        <div class="field-hint">La elección queda guardada en la muestra para la próxima exportación.</div></details>
+      <div class="form-group"><label>Formato</label><select class="fselect" id="mu-formato">
+        <option value="ucontact">uContact: un renglón por teléfono</option><option value="planilla">Planilla de la muestra: un renglón por empresa</option></select></div>
       <div id="mu-csv-res" class="small muted mb"></div>
       <button class="btn btn-orange" id="mu-csv">Descargar CSV</button>
-      <p class="field-hint mt">Un renglón por teléfono discable de cada ítem liberado y pendiente en la parte. Nunca incluye intermediarios, inexistentes, "no corresponde" ni no llamar.${ctx.me.exportar_contactos ? '' : ' Tu usuario no tiene permiso para exportar contactos personales: la columna de contacto sale vacía.'}</p>`
+      <p class="field-hint mt">Un renglón por teléfono discable de cada ítem liberado y pendiente en la parte. Nunca incluye intermediarios, inexistentes, "no corresponde" ni no llamar.${ctx.me.exportar_contactos ? '' : ' Tu usuario no tiene permiso para exportar contactos personales: no salen en el archivo.'}</p>`
       : '<div class="muted small">Solo se exporta una muestra activa, con rol coordinador o jefe de proyecto.</div>')}</div>` +
     card('Avance por estrato', tabla([
       { t: 'Estrato', f: x => `<span class="td-strong">${esc(x.estrato)}</span>` }, { t: 'Titulares', cls: 'num', k: 'titulares' },
@@ -371,20 +385,29 @@ export async function muestra(ctx, id) {
     const resumen = async () => {
       const s = await api.get(`/muestras/${id}/csv/resumen`, { parte_id: $('#mu-parte').value });
       $('#mu-csv-res').innerHTML = `${num(s.renglones)} renglones para ${num(s.items)} de ${num(s.items_pendientes)} ítems pendientes en la parte · ${s.items_sin_telefono ? `<strong>${num(s.items_sin_telefono)} sin teléfono discable</strong>` : "todos tienen teléfono"}` +
-        (s.items_sin_telefono_por_origen ? ` · <strong>${num(s.items_sin_telefono_por_origen)} sin teléfono exportable por el filtro de origen</strong>` : '');
+        (s.items_sin_telefono_por_origen ? ` · <strong>${num(s.items_sin_telefono_por_origen)} sin teléfono exportable por el filtro de origen</strong>` : '') +
+        (s.columnas_extra && s.columnas_extra.length ? `<div>Columnas agregadas: ${esc(s.columnas_extra.filter(c => !/^contacto_[2-9]/.test(c)).join(', '))}${s.columnas_extra.some(c => c.startsWith('contacto_2')) ? ', …' : ''}</div>` : '');
     };
     const guardarExportacion = async () => {
-      try {
-        await api.put(`/muestras/${id}/exportacion`, { origenes: chipsSel(main(), 'exp-origenes'), orden: $('#mu-orden').value });
-      } catch (e) { toast(e.message, 'err'); }
+      const d = { origenes: chipsSel(main(), 'exp-origenes'), orden: $('#mu-orden').value, numeros: $('#mu-numeros').value,
+        atributos_excluidos: $$('[data-inc-atr]').filter(x => !x.checked).map(x => x.dataset.incAtr) };
+      if ($('#mu-contactos')) Object.assign(d, { contactos: $('#mu-contactos').checked,
+        contacto_campos: $$('[data-inc-ccampo]').filter(x => x.checked).map(x => x.dataset.incCcampo),
+        atributos_contacto_excluidos: $$('[data-inc-catr]').filter(x => !x.checked).map(x => x.dataset.incCatr) });
+      try { await api.put(`/muestras/${id}/exportacion`, d); } catch (e) { toast(e.message, 'err'); }
       resumen();
     };
+    $$('#mu-incluir input, #mu-numeros').forEach(x => { x.onchange = guardarExportacion; });
+    $$('[data-todos], [data-ninguno]').forEach(a => a.onclick = () => {
+      $$('[data-inc-atr]').forEach(x => { x.checked = !!a.dataset.todos; });
+      guardarExportacion();
+    });
     activarChips($('#mu-csv').closest('.card'), guardarExportacion);
     $('#mu-orden').onchange = guardarExportacion;
     $('#mu-parte').onchange = resumen;
     resumen();
     $('#mu-csv').onclick = async () => {
-      const r = await api.descargar(`/muestras/${id}/csv`, { parte_id: $('#mu-parte').value });
+      const r = await api.descargar(`/muestras/${id}/csv`, { parte_id: $('#mu-parte').value, formato: $('#mu-formato').value });
       toast(`Descargado ${r.nombre} (${r.headers.get('X-Renglones')} renglones)`, 'ok');
     };
   }

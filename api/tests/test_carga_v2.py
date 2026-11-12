@@ -371,12 +371,13 @@ def test_csv_filtrado_y_ordenado_por_origen(api, sql):
     assert [f["tel"] for f in rut3] == sorted(f["tel"] for f in rut3)
     # solo la guía
     r = api.put(f"/muestras/{mid}/exportacion", rol="coordinador", json={"origenes": ["guia"], "orden": "prioridad"})
-    assert r.json() == {"origenes": ["guia"], "orden": "prioridad"}
+    assert {k: r.json()[k] for k in ("origenes", "orden")} == {"origenes": ["guia"], "orden": "prioridad"}
     filas = leer_csv(api.get(f"/muestras/{mid}/csv?parte_id={parte}", rol="coordinador"))
     assert {f["origen"] for f in filas} == {"Guía telefónica"} and len(filas) == 6
     s = api.get(f"/muestras/{mid}/csv/resumen?parte_id={parte}", rol="coordinador").json()
     assert s["items_sin_telefono_por_origen"] == 6 and s["items_sin_telefono"] == 0
-    assert api.get(f"/muestras/{mid}").json()["exportacion"] == {"origenes": ["guia"], "orden": "prioridad"}
+    exp = api.get(f"/muestras/{mid}").json()["exportacion"]
+    assert {k: exp[k] for k in ("origenes", "orden")} == {"origenes": ["guia"], "orden": "prioridad"}
     assert api.put(f"/muestras/{mid}/exportacion", rol="lectura", json={}).status_code == 403
     assert sum(1 for a in api.get("/auditoria").json() if a["accion"] == "muestra.exportacion") == 2
 

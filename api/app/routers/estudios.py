@@ -185,20 +185,26 @@ def cerrar(muestra_id: int, conn=Depends(get_conn), u: Usuario = Depends(requier
 
 
 class Exportacion(BaseModel):
-    origenes: list[str] = []
-    orden: str = "prioridad"
+    origenes: list[str] | None = None
+    orden: str | None = None
+    numeros: str | None = None
+    atributos_excluidos: list[str] | None = None
+    contactos: bool | None = None
+    contacto_campos: list[str] | None = None
+    atributos_contacto_excluidos: list[str] | None = None
 
 
 @router.put("/muestras/{muestra_id}/exportacion")
 def exportacion_opciones(muestra_id: int, body: Exportacion, conn=Depends(get_conn),
                          u: Usuario = Depends(requiere("coordinador", "jefe"))):
     """Orígenes a exportar y orden de los teléfonos del CSV (queda guardado en la muestra)."""
-    return muestras.guardar_exportacion(conn, muestra_id, body.model_dump(), u.email)
+    return muestras.guardar_exportacion(conn, muestra_id, body.model_dump(exclude_unset=True), u.email)
 
 
 @router.get("/muestras/{muestra_id}/csv")
-def csv(muestra_id: int, parte_id: int, conn=Depends(get_conn), u: Usuario = Depends(requiere("coordinador", "jefe"))):
-    nombre, contenido, resumen = exportacion.generar_csv(conn, muestra_id, parte_id, u)
+def csv(muestra_id: int, parte_id: int, formato: str = "ucontact", conn=Depends(get_conn),
+        u: Usuario = Depends(requiere("coordinador", "jefe"))):
+    nombre, contenido, resumen = exportacion.generar_csv(conn, muestra_id, parte_id, u, formato)
     return Response(
         content=contenido.encode("utf-8-sig"), media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{nombre}"',
@@ -209,5 +215,6 @@ def csv(muestra_id: int, parte_id: int, conn=Depends(get_conn), u: Usuario = Dep
 
 @router.get("/muestras/{muestra_id}/csv/resumen")
 def csv_resumen(muestra_id: int, parte_id: int, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
-    filas, ctx = exportacion.filas_csv(conn, muestra_id, parte_id, False)
-    return {**ctx["resumen"], "ejemplo": filas[:5], "columnas": ctx["cfg"]["csv_ucontact"]["columnas"]}
+    filas, ctx = exportacion.filas_csv(conn, muestra_id, parte_id, u.exportar_contactos)
+    return {**ctx["resumen"], "columnas": ctx["cfg"]["csv_ucontact"]["columnas"],
+            "puede_exportar_contactos": u.exportar_contactos}

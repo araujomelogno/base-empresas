@@ -451,6 +451,7 @@ def detalle(conn, muestra_id: int) -> dict:
     if m is None:
         raise HTTPException(404, "Muestra inexistente")
     m["exportacion"] = opciones_exportacion(m)
+    m["contactos_por_empresa_csv"] = int(config.vigente(conn)[1].get("contactos_por_empresa_csv", 3))
     m["n_items_borrados"] = conn.execute("SELECT count(*) AS n FROM muestra_item_borrado WHERE muestra_id = %s",
                                          (muestra_id,)).fetchone()["n"]
     m["partes"] = conn.execute("SELECT id, nombre FROM parte WHERE estudio_id = %s ORDER BY id", (m["estudio_id"],)).fetchall()
@@ -484,25 +485,49 @@ def detalle(conn, muestra_id: int) -> dict:
     return m
 
 
+CAMPOS_CONTACTO_CSV = ("nombre", "cargo", "area", "email", "telefonos")
+NUMEROS = ("discables", "verificados")
+
+
 def opciones_exportacion(m: dict) -> dict:
+    """Qué incluir al exportar (C8 y F5.1). Por defecto, todo: los atributos se guardan como excluidos, así un
+    atributo nuevo entra solo. «numeros»: todos los discables (verificados y sin verificar, como siempre) o solo
+    los verificados."""
     e = m.get("exportacion") or {}
-    return {"origenes": e.get("origenes") or [], "orden": e.get("orden") or "prioridad"}
+    return {"origenes": e.get("origenes") or [], "orden": e.get("orden") or "prioridad",
+            "numeros": e.get("numeros") if e.get("numeros") in NUMEROS else "discables",
+            "atributos_excluidos": e.get("atributos_excluidos") or [],
+            "contactos": e.get("contactos", True) is not False,
+            "contacto_campos": [c for c in (e.get("contacto_campos") or CAMPOS_CONTACTO_CSV) if c in CAMPOS_CONTACTO_CSV],
+            "atributos_contacto_excluidos": e.get("atributos_contacto_excluidos") or []}
 
 
 def guardar_exportacion(conn, muestra_id: int, datos: dict, actor: str) -> dict:
-    """Orígenes a exportar y orden de los teléfonos del CSV (C8). Queda guardado en la muestra."""
+    """Orígenes, orden de los teléfonos (C8) y qué incluir (F5.1). Queda guardado en la muestra."""
     m = conn.execute("SELECT * FROM muestra WHERE id = %s FOR UPDATE", (muestra_id,)).fetchone()
     if m is None:
         raise HTTPException(404, "Muestra inexistente")
+    antes = opciones_exportacion(m)
+    datos = {**antes, **{k: v for k, v in datos.items() if v is not None}}
     orden = datos.get("orden") or "prioridad"
     if orden not in ("prioridad", "verificados"):
         raise HTTPException(422, "orden: prioridad | verificados")
+    if datos.get("numeros") not in NUMEROS:
+        raise HTTPException(422, "numeros: discables | verificados")
     origenes = sorted({o for o in (datos.get("origenes") or []) if o})
     conocidos = {o["codigo"] for o in catalogos.origenes(conn)}
     if set(origenes) - conocidos:
         raise HTTPException(422, f"Orígenes de teléfono desconocidos: {', '.join(sorted(set(origenes) - conocidos))}")
-    nuevo = {"origenes": origenes, "orden": orden}
-    antes = opciones_exportacion(m)
+    claves = {a["clave"]: a["ambito"] for a in catalogos.atributos(conn)}
+    for k, ambito in (("atributos_excluidos", "empresa"), ("atributos_contacto_excluidos", "contacto")):
+        malos = [c for c in datos.get(k) or [] if claves.get(c) != ambito]
+        if malos:
+            raise HTTPException(422, f"Atributos de {ambito} desconocidos: {', '.join(malos)}")
+    campos = [c for c in CAMPOS_CONTACTO_CSV if c in (datos.get("contacto_campos") or [])]
+    nuevo = {"origenes": origenes, "orden": orden, "numeros": datos["numeros"],
+             "atributos_excluidos": sorted(set(datos.get("atributos_excluidos") or [])),
+             "contactos": bool(datos.get("contactos")), "contacto_campos": campos or list(CAMPOS_CONTACTO_CSV),
+             "atributos_contacto_excluidos": sorted(set(datos.get("atributos_contacto_excluidos") or []))}
     if nuevo != antes:
         conn.execute("UPDATE muestra SET exportacion = %s WHERE id = %s", (Jsonb(nuevo), muestra_id))
         auditoria.registrar(conn, actor, "muestra.exportacion", "muestra", muestra_id, {"antes": antes, "despues": nuevo})
