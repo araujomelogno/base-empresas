@@ -33,7 +33,7 @@ const RUTAS = [
   [/^intermediarios$/, cargas.intermediarios], [/^revision$/, cargas.revision],
   [/^estudios$/, estudios.lista], [/^estudios\/(\d+)$/, estudios.detalle], [/^estudios\/(\d+)\/nueva-muestra$/, estudios.nuevaMuestra],
   [/^muestras\/(\d+)$/, estudios.muestra],
-  [/^sav$/, campo.sav], [/^sav\/(\d+)$/, campo.savDetalle], [/^conciliacion$/, campo.conciliacion], [/^actividad$/, campo.actividad],
+  [/^sav$/, campo.sav], [/^sav\/(\d+)$/, campo.savDetalle], [/^conciliacion$/, campo.conciliacion], [/^actividad$/, campo.actividad], [/^actividad\/empresas$/, campo.empresasLlamadas],
   [/^config$/, admin.config], [/^atributos$/, admin.atributos], [/^origenes$/, admin.origenes], [/^naturalezas$/, admin.naturalezas], [/^no-llamar$/, admin.noLlamar],
   [/^usuarios$/, admin.usuarios], [/^auditoria$/, admin.auditoria],
 ];

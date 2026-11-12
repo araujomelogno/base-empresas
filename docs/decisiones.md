@@ -45,6 +45,7 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 | D35 | Llamada atendida: disposición ANSWERED del CDR o, si la disposición no lo dice, duración facturada > 0 | Provisoria (11/11/2026) |
 | D36 | Borrado definitivo de empresas y cargas, solo administrador | Vigente (11/11/2026; ajustada por D37) |
 | D37 | Borrar estudios y muestras, cancelar tareas al borrar y verificar la reproducibilidad con borrados (marco inmutable) | Vigente (11/11/2026) |
+| D38 | Qué es una llamada y cómo se cuentan las llamadas a empresas (criterios del dashboard, sin filtro de campaña, filtro por empresa) | Vigente (11/11/2026) |
 
 ## D01 — Cloud SQL Postgres como núcleo
 
@@ -392,6 +393,26 @@ La configuración inicial usa 6 meses de enfriamiento desde el último contacto 
 - **Borrar una parte suelta:** queda para más adelante (P2).
 
 **Consecuencias.** Migración `0008_borrado_estudios_muestras.sql`. Sin costo de infraestructura.
+
+## D38 — Qué es una llamada y cómo se cuentan las llamadas a empresas
+
+**Contexto.** En Actividad, la columna «Llamadas» de las corridas del job del CDR mostraba las filas leídas del CDR (con tramos repetidos, internos y filas releídas), y «Nuevos» no decía qué eran. «Rendimiento por origen» no mostraba llamadas a empresas que no estaban en una muestra cuando se filtraba por estudio o muestra, porque el filtro era por ítem. Y no había forma de ver a qué empresas se llamó. (Spec: `specs/SPEC_conteo_llamadas_cdr_y_rendimiento_por_origen.md`, versión 2; decisiones de Germán Araújo del 11/11/2026.)
+
+**Decisión.**
+
+- **Una llamada** es lo que cuenta el dashboard de productividad CATI: **una por `uniqueid`** (los tramos cuentan una vez), con **destino externo** (no interno según `destinos_internos`), sin volver a contar las filas del segundo ya procesado en la corrida anterior. **No se filtra por campaña.**
+- **Conteos de cada corrida** (`cdr_corrida.conteos`, `conteo_version = 2`): `llamadas`; `llamadas_a_empresas` (las que cruzan con un teléfono de la base, **nuevas más ya registradas**, así un reproceso repite el número en lugar de mostrar 0); `telefonos_marcados` y `empresas_llamadas` distintos; y el embudo `asociadas_a_muestra` + `en_conciliacion` + `sin_muestra` = `llamadas_a_empresas`. Las corridas anteriores muestran «—»: un reproceso con «Correr ahora» y fechas las recalcula.
+- **`cdr_corrida_intento`** (migración 0009) guarda las llamadas a empresas de cada corrida, nuevas o ya registradas. Con eso salen los distintos y el embudo, y «Exportar empresas» de una corrida da exactamente sus empresas aunque los intentos se hayan guardado antes (su `lote_id` es el de la primera vez). Para las corridas anteriores se usa el `lote_id` de sus lotes, como pedía el spec.
+- **Rendimiento por origen no depende de las muestras.** Sin filtros cuenta todas las llamadas a empresas del período. Con un estudio o una muestra, Actividad filtra **por empresa** (las llamadas a empresas que pertenecen a alguna de sus muestras), no por ítem: cuenta también la llamada hecha antes del campo o la que quedó en Conciliación. Aplica al tablero y a la tarjeta, así coinciden. La fila **Total** sale de todas las llamadas filtradas (cada teléfono y empresa una vez), y si alguna llamada a una empresa ya no tiene vínculo vigente aparece la fila «Sin vínculo vigente».
+- **Lista de empresas llamadas** (`GET /api/actividad/empresas-llamadas`, también en CSV): una fila por empresa, con sus teléfonos llamados y su origen, llamadas, atendidas (D35), primera y última llamada, encuestadores, y estudio, muestra y estado del ítem. Se abre desde una corrida, desde cada número de la tarjeta y desde Actividad con los filtros vigentes. La ven y exportan administrador, coordinador y jefe; cada exportación queda en Auditoría (`actividad.exportar_empresas`). No incluye contactos (nombres de personas). Una llamada a un número compartido por varias empresas aparece en la fila de cada una; el total de llamadas arriba de la lista la cuenta una vez.
+
+**Descartado.**
+
+- **Filtrar por campaña:** las llamadas del marcador manual no tienen campaña y son parte del trabajo de campo.
+- **Seguir filtrando por ítem:** escondía llamadas reales a empresas de la muestra (antes del campo, en Conciliación).
+- **Guardar todas las llamadas del CDR, también las que no cruzan:** no se guardan (no son de empresas de la base); por eso las llamadas por encuestador del tablero siguen contando solo las llamadas a empresas (P1.1 queda para cuando se decida guardarlas).
+
+**Consecuencias.** Migración `0009_conteo_llamadas.sql` (tabla e índices). El conteo nuevo vive en el job: hay que desplegar `api` y `cdr`. Sin costo de infraestructura.
 
 ## Preguntas abiertas que heredan del PRD
 
