@@ -190,8 +190,11 @@ def _validar_criterios(conn, c: dict) -> dict:
             raise HTTPException(422, "Tamaños y reemplazos no pueden ser negativos")
     if not estratos and c.get("n_por_estrato") is None:
         raise HTTPException(422, "Indicá el tamaño por estrato (lista de estratos o n_por_estrato)")
-    return {"filtros": filtros, "atributos": atributos, "origenes": origenes, "estratificar_por": por, "estratos": estratos,
-            "n_por_estrato": c.get("n_por_estrato"), "reemplazos_por_estrato": c.get("reemplazos_por_estrato", 0)}
+    salida = {"filtros": filtros, "atributos": atributos, "origenes": origenes, "estratificar_por": por, "estratos": estratos,
+              "n_por_estrato": c.get("n_por_estrato"), "reemplazos_por_estrato": c.get("reemplazos_por_estrato", 0)}
+    if c.get("incluir_provisoria"):  # F6.1 (Q2): desmarcado por defecto; solo se guarda si se marca (reproducibilidad)
+        salida["incluir_provisoria"] = True
+    return salida
 
 
 def crear_muestra(conn, estudio_id: int, nombre: str, criterios: dict, actor: str) -> dict:
@@ -207,6 +210,8 @@ def crear_muestra(conn, estudio_id: int, nombre: str, criterios: dict, actor: st
 def _universo(conn, criterios: dict) -> list[dict]:
     filtros = criterios.get("filtros") or {}
     where, args = ["TRUE"], []
+    if not criterios.get("incluir_provisoria"):
+        where.append("e.base = 'definitiva'")
     if filtros.get("ciiu"):
         where.append("(" + " OR ".join(["e.ciiu LIKE %s"] * len(filtros["ciiu"])) + ")")
         args += [f"{x}%" for x in filtros["ciiu"]]
@@ -562,13 +567,13 @@ def items(conn, muestra_id: int, estrato: str | None = None, rol: str | None = N
                      SELECT 1 FROM item_parte_estado ps WHERE ps.item_id = i.id
                      AND (%(parte)s::int IS NULL OR ps.parte_id = %(parte)s))))
           AND (%(q)s::text IS NULL OR e.razon_social ILIKE %(q_like)s
-               OR (%(rut)s <> '' AND e.rut LIKE %(rut)s || '%%') OR i.id = %(item)s)"""
+               OR (%(rut)s <> '' AND e.rut LIKE %(rut)s || '%%') OR i.id = %(item)s OR e.codigo = upper(%(q)s))"""
     total = conn.execute(f"SELECT count(*) AS n FROM muestra_item i JOIN empresa e ON e.id = i.empresa_id {where}",
                          p).fetchone()["n"]
     filas = conn.execute(
         f"""
         SELECT i.id, i.estrato, i.rol, i.orden, i.liberado, i.liberado_por, i.liberado_motivo, i.liberado_fecha,
-               e.rut, e.razon_social, e.departamento, e.tamano,
+               e.codigo AS rut, e.base, e.razon_social, e.departamento, e.tamano,
                (SELECT count(*) FROM intento t WHERE t.item_id = i.id) AS intentos,
                (SELECT json_object_agg(p.nombre, ps.estado) FROM item_parte_estado ps JOIN parte p ON p.id = ps.parte_id
                  WHERE ps.item_id = i.id) AS estados

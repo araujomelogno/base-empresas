@@ -183,7 +183,8 @@ class Contexto:
                 "SELECT i.*, e.rut FROM muestra_item i JOIN muestra m ON m.id = i.muestra_id JOIN empresa e ON e.id = i.empresa_id"
                 " WHERE m.estudio_id = %s", (parte["estudio_id"],)):
             self.items[r["id"]] = r
-            self.por_rut[r["rut"]].append(r["id"])
+            if r["rut"]:
+                self.por_rut[r["rut"]].append(r["id"])
         if self.items:
             for r in conn.execute(
                     "SELECT v.empresa_id, t.e164 FROM telefono_vinculo v JOIN telefono t ON t.id = v.telefono_id"

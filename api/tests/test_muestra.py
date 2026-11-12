@@ -146,7 +146,9 @@ def test_csv_ucontact(api, sql):
     f = filas[0]
     # las columnas configuradas, más las de «Qué incluir» (F5.1): contactos numerados para quien tiene permiso
     assert {"id_item", "telefono", "rut", "razon_social", "contacto", "link"} <= set(f)
-    assert {c for c in f if not c.startswith("contacto_")} == {"id_item", "telefono", "rut", "razon_social", "contacto", "link"}
+    assert {c for c in f if not c.startswith(("contacto_", "atr_"))} == {"id_item", "telefono", "rut", "razon_social", "contacto",
+                                                                        "link", "EC_ID_EMPRESA"}
+    assert f["EC_ID_EMPRESA"] == f["rut"]  # en la base definitiva, el código es el RUT
     assert "EC_ID_ITEM=" + f["id_item"] in f["link"] and "EC_RUT=" + f["rut"] in f["link"]
     assert "EC_TEL_USADO=598" in f["link"]
     assert f["contacto"].startswith("Persona")
@@ -190,7 +192,7 @@ def test_formato_csv_configurable(api):
     mid, _ = muestra(api, e, {"n_por_estrato": 1})
     txt = api.get(f"/muestras/{mid}/csv?parte_id={e['partes'][0]['id']}", rol="coordinador").content.decode("utf-8-sig")
     # las columnas configuradas van primero; después, las de «Qué incluir» (F5.1)
-    assert txt.splitlines()[0].startswith("PHONE,DATA,contacto_1_nombre") and txt.splitlines()[1].startswith("598")
+    assert txt.splitlines()[0].startswith("PHONE,DATA,EC_ID_EMPRESA,") and txt.splitlines()[1].startswith("598")
 
 
 # ─── Control automático: excluidas, no llamar y enfriamiento nunca en muestras ni en CSV ───

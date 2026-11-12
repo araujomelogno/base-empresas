@@ -13,7 +13,7 @@ import psycopg
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
-from . import auditoria, catalogos, config, contactos, empresas, intermediarios, lectores, rut as rutmod, storage, tareas
+from . import auditoria, catalogos, config, contactos, empresas, intermediarios, lectores, provisorias, rut as rutmod, storage, tareas
 from . import telefonos as telmod
 from .util import dominio, razon_normalizada, sin_tildes, texto
 
@@ -164,9 +164,9 @@ def limpiar_mapeo(mapeo: dict) -> tuple[dict, list[str]]:
     return m, avisos
 
 
-def _validar_mapeo(conn, mapeo: dict, columnas: list[str]):
-    if not mapeo.get("rut"):
-        raise HTTPException(422, "El mapeo tiene que indicar la columna del RUT")
+def _validar_mapeo(conn, mapeo: dict, columnas: list[str], destino: str = "definitiva"):
+    if not mapeo.get("rut") and destino != "provisoria":
+        raise HTTPException(422, "El mapeo tiene que indicar la columna del RUT (o elegí el destino «Base provisoria»)")
     for campo in mapeo:
         if campo not in CLAVES_MAPEO:
             raise HTTPException(422, f"Campo de destino desconocido: {campo}")
@@ -215,7 +215,8 @@ def analizar(conn, archivo: dict, tipo_fuente: str | None) -> dict:
     atributos = catalogos.atributos(conn, activos=True)
     plantilla = None
     if tipo_fuente:
-        plantilla = conn.execute("SELECT mapeo FROM carga_plantilla WHERE tipo_fuente = %s", (tipo_fuente,)).fetchone()
+        plantilla = conn.execute("SELECT mapeo, destino, reglas FROM carga_plantilla WHERE tipo_fuente = %s",
+                                 (tipo_fuente,)).fetchone()
     avisos = []
     if plantilla:
         mapeo_p, avisos = limpiar_mapeo(plantilla["mapeo"])
@@ -243,6 +244,10 @@ def analizar(conn, archivo: dict, tipo_fuente: str | None) -> dict:
         "columnas": columnas, "n_filas": len(filas), "ejemplos": filas[:8],
         "mapeo": mapeo, "origen_mapeo": origen, "avisos": avisos,
         "sugerencias_atributos": sugerir_atributos(conn, columnas, mapeo),
+        "destino": (plantilla or {}).get("destino") or "definitiva",
+        "reglas": (plantilla or {}).get("reglas") or provisorias.REGLAS_DEFECTO,
+        "criterios_fusion": list(provisorias.CRITERIOS),
+        "umbral_fusion_flexible": float(config.vigente(conn)[1].get("umbral_fusion_flexible", 0.85)),
         "campos": {"empresa": CAMPOS_NUCLEO, "sucursal": CAMPOS_SUCURSAL, "contacto": CAMPOS_CONTACTO},
         "atributos": atributos, "origenes": catalogos.origenes(conn, activos=True),
         "plantillas": [r["tipo_fuente"] for r in conn.execute("SELECT tipo_fuente FROM carga_plantilla ORDER BY 1")],
@@ -392,32 +397,6 @@ def valores(conn, archivo_id: int, mapeo: dict) -> dict:
     return salida
 
 
-def _buscar_candidata(conn, regla: str, datos: dict, tels: list) -> dict | None:
-    if regla == "telefono":
-        e164s = [t.e164 for t in tels if t.e164]
-        if not e164s:
-            return None
-        return conn.execute(
-            "SELECT e.* FROM empresa e JOIN telefono_vinculo v ON v.empresa_id = e.id JOIN telefono t ON t.id = v.telefono_id"
-            " WHERE t.e164 = ANY(%s) AND e.baja IS NULL ORDER BY e.id LIMIT 1", (e164s,)).fetchone()
-    if regla == "razon_social":
-        clave = razon_normalizada(datos.get("razon_social"))
-        if not clave:
-            return None
-        for e in conn.execute("SELECT * FROM empresa WHERE baja IS NULL AND translate(lower(razon_social), 'áéíóúüñ', 'aeiouun') LIKE %s",
-                              (f"%{clave.split(' ')[0]}%",)).fetchall():
-            if razon_normalizada(e["razon_social"]) == clave:
-                return e
-        return None
-    if regla == "dominio":
-        d = dominio(datos.get("web")) or dominio(datos.get("email"))
-        if not d:
-            return None
-        return conn.execute("SELECT * FROM empresa WHERE baja IS NULL AND web IS NOT NULL AND"
-                            " (lower(web) LIKE %s) ORDER BY id LIMIT 1", (f"%{d}%",)).fetchone()
-    return None
-
-
 def procesar(conn, carga: dict, filas: list[dict], cfg: dict, actor: str, real: bool,
              tarea_id: int | None = None) -> tuple[dict, list]:
     """Aplica las filas. Devuelve (conteos, rechazos). Si real=False lo corre el preview."""
@@ -431,20 +410,30 @@ def procesar(conn, carga: dict, filas: list[dict], cfg: dict, actor: str, real: 
     por_atributo.update({k: Counter() for k in (mapeo.get("contacto_atributos") or {})})
     rechazos, conflictos_muestra, ruts_vistos = [], [], set()
     telefonos_tocados: set[int] = set()
+    # F6.1 / F6.2: destino, opciones, reglas en cascada y decisiones tomadas en el preview
+    destino = carga.get("destino") or "definitiva"
+    opciones = carga.get("opciones") or {}
+    sin_rut_a_provisoria = destino == "provisoria" or bool(opciones.get("sin_rut_a_provisoria"))
+    con_rut_a_definitiva = destino == "definitiva" or opciones.get("con_rut_a_definitiva", True) is not False
+    reglas = carga.get("reglas") or provisorias.REGLAS_DEFECTO
+    decisiones = carga.get("decisiones") or {}
+    coincidencias = []
     total = len(filas)
     for i, fila in enumerate(filas):
         nfila = i + 2
         if tarea_id and i % 200 == 0:
             tareas.progreso(tarea_id, i, total)
-        r, motivo = rutmod.validar(fila.get(mapeo["rut"]))
-        if r is None:
+        crudo_rut = texto(fila.get(mapeo["rut"])) if mapeo.get("rut") else None
+        r, motivo = rutmod.validar(crudo_rut) if crudo_rut else (None, "sin RUT")
+        if r is None and not sin_rut_a_provisoria:
             rechazos.append((nfila, motivo, fila))
             c["rechazos"] += 1
             continue
-        if r in ruts_vistos:
+        if r and r in ruts_vistos:
             c["conflictos"] += 1
             c["rut_repetido_en_archivo"] += 1
-        ruts_vistos.add(r)
+        if r:
+            ruts_vistos.add(r)
         datos = {k: _valor(fila, mapeo, k) for k in CAMPOS_MAPEO}
         if datos.get("naturaleza"):
             cod = empresas.resolver_naturaleza(conn, datos["naturaleza"])
@@ -480,32 +469,61 @@ def procesar(conn, carga: dict, filas: list[dict], cfg: dict, actor: str, real: 
             attrs[clave] = v
             por_atributo[clave]["invalidos" if v["invalido"] else "cargados"] += 1
 
-        emp = conn.execute("SELECT * FROM empresa WHERE rut = %s", (r,)).fetchone()
+        if r is None and crudo_rut:  # un identificador que no es RUT válido no se pierde (atributo de sistema)
+            attrs["id_informado"] = {"valor": crudo_rut, "invalido": False}
+        emp = conn.execute("SELECT * FROM empresa WHERE rut = %s", (r,)).fetchone() if r else None
         while emp and emp["baja"] == "fusionada" and emp["fusionada_en"]:
             emp = conn.execute("SELECT * FROM empresa WHERE id = %s", (emp["fusionada_en"],)).fetchone()
         es_alta = False
         if emp is None:
-            if carga["regla_fusion"] != "rut":
-                cand = _buscar_candidata(conn, carga["regla_fusion"], datos, [t for t, _ in tels])
-                if cand is not None:
+            email_c = _valor(fila, mapeo, "contacto_email") or datos.get("email")
+            m = provisorias.cascada(conn, reglas, r, datos, [t.e164 for t, _ in tels if t.e164], email_c)
+            if m and m["accion"] == "consultar":
+                decision = decisiones.get(str(nfila))
+                cand = m["candidata"]
+                if len(coincidencias) < 500:
+                    coincidencias.append({
+                        "fila": nfila, "rut": r, "datos": {k: v for k, v in datos.items() if v},
+                        "telefonos": [t.e164 or t.crudo for t, _ in tels], "candidata": provisorias._resumen(cand),
+                        "candidatas": m["candidatas"], "criterio": m["regla"]["criterio"], "tipo": m["regla"]["tipo"],
+                        "similitud": m["similitud"], "decision": decision})
+                c["coincidencias"] += 1
+                if decision == "fusionar":
+                    emp = cand
+                    c["fusiones_decididas"] += 1
+                elif decision == "otra":
+                    c["otra_empresa"] += 1
+                else:  # «Decidir después» o sin decisión: a la bandeja de Revisión de fusiones
                     c["revision"] += 1
                     if real:
                         conn.execute(
-                            "INSERT INTO revision_fusion (carga_id, fila, datos, criterio, candidata_id)"
-                            " VALUES (%s,%s,%s,%s,%s)",
-                            (cid, nfila, Jsonb({"rut": r, **{k: v for k, v in datos.items() if v},
+                            "INSERT INTO revision_fusion (carga_id, fila, datos, criterio, candidata_id, similitud)"
+                            " VALUES (%s,%s,%s,%s,%s,%s)",
+                            (cid, nfila, Jsonb({"rut": r, "id_informado": None if r else crudo_rut,
+                                                **{k: v for k, v in datos.items() if v},
                                                 "telefonos": [{"crudo": t.crudo, "origen": o} for t, o in tels],
                                                 "atributos": attrs}),
-                             carga["regla_fusion"], cand["id"]),
+                             m["regla"]["criterio"] + ("" if m["regla"]["tipo"] == "exacta" else " (flexible)"),
+                             cand["id"], m["similitud"]),
                         )
                     continue
-            emp = conn.execute("INSERT INTO empresa (rut, carga_alta_id) VALUES (%s, %s) RETURNING *",
-                               (r, cid)).fetchone()
+            elif m and m["accion"] == "fusionar":
+                emp = m["candidata"]
+                c[f"fusion_por_{m['regla']['criterio']}"] += 1
+        if emp is None:
+            base = "definitiva" if r and con_rut_a_definitiva else "provisoria"
+            emp = conn.execute("INSERT INTO empresa (rut, base, carga_alta_id) VALUES (%s, %s, %s) RETURNING *",
+                               (r, base, cid)).fetchone()
             es_alta = True
+            c[f"altas_{base}"] += 1
         elif emp["baja"] == "anulada":
             conn.execute("UPDATE empresa SET baja = NULL, carga_alta_id = %s WHERE id = %s", (cid, emp["id"]))
             es_alta = True
-
+            c[f"altas_{emp['base']}"] += 1
+        elif r and emp["base"] == "provisoria" and not emp["rut"] and con_rut_a_definitiva:
+            # La fila trae el RUT de una provisoria que coincidió por otra regla: pasa a la definitiva
+            emp = provisorias.promover(conn, emp, r, actor, "carga", cid, carga_id=cid if real else None)
+            c["promovidas"] += 1
         hubo_cambio = aplicar_fila(conn, emp, datos, tels, cid, confianza, actor, c, conflictos_muestra,
                                    telefonos_tocados, attrs, por_origen)
         if mapeo.get("contacto_nombre"):
@@ -515,6 +533,7 @@ def procesar(conn, carga: dict, filas: list[dict], cfg: dict, actor: str, real: 
             c["altas"] += 1
         elif hubo_cambio:
             c["actualizaciones"] += 1
+            c[f"actualizaciones_{emp['base']}"] += 1
         else:
             c["sin_cambios"] += 1
 
@@ -535,6 +554,8 @@ def procesar(conn, carga: dict, filas: list[dict], cfg: dict, actor: str, real: 
                                        for o, n in sorted(por_origen.items())}
     conteos["atributos"] = {k: {"cargados": n.get("cargados", 0), "invalidos": n.get("invalidos", 0),
                                 "sin_dato": n.get("sin_dato", 0)} for k, n in por_atributo.items()}
+    conteos["coincidencias_a_decidir"] = coincidencias
+    conteos["destino"] = destino
     return conteos, rechazos
 
 
@@ -602,7 +623,7 @@ def aplicar_fila(conn, emp, datos, tels, cid, confianza, actor, c, conflictos_mu
     if conflictos:
         c["conflictos"] += 1
         if len(conflictos_muestra) < 30:
-            conflictos_muestra.append({"rut": emp["rut"], "campos": conflictos})
+            conflictos_muestra.append({"rut": emp["codigo"], "campos": conflictos})
     sucursal_id = None
     if datos.get("sucursal_direccion") or datos.get("sucursal_localidad"):
         dir_ = datos.get("sucursal_direccion")
@@ -645,16 +666,31 @@ class _Preview(Exception):
     pass
 
 
-def crear(conn, archivo_id: int, fuente: str, tipo_fuente: str, licencia: str, regla_fusion: str,
-          confianza: int | None, mapeo: dict, guardar_plantilla: bool, actor: str) -> dict:
+DESTINOS = ("definitiva", "provisoria")
+
+
+def crear(conn, archivo_id: int, fuente: str, tipo_fuente: str, licencia: str, regla_fusion: str | None,
+          confianza: int | None, mapeo: dict, guardar_plantilla: bool, actor: str, destino: str = "definitiva",
+          reglas: list | None = None, opciones: dict | None = None) -> dict:
     version, cfg = config.vigente(conn)
-    if regla_fusion not in cfg["reglas_fusion"]:
-        raise HTTPException(422, f"La regla de fusión '{regla_fusion}' no está habilitada en la configuración")
+    if destino not in DESTINOS:
+        raise HTTPException(422, "Destino de la carga: definitiva o provisoria")
+    if reglas is None:  # API anterior: una sola regla (D43: pasa a ser una lista)
+        regla_fusion = regla_fusion or "rut"
+        if regla_fusion not in cfg["reglas_fusion"]:
+            raise HTTPException(422, f"La regla de fusión '{regla_fusion}' no está habilitada en la configuración")
+        reglas = [{"criterio": "rut", "tipo": "exacta"}] + (
+            [{"criterio": provisorias.LEGADO[regla_fusion], "tipo": "exacta"}] if regla_fusion != "rut" else [])
+    reglas = provisorias.normalizar_reglas(reglas, float(cfg.get("umbral_fusion_flexible", 0.85)))
+    regla_fusion = next((r for r in ("telefono", "razon_social", "dominio")
+                         if any(x["criterio"] == provisorias.LEGADO[r] for x in reglas)), "rut")
+    opciones = {"con_rut_a_definitiva": (opciones or {}).get("con_rut_a_definitiva", True) is not False,
+                "sin_rut_a_provisoria": bool((opciones or {}).get("sin_rut_a_provisoria"))}
     if not licencia or not licencia.strip():
         raise HTTPException(422, "Indicá la licencia de uso de la fuente")
     archivo, columnas, filas = _leer(conn, archivo_id)
     mapeo, _ = limpiar_mapeo(mapeo)
-    _validar_mapeo(conn, mapeo, columnas)
+    _validar_mapeo(conn, mapeo, columnas, destino)
     pend = valores(conn, archivo_id, mapeo)
     if pend["pendientes"]:
         ejemplos = [x["valor"] for x in pend["origen"] if not x["traducido"]] + [
@@ -664,18 +700,21 @@ def crear(conn, archivo_id: int, fuente: str, tipo_fuente: str, licencia: str, r
     if confianza is None:
         confianza = cfg["confianza_fuentes"].get("carga", 50)
     carga = conn.execute(
-        "INSERT INTO carga (archivo_id, fuente, tipo_fuente, licencia, responsable, regla_fusion, confianza, mapeo, config_version)"
-        " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
-        (archivo_id, fuente, tipo_fuente, licencia, actor, regla_fusion, confianza, Jsonb(mapeo), version),
+        "INSERT INTO carga (archivo_id, fuente, tipo_fuente, licencia, responsable, regla_fusion, confianza, mapeo, config_version,"
+        " destino, reglas, opciones) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
+        (archivo_id, fuente, tipo_fuente, licencia, actor, regla_fusion, confianza, Jsonb(mapeo), version,
+         destino, Jsonb(reglas), Jsonb(opciones)),
     ).fetchone()
-    if guardar_plantilla:
+    if guardar_plantilla:  # el destino y las reglas quedan en la plantilla (F6.1, F6.2)
         conn.execute(
-            "INSERT INTO carga_plantilla (tipo_fuente, mapeo, autor) VALUES (%s,%s,%s)"
-            " ON CONFLICT (tipo_fuente) DO UPDATE SET mapeo = EXCLUDED.mapeo, autor = EXCLUDED.autor, actualizado = now()",
-            (tipo_fuente, Jsonb(mapeo), actor),
+            "INSERT INTO carga_plantilla (tipo_fuente, mapeo, autor, destino, reglas) VALUES (%s,%s,%s,%s,%s)"
+            " ON CONFLICT (tipo_fuente) DO UPDATE SET mapeo = EXCLUDED.mapeo, autor = EXCLUDED.autor, destino = EXCLUDED.destino,"
+            " reglas = EXCLUDED.reglas, actualizado = now()",
+            (tipo_fuente, Jsonb(mapeo), actor, destino, Jsonb(reglas)),
         )
     auditoria.registrar(conn, actor, "carga.crear", "carga", carga["id"],
-                        {"archivo": archivo["nombre"], "fuente": fuente, "regla_fusion": regla_fusion})
+                        {"archivo": archivo["nombre"], "fuente": fuente, "destino": destino, "reglas": reglas,
+                         "opciones": opciones})
     tarea_id = tareas.crear(conn, "carga.preview", {"carga_id": carga["id"]}, actor)
     return {"carga_id": carga["id"], "tarea_id": tarea_id, "n_filas": len(filas)}
 
@@ -706,6 +745,28 @@ def _guardar_rechazos(conn, carga_id, rechazos):
     with conn.cursor() as cur:
         cur.executemany("INSERT INTO carga_rechazo (carga_id, fila, motivo, datos) VALUES (%s,%s,%s,%s)",
                         [(carga_id, n, m, Jsonb(f)) for n, m, f in rechazos])
+
+
+DECISIONES = ("fusionar", "otra", "despues")
+
+
+def guardar_decisiones(conn, carga_id: int, decisiones: dict, actor: str) -> dict:
+    """«Coincidencias a decidir» (F6.2): por fila, fusionar, es otra empresa o decidir después.
+    La confirmación las usa y quedan en el linaje de la carga."""
+    carga = conn.execute("SELECT * FROM carga WHERE id = %s FOR UPDATE", (carga_id,)).fetchone()
+    if carga is None:
+        raise HTTPException(404, "Carga inexistente")
+    if carga["estado"] != "preview":
+        raise HTTPException(409, "Las coincidencias se deciden en el preview")
+    filas = {str(x["fila"]) for x in (carga["conteos"] or {}).get("coincidencias_a_decidir") or []}
+    malas = [k for k, v in decisiones.items() if v not in DECISIONES or str(k) not in filas]
+    if malas:
+        raise HTTPException(422, f"Decisiones inválidas para las filas {', '.join(map(str, malas[:10]))}")
+    nuevas = {**(carga["decisiones"] or {}), **{str(k): v for k, v in decisiones.items()}}
+    conn.execute("UPDATE carga SET decisiones = %s WHERE id = %s", (Jsonb(nuevas), carga_id))
+    auditoria.registrar(conn, actor, "carga.decidir", "carga", carga_id,
+                        {"decisiones": {d: sum(1 for v in nuevas.values() if v == d) for d in DECISIONES}})
+    return {"decisiones": nuevas}
 
 
 def confirmar(conn, carga_id: int, actor: str) -> int:
@@ -761,6 +822,9 @@ def deshacer(conn, carga_id: int, actor: str) -> dict:
         raise HTTPException(409, f"No se puede deshacer: {en_muestra} empresas de esta carga ya entraron a una muestra."
                                  " Un administrador puede usar «Borrar carga», que la elimina junto con su paso por las muestras.")
     conn.execute("UPDATE carga SET estado = 'deshecha', deshecha = now() WHERE id = %s", (carga_id,))
+    # Las provisorias que esta carga pasó a la definitiva (agregó el RUT) vuelven a la provisoria
+    for p in conn.execute("SELECT * FROM carga_promocion WHERE carga_id = %s ORDER BY id DESC", (carga_id,)).fetchall():
+        conn.execute("UPDATE empresa SET rut = %s, base = %s WHERE id = %s", (p["rut_anterior"], p["base_anterior"], p["empresa_id"]))
     # El origen que esta carga sumó a vínculos que ya existían
     conn.execute("DELETE FROM telefono_vinculo_origen WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))
     vincs = conn.execute("DELETE FROM telefono_vinculo WHERE fuente_tipo = 'carga' AND fuente_id = %s"
@@ -818,7 +882,7 @@ def obtener(conn, carga_id: int) -> dict:
 
 def listar(conn) -> list[dict]:
     return conn.execute(
-        "SELECT c.id, c.fuente, c.tipo_fuente, c.licencia, c.responsable, c.regla_fusion, c.estado, c.conteos, c.fecha,"
+        "SELECT c.id, c.fuente, c.tipo_fuente, c.licencia, c.responsable, c.regla_fusion, c.destino, c.reglas, c.estado, c.conteos, c.fecha,"
         " c.confirmada, c.deshecha, c.descartada, a.nombre AS archivo_nombre FROM carga c JOIN archivo a ON a.id = c.archivo_id"
         " ORDER BY c.id DESC LIMIT 200").fetchall()
 
@@ -829,7 +893,7 @@ def listar(conn) -> list[dict]:
 
 def revision_pendiente(conn) -> list[dict]:
     return conn.execute(
-        "SELECT r.*, e.rut AS candidata_rut, e.razon_social AS candidata_razon, e.web AS candidata_web,"
+        "SELECT r.*, e.codigo AS candidata_rut, e.base AS candidata_base, e.razon_social AS candidata_razon, e.web AS candidata_web,"
         " c.fuente FROM revision_fusion r JOIN empresa e ON e.id = r.candidata_id JOIN carga c ON c.id = r.carga_id"
         " WHERE r.estado = 'pendiente' ORDER BY r.id").fetchall()
 
@@ -846,12 +910,21 @@ def resolver_revision(conn, revision_id: int, accion: str, actor: str) -> dict:
             else (telmod.normalizar(t["crudo"]), t.get("origen") or catalogos.SIN_DATO) for t in datos.pop("telefonos", [])]
     atributos = datos.pop("atributos", None) or {}
     c = Counter()
+    id_informado = datos.pop("id_informado", None)
+    if id_informado:
+        atributos = {**atributos, "id_informado": {"valor": id_informado, "invalido": False}}
     if accion == "alta":
-        emp = conn.execute("INSERT INTO empresa (rut, carga_alta_id) VALUES (%s, %s) ON CONFLICT (rut) DO NOTHING"
-                           " RETURNING *", (datos["rut"], carga["id"])).fetchone()
-        emp = emp or conn.execute("SELECT * FROM empresa WHERE rut = %s", (datos["rut"],)).fetchone()
+        if datos.get("rut"):
+            emp = conn.execute("INSERT INTO empresa (rut, carga_alta_id) VALUES (%s, %s) ON CONFLICT (rut) DO NOTHING"
+                               " RETURNING *", (datos["rut"], carga["id"])).fetchone()
+            emp = emp or conn.execute("SELECT * FROM empresa WHERE rut = %s", (datos["rut"],)).fetchone()
+        else:  # fila sin RUT: alta en la base provisoria
+            emp = conn.execute("INSERT INTO empresa (rut, base, carga_alta_id) VALUES (NULL, 'provisoria', %s) RETURNING *",
+                               (carga["id"],)).fetchone()
     elif accion == "actualizar_candidata":
         emp = conn.execute("SELECT * FROM empresa WHERE id = %s", (r["candidata_id"],)).fetchone()
+        if datos.get("rut") and emp["base"] == "provisoria" and not emp["rut"]:
+            emp = provisorias.promover(conn, emp, datos["rut"], actor, "carga", carga["id"], carga_id=carga["id"])
     elif accion == "descartada":
         emp = None
     else:

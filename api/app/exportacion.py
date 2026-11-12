@@ -55,7 +55,7 @@ def filas_csv(conn, muestra_id: int, parte_id: int, con_contactos: bool, formato
           SELECT empresa_id, regla FROM bloqueos(%(cfg)s)
           WHERE regla IN ('naturaleza_excluida','no_llamar','baja','cerrada')
         )
-        SELECT i.id AS id_item, i.estrato, e.id AS empresa_id, e.rut, e.razon_social, e.fantasia, e.departamento,
+        SELECT i.id AS id_item, i.estrato, e.id AS empresa_id, e.rut, e.codigo, e.razon_social, e.fantasia, e.departamento,
                e.localidad, d.e164, d.estado AS estado_vinculo, d.contacto_id, og.origen_nombre, og.prioridad
         FROM muestra_item i
         JOIN empresa e ON e.id = i.empresa_id
@@ -84,12 +84,12 @@ def filas_csv(conn, muestra_id: int, parte_id: int, con_contactos: bool, formato
     salida = []
     for r in rows:
         c = contactos.get(r["empresa_id"]) or {}
-        salida.append({**extra.get(r["empresa_id"], {}),
+        salida.append({**extra.get(r["empresa_id"], {}), "EC_ID_EMPRESA": r["codigo"],
             "id_item": r["id_item"], "tel_e164": r["e164"], "tel_nacional": telmod.nacional(r["e164"]),
-            "tel_sin_mas": r["e164"].lstrip("+"), "rut": r["rut"], "razon_social": r["razon_social"] or "",
+            "tel_sin_mas": r["e164"].lstrip("+"), "rut": r["rut"] or "", "razon_social": r["razon_social"] or "",
             "fantasia": r["fantasia"] or "", "contacto": c.get("nombre", ""), "contacto_cargo": c.get("cargo", ""),
             "departamento": r["departamento"] or "", "localidad": r["localidad"] or "", "estrato": r["estrato"],
-            "link": link_alchemer(p["link_base"], r["id_item"], r["rut"], r["e164"]), "parte": p["nombre"],
+            "link": link_alchemer(p["link_base"], r["id_item"], r["rut"] or "", r["e164"]), "parte": p["nombre"],
             "muestra": m["nombre"], "origen_telefono": r["origen_nombre"] or "",
         })
     # Ítems que deberían ir a campo en esta parte (liberados y pendientes o en curso) sin ningún teléfono discable
@@ -121,7 +121,8 @@ def _incluir(conn, empresa_ids: set[int], opciones: dict, cfg: dict, objetivo, c
     """Columnas elegidas en «Qué incluir» (F5.1): atributos de empresa y, con permiso, contactos numerados."""
     extra: dict[int, dict] = {eid: {} for eid in empresa_ids}
     atrs = [a for a in catalogos.atributos(conn, True, "empresa") if a["clave"] not in opciones["atributos_excluidos"]]
-    columnas = [f"atr_{a['clave']}" for a in atrs]
+    # F6.1: EC_ID_EMPRESA = RUT en la definitiva, código P- en la provisoria (EC_RUT va vacío)
+    columnas = ["EC_ID_EMPRESA"] + [f"atr_{a['clave']}" for a in atrs]
     if empresa_ids and atrs:
         for r in conn.execute(
                 "SELECT ea.empresa_id, a.clave, coalesce(ea.valor_texto, ea.valor_crudo) AS v FROM empresa_atributo ea"
@@ -171,7 +172,7 @@ def _incluir(conn, empresa_ids: set[int], opciones: dict, cfg: dict, objetivo, c
 def _items_planilla(conn, muestra_id: int, parte_id: int, cfg: dict) -> list[dict]:
     return conn.execute(
         """
-        SELECT i.id AS id_item, i.estrato, i.rol, e.id AS empresa_id, e.rut, e.razon_social, e.fantasia, e.departamento,
+        SELECT i.id AS id_item, i.estrato, i.rol, e.id AS empresa_id, e.rut, e.codigo, e.razon_social, e.fantasia, e.departamento,
                e.localidad, coalesce(ps.estado, 'pendiente') AS estado_parte
         FROM muestra_item i JOIN empresa e ON e.id = i.empresa_id
         LEFT JOIN item_parte_estado ps ON ps.item_id = i.id AND ps.parte_id = %(parte)s
@@ -195,7 +196,7 @@ def _planilla(conn, muestra_id, parte_id, cfg, renglones, extra, columnas_extra,
              "fantasia": it["fantasia"] or "", "departamento": it["departamento"] or "", "localidad": it["localidad"] or "",
              "estrato": it["estrato"], "rol": it["rol"], "estado_parte": it["estado_parte"], "parte": p["nombre"],
              "muestra": m["nombre"], "link": tels[0]["link"] if tels else link_alchemer(p["link_base"], it["id_item"], it["rut"] or "", ""),
-             **extra.get(it["empresa_id"], {})}
+             **extra.get(it["empresa_id"], {}), "EC_ID_EMPRESA": it["codigo"]}
         for k, t in enumerate(tels, 1):
             f[f"tel_{k}"] = t["tel_nacional"]
             f[f"tel_{k}_origen"] = t["origen_telefono"]

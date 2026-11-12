@@ -126,7 +126,7 @@ def csv_bytes(filas: list[dict], sep=";") -> bytes:
 
 
 def cargar(api, filas, rol="steward", regla="rut", fuente="Base de prueba", tipo_fuente=None, confianza=None,
-           confirmar=True, nombre="base.csv", contenido=None, origen_defecto="sin_dato", mapeo=None):
+           confirmar=True, nombre="base.csv", contenido=None, origen_defecto="sin_dato", mapeo=None, **extra):
     """Sube, crea el preview y (opcional) confirma una carga. Devuelve el detalle de la carga.
     Por defecto la plantilla de mapeo se comparte entre archivos con las mismas columnas.
     mapeo: cambios sobre el mapeo sugerido (origen de teléfonos, atributos, traducciones…)."""
@@ -140,7 +140,7 @@ def cargar(api, filas, rol="steward", regla="rut", fuente="Base de prueba", tipo
         m.setdefault("origen_defecto", origen_defecto)
     m.update(mapeo or {})
     body = {"archivo_id": a["archivo_id"], "fuente": fuente, "tipo_fuente": tipo_fuente, "licencia": "uso interno",
-            "regla_fusion": regla, "mapeo": m}
+            "regla_fusion": regla, "mapeo": m, **extra}  # extra: destino, reglas, opciones (F6)
     if confianza is not None:
         body["confianza"] = confianza
     r = api.post("/cargas", rol=rol, json=body)

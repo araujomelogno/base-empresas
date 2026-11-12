@@ -1,5 +1,6 @@
 // Inicio, buscador de empresas y ficha (R1.1, R1.2, R1.11)
 import * as api from '../api.js';
+import { agregarRut, fusionarCon } from './provisorias.js';
 import { $, $$, esc, main, toast, num, fecha, fechaHora, rutFmt, est, estDe, etiqueta, pageHeader, stats, tabla, card, modal,
   pedirTexto, confirmar, tabs } from '../ui.js';
 
@@ -17,7 +18,9 @@ export async function inicio(ctx) {
       ${ctx.puede('admin') ? '<a class="link" href="#/config">Revisar la conexión</a>' : 'Avisale a un administrador.'}</span></div>` : '') +
     stats([[r.empresas, 'Empresas activas', 's-total'], [r.disponibles, 'Disponibles para muestra', 's-ok'],
       [r.con_telefono_discable, 'Con teléfono discable', 's-free'], [r.muestras_activas, 'Muestras activas', 's-warn', '#/muestras?estado=activa'],
-      [r.intermediarios, 'Intermediarios confirmados', 's-bad'], [r.intentos_7d, 'Llamadas últimos 7 días', '']]) +
+      [r.intermediarios, 'Intermediarios confirmados', 's-bad'], [r.intentos_7d, 'Llamadas últimos 7 días', ''],
+      ...(r.provisorias ? [[`${num(r.provisorias)}${r.provisorias_con_candidatas ? ` · ${num(r.provisorias_con_candidatas)}` : ''}`,
+        `Base provisoria${r.provisorias_con_candidatas ? ' · con candidatas' : ''}`, 's-free', '#/provisorias']] : [])]) +
     `<div class="grid-2">
       ${card('Bandejas pendientes', bandejas.length ? tabla([
         { t: '', f: b => `<span style="font-size:1.1rem">${b[1]}</span>` },
@@ -36,7 +39,7 @@ export async function inicio(ctx) {
 }
 
 // ── Buscador ──
-let _filtros = { q: '', departamento: '', tamano: '', naturaleza: '', disponible: '', pagina: 1 };
+let _filtros = { q: '', departamento: '', tamano: '', naturaleza: '', disponible: '', base: 'definitiva', pagina: 1 };
 
 export async function empresas(ctx) {
   const v = await api.get('/empresas/valores');
@@ -52,10 +55,12 @@ export async function empresas(ctx) {
       <select class="fselect" id="f-tamano">${opt(v.tamano, _filtros.tamano, 'Todos los tamaños')}</select>
       <select class="fselect" id="f-naturaleza">${opt(v.naturaleza.map(n => [n.codigo, n.nombre]), _filtros.naturaleza, 'Toda naturaleza')}</select>
       <select class="fselect" id="f-disponible">${opt([['true', 'Disponibles'], ['false', 'No disponibles']], _filtros.disponible, 'Disponibilidad')}</select>
+      <select class="fselect" id="f-base" title="Base">${[['definitiva', 'Base definitiva'], ['provisoria', 'Base provisoria'], ['ambas', 'Ambas bases']].map(([k, t]) =>
+        `<option value="${k}" ${k === _filtros.base ? 'selected' : ''}>${t}</option>`).join('')}</select>
       <button class="btn btn-dark btn-sm" id="f-buscar">Buscar</button></div></div>
       <div class="card-body tight" id="e-res"></div></div>`;
   const buscar = async (pagina = 1) => {
-    ['q', 'departamento', 'tamano', 'naturaleza', 'disponible'].forEach(k => { _filtros[k] = $('#f-' + k).value; });
+    ['q', 'departamento', 'tamano', 'naturaleza', 'disponible', 'base'].forEach(k => { _filtros[k] = $('#f-' + k).value; });
     _filtros.pagina = pagina;
     const r = await api.get('/empresas', _filtros);
     if (r.item && r.empresas.length === 1) {  // F1.4: #1234 lleva directo a la ficha, pestaña Muestras, con la fila resaltada
@@ -68,7 +73,7 @@ export async function empresas(ctx) {
     }
     const paginas = Math.max(1, Math.ceil(r.total / 50));
     $('#e-res').innerHTML = tabla([
-      { t: 'RUT', f: e => `<a class="link mono" href="#/empresas/${e.rut}">${rutFmt(e.rut)}</a>` },
+      { t: 'RUT / código', f: e => `<a class="link mono" href="#/empresas/${e.rut}">${rutFmt(e.rut)}</a>${e.base === 'provisoria' ? ` ${est('sospechoso', 'provisoria')}` : ''}` },
       { t: 'Razón social', f: e => `<span class="td-strong">${esc(e.razon_social || '—')}</span>${e.fantasia ? `<div class="small muted">${esc(e.fantasia)}</div>` : ''}` },
       { t: 'Departamento', k: 'departamento' }, { t: 'Tamaño', k: 'tamano' }, { t: 'Nat.', k: 'naturaleza' },
       { t: 'Tel. discables', cls: 'num', f: e => num(e.telefonos_discables) },
@@ -152,7 +157,7 @@ async function activarContactos(ctx, e, recargar) {
   if ($('#c-agregar')) $('#c-agregar').onclick = async () => {
     let forzar = false;
     const r = await modal({ titulo: 'Agregar contacto', ancho: 680, cuerpo: form(), acciones: [{ t: 'Cancelar' }, { t: 'Agregar', cls: 'btn-orange', fn: async (b) => {
-      try { return await api.post(`/empresas/${e.rut}/contactos`, { ...leer(b), forzar }); }
+      try { return await api.post(`/empresas/${e.codigo}/contactos`, { ...leer(b), forzar }); }
       catch (err) {
         if (err.status !== 409 || !err.datos) throw err;
         // Duplicado: mismo nombre normalizado en la empresa → editar el existente o crear igual
@@ -160,7 +165,7 @@ async function activarContactos(ctx, e, recargar) {
         const eleccion = await modal({ titulo: 'Ya existe un contacto con ese nombre', cuerpo: `<p>${esc(err.message)}.</p>
           <p class="small muted">Podés editar el que ya existe o agregar otro contacto igual (por ejemplo, dos personas con el mismo nombre).</p>`,
           acciones: [{ t: 'Cancelar' }, { t: 'Agregar igual', fn: () => 'forzar' }, { t: 'Editar el existente', cls: 'btn-orange', fn: () => 'editar' }] });
-        if (eleccion === 'forzar') { forzar = true; return api.post(`/empresas/${e.rut}/contactos`, { ...leer(b), forzar: true }); }
+        if (eleccion === 'forzar') { forzar = true; return api.post(`/empresas/${e.codigo}/contactos`, { ...leer(b), forzar: true }); }
         if (eleccion === 'editar' && existente) setTimeout(() => editar(existente), 50);
         return { cancelado: true };
       }
@@ -186,14 +191,19 @@ export async function ficha(ctx, rut, params) {
   const tab = params.get('tab') || 'datos';
   const vig = Object.fromEntries(e.historia.filter(h => h.vigente).map(h => [h.campo, h]));
   const d = e.disponibilidad || {};
-  const acciones = [
+  let acciones = [
     ctx.puede('steward') && !e.baja ? `<button class="btn btn-outline btn-sm" id="a-editar">Editar datos</button>` : '',
     ctx.puede('steward') && !e.baja ? `<button class="btn btn-outline btn-sm" id="a-fusionar">Fusionar otra empresa</button>` : '',
     ctx.puede('admin', 'steward') && !e.baja ? `<button class="btn btn-outline btn-sm btn-del" id="a-nollamar">No llamar</button>` : '',
     ctx.puede() ? `<button class="btn btn-danger btn-sm" id="a-borrar">Borrar empresa</button>` : '',
-  ].join('');
-  main().innerHTML = pageHeader(e.razon_social || 'Empresa sin razón social', '', `RUT <strong class="mono">${rutFmt(e.rut)}</strong>
-    ${e.fantasia ? ' · ' + esc(e.fantasia) : ''} · ${estDe('empresa', e.estado)} ${e.baja ? est('error', e.baja) : ''}`, acciones) +
+  ];
+  const prov = e.base === 'provisoria';
+  if (prov) acciones.unshift(...(ctx.puede('steward') && !e.baja ? [`<button class="btn btn-orange btn-sm" id="a-rut">Agregar RUT</button>`,
+    `<button class="btn btn-outline btn-sm" id="a-fus-def">Fusionar con…</button>`] : []));
+  main().innerHTML = pageHeader(e.razon_social || 'Empresa sin razón social', '', `${prov ? `${est('sospechoso', 'Provisoria')} Código <strong class="mono">${esc(e.codigo)}</strong>` : `RUT <strong class="mono">${rutFmt(e.rut)}</strong>`}
+    ${e.fantasia ? ' · ' + esc(e.fantasia) : ''} · ${estDe('empresa', e.estado)} ${e.baja ? est('error', e.baja) : ''}`, acciones.join('')) +
+    (prov && !e.baja ? `<div class="alert alert-info"><span><strong>Empresa de la base provisoria</strong> (no trae RUT). Se puede sortear y llamar.
+      Pasa a la base definitiva al agregarle el RUT o al fusionarla con una empresa que lo tiene.<span id="f-cands"></span></span></div>` : '') +
     (e.baja === 'fusionada' ? `<div class="alert alert-warn">Esta empresa fue absorbida por <a class="link" href="#/empresas/${e.fusionada_en_rut}">${rutFmt(e.fusionada_en_rut)}</a>.</div>` : '') +
     (d.disponible ? `<div class="alert alert-success">Disponible para muestras.</div>`
       : `<div class="alert alert-warn"><span>No disponible: ${(d.reglas || []).map(r => `<strong>${esc(etiqueta(r))}</strong>`).join(', ')}${d.hasta ? ` · hasta ${fecha(d.hasta)}` : ''}</span></div>`) +
@@ -338,18 +348,37 @@ export async function ficha(ctx, rut, params) {
     });
     if (r) { toast('Empresas fusionadas', 'ok'); recargar(); }
   };
+  if ($('#a-rut')) $('#a-rut').onclick = () => agregarRut(e, (cod) => ctx.ir('empresas/' + cod));
+  if (prov && !e.baja) {
+    const cands = await api.get(`/empresas/${e.codigo}/candidatas`);
+    if (cands.length && $('#f-cands')) $('#f-cands').innerHTML = ` Candidatas en la definitiva: ${cands.map(c =>
+      `<a class="link mono" href="#/empresas/${c.codigo}">${rutFmt(c.codigo)}</a> ${esc(c.razon_social || '')} (${Math.round(c.similitud * 100)} %)`).join(' · ')}.`;
+    if ($('#a-fus-def')) $('#a-fus-def').onclick = () => {
+      fusionarCon(e, cands, (cod) => ctx.ir('empresas/' + cod));
+      setTimeout(() => {
+        const q = $('#fu-q');
+        if (q) q.addEventListener('keydown', async (ev) => {
+          if (ev.key !== 'Enter') return;
+          const r = await api.get('/empresas', { q: q.value, base: 'definitiva' });
+          $('#fu-res').innerHTML = r.empresas.slice(0, 8).map(x => `<label class="check"><input type="radio" name="fu-c" value="${esc(x.rut)}" />
+            <span class="mono">${rutFmt(x.rut)}</span> ${esc(x.razon_social || '—')}</label>`).join('') || '<div class="small muted">Sin resultados</div>';
+        });
+      }, 50);
+    };
+  }
   if ($('#a-borrar')) $('#a-borrar').onclick = async () => {
     const txt = `Se elimina <strong>${esc(e.razon_social || rutFmt(e.rut))}</strong> con toda su historia, teléfonos, contactos, sucursales
       y atributos, su lugar en las muestras (${e.muestras.length}) y su actividad de campo (intentos del CDR y respuestas del .sav).
       Si otras empresas se fusionaron dentro de esta, se borran también. <strong>No se puede deshacer.</strong> Solo queda el registro
-      en Auditoría.<br><br>Escribí el RUT <strong class="mono">${e.rut}</strong> para confirmar.`;
+      en Auditoría.<br><br>Escribí ${e.rut ? 'el RUT' : 'el código'} <strong class="mono">${esc(e.codigo)}</strong> para confirmar.`;
     const ok = await modal({ titulo: 'Borrar empresa', cuerpo: `<p>${txt}</p><div class="form-group"><input type="text" id="m-borrar" autocomplete="off" /></div>`,
       acciones: [{ t: 'Cancelar' }, { t: 'Borrar definitivamente', cls: 'btn-danger', fn: (b) => {
-        if (b.querySelector('#m-borrar').value.replace(/\D/g, '') !== e.rut) { toast('El RUT no coincide', 'err'); return false; }
+        const v = b.querySelector('#m-borrar').value;
+        if ((e.rut ? v.replace(/\D/g, '') : v.trim().toUpperCase()) !== e.codigo) { toast(e.rut ? 'El RUT no coincide' : 'El código no coincide', 'err'); return false; }
         return true;
       } }] });
     if (!ok) return;
-    const r = await api.del('/empresas/' + e.rut);
+    const r = await api.del('/empresas/' + e.codigo);
     toast(`Empresa borrada${r.empresas > 1 ? ` (con ${r.empresas - 1} fusionadas)` : ''}`, 'ok');
     ctx.ir('empresas');
   };

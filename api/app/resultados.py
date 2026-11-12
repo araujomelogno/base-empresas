@@ -115,6 +115,13 @@ def aplicar(conn, item: dict, parte: dict, v: dict, linaje: dict, cfg: dict, act
             if catalogos.aplicar_atributo_contacto(conn, contacto, clave_attr, valor, "sala", fuente_id, actor, linaje):
                 aplicado.setdefault("atributos_contacto", []).append(clave_attr)
 
+    # F6.1: si la fila de una provisoria trae un EC_RUT válido, se propone completar el RUT (no se aplica solo)
+    if v.get("rut"):
+        from . import provisorias
+        emp = conn.execute("SELECT * FROM empresa WHERE id = %s", (empresa_id,)).fetchone()
+        if emp["base"] == "provisoria" and provisorias.proponer_rut(conn, emp, v["rut"], "sala", fuente_id):
+            aplicado["rut_propuesto"] = v["rut"]
+
     # D-b: toda fila del .sav es una encuesta completa
     actual = conn.execute("SELECT * FROM item_parte_estado WHERE item_id = %s AND parte_id = %s",
                           (item["id"], parte["id"])).fetchone()

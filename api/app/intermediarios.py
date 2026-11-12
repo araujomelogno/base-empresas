@@ -49,7 +49,7 @@ def sospechosos(conn, estado: str = "sospechoso") -> list[dict]:
         SELECT t.id, t.e164, t.crudo, t.tipo, t.intermediario, t.intermediario_fecha, t.intermediario_por,
                count(DISTINCT v.empresa_id) AS n_empresas,
                count(DISTINCT e.ciiu) AS n_rubros,
-               json_agg(json_build_object('rut', e.rut, 'razon_social', e.razon_social, 'ciiu', e.ciiu,
+               json_agg(json_build_object('rut', e.codigo, 'razon_social', e.razon_social, 'ciiu', e.ciiu,
                                           'estado_vinculo', v.estado) ORDER BY e.razon_social) AS empresas
         FROM telefono t
         JOIN telefono_vinculo v ON v.telefono_id = t.id

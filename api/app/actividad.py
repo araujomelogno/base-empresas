@@ -294,7 +294,7 @@ def empresas_llamadas(conn, f: dict, origen: str | None = None, solo_sin_muestra
                            array_remove(array_agg(DISTINCT encuestador), NULL) AS encuestadores,
                            array_agg(DISTINCT telefono_id) AS tels
                     FROM ie GROUP BY empresa_id)
-        SELECT e.id, e.rut, e.razon_social, e.departamento, ag.llamadas, ag.atendidas, ag.primera, ag.ultima, ag.encuestadores,
+        SELECT e.id, e.codigo AS rut, e.razon_social, e.departamento, ag.llamadas, ag.atendidas, ag.primera, ag.ultima, ag.encuestadores,
                (SELECT json_agg(json_build_object('numero', coalesce(t.e164, t.crudo), 'origenes',
                          (SELECT coalesce(json_agg(o.nombre ORDER BY o.prioridad), '[]'::json) FROM telefono_vinculo v
                           JOIN telefono_vinculo_origen x ON x.vinculo_id = v.id JOIN origen_telefono o ON o.id = x.origen_id
@@ -346,6 +346,10 @@ def linea_de_tiempo(conn, empresa_id: int, limite: int = 300, ver_contactos: boo
     en un evento desplegable (tipo 'ingesta') con su resumen y sus eventos (F2.4).
     ver_contactos=False (rol de lectura): los nombres de contactos se ocultan."""
     nombre = "c.nombre" if ver_contactos else "'(dato personal oculto)'"
+    # La absorbente ve las llamadas de las empresas que absorbió (por ejemplo, una provisoria fusionada, F6.1)
+    ids = [empresa_id] + [r["id"] for r in conn.execute(
+        "WITH RECURSIVE f AS (SELECT id FROM empresa WHERE fusionada_en = %s"
+        " UNION SELECT e.id FROM empresa e JOIN f ON e.fusionada_en = f.id) SELECT id FROM f", (empresa_id,))]
     filas = conn.execute(
         f"""
         WITH contactos AS (SELECT id FROM contacto WHERE empresa_id = %(e)s)
@@ -359,7 +363,7 @@ def linea_de_tiempo(conn, empresa_id: int, limite: int = 300, ver_contactos: boo
           SELECT i.inicio, 'llamada', t.e164 || ' · ' || coalesce(i.disposicion, 'sin disposición')
                  || coalesce(' · ' || i.duracion || ' s', ''), coalesce(i.campania, 'marcador manual'), i.encuestador,
                  NULL, 'llamada'
-          FROM intento i JOIN telefono t ON t.id = i.telefono_id WHERE %(e)s = ANY(i.empresas)
+          FROM intento i JOIN telefono t ON t.id = i.telefono_id WHERE i.empresas && %(ids)s::int[]
           UNION ALL
           SELECT ps.fecha, 'resultado', p.nombre || ': ' || ps.estado
                  || CASE WHEN %(ver)s THEN coalesce(' · respondió ' || ps.respondente, '') ELSE '' END,
@@ -404,7 +408,7 @@ def linea_de_tiempo(conn, empresa_id: int, limite: int = 300, ver_contactos: boo
                  n.registrado_por, NULL, 'no_llamar'
           FROM no_llamar n WHERE n.alcance = 'empresa' AND n.objeto_id = %(e)s
         ) x WHERE fecha IS NOT NULL ORDER BY fecha DESC LIMIT %(l)s
-        """, {"e": empresa_id, "l": limite, "ver": ver_contactos}).fetchall()
+        """, {"e": empresa_id, "l": limite, "ver": ver_contactos, "ids": ids}).fetchall()
     ingestas = sorted({f["ingesta_id"] for f in filas if f["ingesta_id"]})
     nombres = {r["id"]: r for r in conn.execute(
         "SELECT g.id, p.nombre AS parte, s.nombre AS estudio FROM sav_ingesta g JOIN parte p ON p.id = g.parte_id"

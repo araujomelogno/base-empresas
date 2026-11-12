@@ -23,17 +23,24 @@ class NuevaCarga(BaseModel):
     fuente: str
     tipo_fuente: str
     licencia: str
-    regla_fusion: str = "rut"
+    regla_fusion: str | None = None      # API anterior (una sola regla); reglas la reemplaza
+    reglas: list[dict] | None = None     # F6.2: [{criterio, tipo, umbral}] en orden
+    destino: str = "definitiva"          # F6.1: definitiva | provisoria
+    opciones: dict | None = None         # con_rut_a_definitiva, sin_rut_a_provisoria
     confianza: int | None = None
     mapeo: dict
     guardar_plantilla: bool = True
+
+
+class Decisiones(BaseModel):
+    decisiones: dict[str, str]
 
 
 @router.post("/cargas")
 def crear(body: NuevaCarga, u: Usuario = Depends(requiere("steward"))):
     with conexion() as conn:
         r = cargas.crear(conn, body.archivo_id, body.fuente, body.tipo_fuente, body.licencia, body.regla_fusion,
-                         body.confianza, body.mapeo, body.guardar_plantilla, u.email)
+                         body.confianza, body.mapeo, body.guardar_plantilla, u.email, body.destino, body.reglas, body.opciones)
     tareas.despachar(r["tarea_id"])
     return r
 
@@ -70,6 +77,11 @@ def confirmar(carga_id: int, u: Usuario = Depends(requiere("steward"))):
         tid = cargas.confirmar(conn, carga_id, u.email)
     tareas.despachar(tid)
     return {"tarea_id": tid}
+
+
+@router.put("/cargas/{carga_id}/decisiones")
+def decisiones(carga_id: int, body: Decisiones, conn=Depends(get_conn), u: Usuario = Depends(requiere("steward"))):
+    return cargas.guardar_decisiones(conn, carga_id, body.decisiones, u.email)
 
 
 @router.delete("/cargas/{carga_id}")

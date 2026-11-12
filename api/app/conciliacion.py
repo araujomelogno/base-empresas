@@ -20,7 +20,7 @@ def listar(conn, tipo: str | None = None, estado: str = "pendiente") -> list[dic
                 " JOIN parte p ON p.id = s.parte_id WHERE s.id = %s", (f["objeto_id"],)).fetchone()
         ids = (f["candidatos"] or {}).get("items") or []
         f["candidatos_detalle"] = conn.execute(
-            "SELECT i.id, i.estrato, m.nombre AS muestra, e.rut, e.razon_social FROM muestra_item i"
+            "SELECT i.id, i.estrato, m.nombre AS muestra, e.codigo AS rut, e.razon_social FROM muestra_item i"
             " JOIN muestra m ON m.id = i.muestra_id JOIN empresa e ON e.id = i.empresa_id WHERE i.id = ANY(%s)",
             (ids,)).fetchall() if ids else []
     return filas

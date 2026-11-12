@@ -93,6 +93,9 @@ def borrar_empresas(conn, ids: list[int], accion: str = "empresa.borrar", actor:
 
     # Base: revisión, fusiones, atributos, historia, contactos, sucursales, no llamar
     x("DELETE FROM revision_fusion WHERE candidata_id = ANY(%s)", (ids,))
+    x("DELETE FROM carga_promocion WHERE empresa_id = ANY(%s)", (ids,))
+    x("DELETE FROM provisoria_descarte WHERE empresa_id = ANY(%s) OR candidata_id = ANY(%s)", (ids, ids))
+    x("DELETE FROM provisoria_rut_propuesto WHERE empresa_id = ANY(%s)", (ids,))
     x("DELETE FROM empresa_fusion WHERE absorbente_id = ANY(%s) OR absorbida_id = ANY(%s)", (ids, ids))
     x("DELETE FROM empresa_atributo WHERE empresa_id = ANY(%s)", (ids,))
     x("DELETE FROM telefono_vinculo_historia WHERE empresa_id = ANY(%s)", (ids,))
@@ -127,8 +130,8 @@ def borrar_empresa(conn, rut: str, actor: str) -> dict:
     conn.execute("SELECT id FROM empresa WHERE id = %s FOR UPDATE", (emp["id"],))
     n = borrar_empresas(conn, [emp["id"]], "empresa.borrar", actor)
     items_borrados = n.pop("_items_borrados")
-    detalle = {"rut": emp["rut"], "razon_social": emp["razon_social"], **n}
-    _vincular_auditoria(conn, items_borrados, auditoria.registrar(conn, actor, "empresa.borrar", "empresa", emp["rut"], detalle))
+    detalle = {"rut": emp["codigo"], "razon_social": emp["razon_social"], **n}
+    _vincular_auditoria(conn, items_borrados, auditoria.registrar(conn, actor, "empresa.borrar", "empresa", emp["codigo"], detalle))
     return detalle
 
 

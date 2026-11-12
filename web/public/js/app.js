@@ -6,6 +6,7 @@ import { $, $$, esc, initials, toast, main, cargando, errorEn } from './ui.js';
 import * as base from './vistas/base.js';
 import * as cargas from './vistas/cargas.js';
 import * as estudios from './vistas/estudios.js';
+import * as provisorias from './vistas/provisorias.js';
 import * as campo from './vistas/campo.js';
 import * as admin from './vistas/admin.js';
 
@@ -17,7 +18,7 @@ const ROL_NOMBRE = { admin: 'Administrador/a', steward: 'Data steward', jefe: 'J
 const MENU = [
   ['General', [['inicio', '🏠', 'Inicio'], ['empresas', '🏢', 'Empresas']]],
   ['Base de datos', [['cargas', '📥', 'Cargas', ['steward']], ['intermediarios', '☎️', 'Intermediarios', ['steward']],
-    ['revision', '🔀', 'Revisión de fusiones', ['steward']]]],
+    ['revision', '🔀', 'Revisión de fusiones', ['steward']], ['provisorias', '🗂️', 'Base provisoria', ['steward']]]],
   ['Estudios', [['estudios', '📋', 'Estudios y muestras', ['jefe', 'coordinador']]]],
   ['Campo', [['sav', '📊', 'Ingesta .sav', ['coordinador']], ['conciliacion', '🧩', 'Conciliación', ['coordinador']],
     ['actividad', '📈', 'Actividad', ['coordinador', 'jefe']]]],
@@ -28,7 +29,7 @@ const MENU = [
 ];
 
 const RUTAS = [
-  [/^inicio$/, base.inicio], [/^empresas$/, base.empresas], [/^empresas\/(\d{12})$/, base.ficha],
+  [/^inicio$/, base.inicio], [/^empresas$/, base.empresas], [/^empresas\/(\d{12}|P-\d+)$/, base.ficha], [/^provisorias$/, provisorias.lista],
   [/^cargas$/, cargas.lista], [/^cargas\/nueva$/, cargas.nueva], [/^cargas\/(\d+)$/, cargas.detalle],
   [/^intermediarios$/, cargas.intermediarios], [/^revision$/, cargas.revision],
   [/^estudios$/, estudios.lista], [/^estudios\/(\d+)$/, estudios.detalle], [/^estudios\/(\d+)\/nueva-muestra$/, estudios.nuevaMuestra],

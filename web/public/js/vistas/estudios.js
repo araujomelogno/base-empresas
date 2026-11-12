@@ -153,7 +153,9 @@ export async function nuevaMuestra(ctx, estudioId) {
         <div class="field-hint">Vacío = todos. Sin filtros, entra toda la base disponible.</div></div>
       ${filtrables.length ? `<div class="card-header-title mb mt">Atributos</div>${filtrables.map(filtroAtributo).join('')}` : ''}
       <div class="form-group mt"><label>Origen de los teléfonos</label>${chips('origenes', origenes.map(o => [o.codigo, o.nombre]))}
-        <div class="field-hint">Solo empresas con al menos un teléfono discable de estos orígenes. Sin selección, no filtra.</div></div>`)}
+        <div class="field-hint">Solo empresas con al menos un teléfono discable de estos orígenes. Sin selección, no filtra.</div></div>
+      <label class="check mt"><input type="checkbox" id="m-provisoria" /> Incluir la base provisoria (empresas sin RUT)</label>
+      <div class="field-hint">Desmarcado por defecto: no cambia el marco de los estudios en curso. Las provisorias entran con su estrato y las mismas reglas de disponibilidad.</div>`)}
     ${card('2 · Estratos', `<div class="form-group"><label>Estratificar por</label>${chips('por', estratif)}</div>
       <button class="btn btn-dark" id="m-marco">Ver marco disponible</button><div id="m-marco-res" class="mt"></div>`)}</div>
     <div id="m-estratos"></div>`;
@@ -164,7 +166,7 @@ export async function nuevaMuestra(ctx, estudioId) {
     const ciiu = $('#m-ciiu').value.split(/[,\s]+/).filter(Boolean);
     if (ciiu.length) f.ciiu = ciiu;
     return { filtros: f, atributos: leerFiltrosAtributo(filtrables), origenes: chipsSel(main(), 'origenes'),
-      estratificar_por: chipsSel(main(), 'por') };
+      estratificar_por: chipsSel(main(), 'por'), ...($('#m-provisoria').checked ? { incluir_provisoria: true } : {}) };
   };
   $('#m-marco').onclick = async () => {
     const c = criteriosBase();

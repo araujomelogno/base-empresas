@@ -130,7 +130,7 @@ def test_atributo_de_contacto_desde_el_sav(api, sql):
                                         "filtrable": True})
     assert dec.status_code == 200 and dec.json()["ambito"] == "contacto" and dec.json()["filtrable"] is False
     assert [a["clave"] for a in api.get("/atributos", params={"ambito": "contacto"}).json()] == ["decisor"]
-    assert api.get("/atributos", params={"ambito": "empresa"}).json() == []
+    assert [a["clave"] for a in api.get("/atributos", params={"ambito": "empresa"}).json()] == ["id_informado"]  # de sistema
     e, mid, items = preparar(api, sql, n=1)
     df = pd.DataFrame([{**{k: v for k, v in fila_sav(1, items[0], EC_RESP_NOMBRE="Ana Gómez").items()
                            if k not in ("EC_RESULTADO", "status")}, "Q12": 1}])

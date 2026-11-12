@@ -205,6 +205,8 @@ def actualizar_atributo(conn, atributo_id: int, datos: dict, actor: str) -> dict
     a = conn.execute("SELECT * FROM atributo WHERE id = %s FOR UPDATE", (atributo_id,)).fetchone()
     if a is None:
         raise HTTPException(404, "Atributo inexistente")
+    if a["sistema"]:
+        raise HTTPException(409, f"{a['nombre']} es un atributo del sistema: no se edita")
     if datos.get("clave") not in (None, a["clave"]):
         raise HTTPException(422, "La clave de un atributo no se puede cambiar")
     if datos.get("ambito") not in (None, a["ambito"]):
@@ -246,6 +248,8 @@ def borrar_atributo(conn, atributo_id: int, actor: str) -> dict:
     a = conn.execute("SELECT * FROM atributo WHERE id = %s FOR UPDATE", (atributo_id,)).fetchone()
     if a is None:
         raise HTTPException(404, "Atributo inexistente")
+    if a["sistema"]:
+        raise HTTPException(409, f"{a['nombre']} es un atributo del sistema: no se borra")
     if tiene_valores(conn, a):
         raise HTTPException(409, "El atributo tiene valores cargados: desactivalo en lugar de borrarlo")
     if _usado_en_muestra_activa(conn, a["clave"]):
@@ -274,6 +278,8 @@ def fusionar_atributo(conn, atributo_id: int, destino_id: int, actor: str) -> di
     b = conn.execute("SELECT * FROM atributo WHERE id = %s FOR UPDATE", (destino_id,)).fetchone()
     if a is None or b is None:
         raise HTTPException(404, "Atributo inexistente")
+    if a["sistema"] or b["sistema"]:
+        raise HTTPException(409, "Los atributos del sistema no se fusionan")
     if a["fusionado_en"]:
         raise HTTPException(409, f"{a['nombre']} ya fue fusionado en otro atributo")
     if b["fusionado_en"] or not b["activo"]:

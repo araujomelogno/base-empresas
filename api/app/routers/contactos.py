@@ -150,5 +150,5 @@ def borrar(contacto_id: int, motivo: str | None = None, conn=Depends(get_conn), 
     En Auditoría queda el RUT y el id del contacto, sin el nombre."""
     c, emp = _contacto(conn, contacto_id)
     contactos.borrar(conn, [contacto_id])
-    contactos.registrar_borrado(conn, u.email, emp["rut"], contacto_id, motivo)
+    contactos.registrar_borrado(conn, u.email, emp["codigo"], contacto_id, motivo)
     return {"borrado": contacto_id}

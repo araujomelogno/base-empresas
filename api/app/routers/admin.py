@@ -4,7 +4,7 @@ import datetime as dt
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .. import accesos, auditoria, cdr_corridas, config, empresas, intermediarios, settings, tareas, telefonos as telmod
+from .. import accesos, auditoria, cdr_corridas, config, empresas, intermediarios, provisorias, settings, tareas, telefonos as telmod
 from ..auth import ROLES, Usuario, requiere, requiere_job, requiere_tarea, usuario_actual
 from ..db import conexion, get_conn
 
@@ -16,7 +16,8 @@ def inicio(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
     """Resumen para la pantalla de inicio: estado de la base y bandejas pendientes."""
     r = conn.execute(
         """
-        SELECT (SELECT count(*) FROM empresa WHERE baja IS NULL) AS empresas,
+        SELECT (SELECT count(*) FROM empresa WHERE baja IS NULL AND base = 'definitiva') AS empresas,
+               (SELECT count(*) FROM empresa WHERE baja IS NULL AND base = 'provisoria') AS provisorias,
                (SELECT count(*) FROM v_empresa_disponible d JOIN empresa e ON e.id = d.empresa_id
                  WHERE d.disponible AND e.baja IS NULL) AS disponibles,
                (SELECT count(*) FROM telefono WHERE e164 IS NOT NULL) AS telefonos,
@@ -29,6 +30,7 @@ def inicio(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
                (SELECT count(*) FROM no_llamar WHERE activo) AS no_llamar,
                (SELECT count(*) FROM intento WHERE inicio > now() - interval '7 days') AS intentos_7d
         """).fetchone()
+    r["provisorias_con_candidatas"] = provisorias.contar_con_candidatas(conn) if r["provisorias"] else 0
     r["ultimas_cargas"] = conn.execute(
         "SELECT id, fuente, estado, fecha, conteos->>'altas' AS altas FROM carga ORDER BY id DESC LIMIT 5").fetchall()
     version, _ = config.vigente(conn)
@@ -158,7 +160,7 @@ def listar_no_llamar(activos: bool = True, conn=Depends(get_conn), u: Usuario = 
         """
         SELECT n.*, CASE n.alcance WHEN 'empresa' THEN (SELECT rut || ' · ' || coalesce(razon_social, '') FROM empresa WHERE id = n.objeto_id)
                                    WHEN 'telefono' THEN (SELECT coalesce(e164, crudo) FROM telefono WHERE id = n.objeto_id)
-                                   ELSE (SELECT c.nombre || ' (' || e.rut || ')' FROM contacto c JOIN empresa e ON e.id = c.empresa_id
+                                   ELSE (SELECT c.nombre || ' (' || e.codigo || ')' FROM contacto c JOIN empresa e ON e.id = c.empresa_id
                                          WHERE c.id = n.objeto_id) END AS objeto
         FROM no_llamar n WHERE (%s = false OR n.activo) ORDER BY n.id DESC LIMIT 500
         """, (activos,)).fetchall()
@@ -172,7 +174,7 @@ def registrar_no_llamar(body: NoLlamar, conn=Depends(get_conn), u: Usuario = Dep
         e = empresas.por_rut(conn, body.rut or "")
         if e is None:
             raise HTTPException(404, "Empresa inexistente")
-        objeto_id, etiqueta = e["id"], e["rut"]
+        objeto_id, etiqueta = e["id"], e["codigo"]
     elif body.alcance == "telefono":
         n = telmod.normalizar(body.telefono)
         t = conn.execute("SELECT id FROM telefono WHERE e164 = %s", (n.e164,)).fetchone() if n.e164 else None
