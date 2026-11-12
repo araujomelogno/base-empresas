@@ -1,4 +1,6 @@
 """Empresas: buscador, ficha, edición manual, teléfonos, intermediarios y fusiones (R1.1, R1.2, R1.11)."""
+import re
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -19,6 +21,16 @@ def buscar(q: str | None = None, departamento: str | None = None, tamano: str | 
            naturaleza: str | None = None, disponible: bool | None = None, pagina: int = 1,
            conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
     where, args = ["e.baja IS NULL"], []
+    item = _item_buscado(q)
+    if item is not None:
+        # F1.4: «#1234» o «item:1234» busca por EC_ID_ITEM; si la empresa se fusionó, lleva a la que la absorbió
+        fila = conn.execute(
+            "WITH RECURSIVE c AS (SELECT e.id, e.fusionada_en, 0 AS n FROM muestra_item i JOIN empresa e ON e.id = i.empresa_id"
+            "  WHERE i.id = %s UNION ALL SELECT e.id, e.fusionada_en, c.n + 1 FROM c JOIN empresa e ON e.id = c.fusionada_en"
+            "  WHERE c.n < 20) SELECT id FROM c ORDER BY n DESC LIMIT 1", (item,)).fetchone()
+        where.append("e.id = %s")
+        args.append(fila["id"] if fila else -1)
+        q = None
     if q:
         digitos = "".join(ch for ch in q if ch.isdigit())
         if len(digitos) >= 4 and len(digitos) == len(q.replace(".", "").replace("-", "").replace(" ", "")):
@@ -50,7 +62,12 @@ def buscar(q: str | None = None, departamento: str | None = None, tamano: str | 
         f" WHERE {' AND '.join(where)} ORDER BY e.razon_social NULLS LAST, e.rut LIMIT 50 OFFSET %s",
         (*args, (pagina - 1) * 50)).fetchall()
     total = filas[0]["total"] if filas else 0
-    return {"total": total, "pagina": pagina, "empresas": filas}
+    return {"total": total, "pagina": pagina, "empresas": filas, "item": item}
+
+
+def _item_buscado(q: str | None) -> int | None:
+    m = re.fullmatch(r"\s*(?:#|item:)\s*(\d{1,9})\s*", q or "", re.IGNORECASE)
+    return int(m.group(1)) if m else None
 
 
 @router.get("/empresas/valores")
@@ -117,7 +134,10 @@ def ficha(rut: str, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)
     e["muestras"] = conn.execute(
         "SELECT mi.id AS item_id, m.id AS muestra_id, m.nombre, m.estado, mi.estrato, mi.rol, mi.liberado, s.nombre AS estudio"
         " FROM muestra_item mi JOIN muestra m ON m.id = mi.muestra_id JOIN estudio s ON s.id = m.estudio_id"
-        " WHERE mi.empresa_id = %s ORDER BY m.id DESC", (eid,)).fetchall()
+        " WHERE mi.empresa_id = %s OR mi.empresa_id IN (WITH RECURSIVE f AS ("
+        "   SELECT id FROM empresa WHERE fusionada_en = %s"
+        "   UNION SELECT e.id FROM empresa e JOIN f ON e.fusionada_en = f.id) SELECT id FROM f)"
+        " ORDER BY m.id DESC", (eid, eid)).fetchall()
     e["fusiones"] = conn.execute(
         "SELECT f.*, a.rut AS absorbente_rut, b.rut AS absorbida_rut FROM empresa_fusion f"
         " JOIN empresa a ON a.id = f.absorbente_id JOIN empresa b ON b.id = f.absorbida_id"

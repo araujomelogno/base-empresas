@@ -4,7 +4,7 @@ import datetime as dt
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .. import accesos, auditoria, cdr_corridas, config, empresas, settings, tareas, telefonos as telmod
+from .. import accesos, auditoria, cdr_corridas, config, empresas, intermediarios, settings, tareas, telefonos as telmod
 from ..auth import ROLES, Usuario, requiere, requiere_job, requiere_tarea, usuario_actual
 from ..db import conexion, get_conn
 
@@ -21,7 +21,7 @@ def inicio(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
                  WHERE d.disponible AND e.baja IS NULL) AS disponibles,
                (SELECT count(*) FROM telefono WHERE e164 IS NOT NULL) AS telefonos,
                (SELECT count(DISTINCT empresa_id) FROM v_vinculo_discable) AS con_telefono_discable,
-               (SELECT count(*) FROM telefono WHERE intermediario = 'sospechoso') AS sospechosos,
+               (""" + intermediarios.SQL_CONTADOR + """) AS sospechosos,
                (SELECT count(*) FROM telefono WHERE intermediario = 'confirmado') AS intermediarios,
                (SELECT count(*) FROM revision_fusion WHERE estado = 'pendiente') AS revision,
                (SELECT count(*) FROM conciliacion WHERE estado = 'pendiente') AS conciliacion,

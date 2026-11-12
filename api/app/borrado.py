@@ -20,7 +20,7 @@ import logging
 import psycopg
 from fastapi import HTTPException
 
-from . import auditoria, empresas, storage, tareas
+from . import auditoria, empresas, intermediarios, storage, tareas
 
 log = logging.getLogger(__name__)
 
@@ -113,6 +113,7 @@ def borrar_empresas(conn, ids: list[int], accion: str = "empresa.borrar", actor:
           AND NOT EXISTS (SELECT 1 FROM no_llamar l WHERE l.alcance = 'telefono' AND l.objeto_id = t.id)
         RETURNING t.id""", (tels,))
     n["telefonos"] = len(huerfanos)
+    intermediarios.reevaluar(conn, tels, actor)
     return n
 
 
@@ -248,6 +249,7 @@ def _borrar_carga(conn, carga, tarea_id):
           AND NOT EXISTS (SELECT 1 FROM intento i WHERE i.telefono_id = t.id)
           AND NOT EXISTS (SELECT 1 FROM item_parte_estado p WHERE p.telefono_id = t.id)
           AND NOT EXISTS (SELECT 1 FROM no_llamar l WHERE l.alcance = 'telefono' AND l.objeto_id = t.id)""", (tels,))
+    intermediarios.reevaluar(conn, tels, actor)
 
     # 3. La carga, sus tareas y su archivo
     x("DELETE FROM revision_fusion WHERE carga_id = %s", (cid,))

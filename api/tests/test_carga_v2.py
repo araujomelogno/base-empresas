@@ -41,7 +41,9 @@ def test_catalogo_de_atributos(api):
     assert api.post("/atributos", rol="steward", json={"clave": "x", "nombre": "X", "tipo": "texto"}).status_code == 403
     assert api.post("/atributos", json={"clave": "Con Espacios", "nombre": "X", "tipo": "texto"}).status_code == 422
     assert api.post("/atributos", json={"clave": "empleados", "nombre": "Otro", "tipo": "texto"}).status_code == 409
-    assert api.post("/atributos", json={"clave": "exporta", "nombre": "Exporta", "tipo": "lista"}).status_code == 422
+    # F1.5: una lista puede crearse sin opciones (se completan en la carga)
+    sin_op = api.post("/atributos", json={"clave": "exporta", "nombre": "Exporta", "tipo": "lista"})
+    assert sin_op.status_code == 200 and sin_op.json()["opciones"] == []
     assert api.post("/atributos", json={"clave": "zona", "nombre": "Zona", "tipo": "texto",
                                         "estratificable": True}).status_code == 422
     # la clave es inmutable
@@ -336,10 +338,10 @@ def test_sorteo_reproducible_con_filtros_nuevos(api, sql):
                  "estratificar_por": ["atributo.exporta"], "n_por_estrato": 3}
     e = estudio(api)
     m1, _ = muestra(api, e, criterios, semilla=7, nombre="A")
-    lista1 = [i["rut"] for i in api.get(f"/muestras/{m1}/items").json()]
+    lista1 = [i["rut"] for i in api.get(f"/muestras/{m1}/items").json()["items"]]
     api.post(f"/muestras/{m1}/cerrar", rol="jefe")
     m2, _ = muestra(api, e, criterios, semilla=7, nombre="B")
-    assert [i["rut"] for i in api.get(f"/muestras/{m2}/items").json()] == lista1
+    assert [i["rut"] for i in api.get(f"/muestras/{m2}/items").json()["items"]] == lista1
 
 
 # ─── C8 · CSV con origen ───

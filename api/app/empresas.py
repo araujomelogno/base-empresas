@@ -358,6 +358,8 @@ def fusionar(conn, absorbente: dict, absorbida: dict, actor: str, motivo: str | 
     conn.execute("UPDATE empresa_fusion SET movidos = %s WHERE id = %s", (Jsonb(movidos), fusion_id))
     auditoria.registrar(conn, actor, "empresa.fusionar", "empresa", absorbente["rut"],
                         {"fusion_id": fusion_id, "absorbida": absorbida["rut"], "motivo": motivo})
+    from . import intermediarios  # import circular: intermediarios usa este módulo
+    intermediarios.reevaluar(conn, [v["telefono_id"] for v in movidos["vinculos_borrados"]], actor)
     return fusion_id
 
 

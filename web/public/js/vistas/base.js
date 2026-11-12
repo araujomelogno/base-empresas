@@ -16,7 +16,7 @@ export async function inicio(ctx) {
     (r.cdr.aviso && ctx.puede('coordinador') ? `<div class="alert alert-error"><span><strong>CDR:</strong> ${esc(r.cdr.aviso)}.
       ${ctx.puede('admin') ? '<a class="link" href="#/config">Revisar la conexión</a>' : 'Avisale a un administrador.'}</span></div>` : '') +
     stats([[r.empresas, 'Empresas activas', 's-total'], [r.disponibles, 'Disponibles para muestra', 's-ok'],
-      [r.con_telefono_discable, 'Con teléfono discable', 's-free'], [r.muestras_activas, 'Muestras activas', 's-warn'],
+      [r.con_telefono_discable, 'Con teléfono discable', 's-free'], [r.muestras_activas, 'Muestras activas', 's-warn', '#/muestras?estado=activa'],
       [r.intermediarios, 'Intermediarios confirmados', 's-bad'], [r.intentos_7d, 'Llamadas últimos 7 días', '']]) +
     `<div class="grid-2">
       ${card('Bandejas pendientes', bandejas.length ? tabla([
@@ -44,10 +44,10 @@ export async function empresas(ctx) {
     const [val, t] = Array.isArray(x) ? x : [x, x];
     return `<option value="${esc(val)}" ${val === sel ? 'selected' : ''}>${esc(t)}</option>`;
   }).join('');
-  main().innerHTML = pageHeader('Empresas', '', 'Registro maestro por RUT. Buscá por RUT, razón social o nombre de fantasía.',
+  main().innerHTML = pageHeader('Empresas', '', 'Registro maestro por RUT. Buscá por RUT, razón social o nombre de fantasía; con #1234 o item:1234, por EC_ID_ITEM.',
     ctx.puede('steward') ? `<button class="btn btn-orange" id="e-nueva">+ Nueva empresa</button>` : '') +
     `<div class="card"><div class="card-header"><div class="toolbar" style="width:100%">
-      <input type="search" class="grow" id="f-q" placeholder="RUT o nombre…" value="${esc(_filtros.q)}" />
+      <input type="search" class="grow" id="f-q" placeholder="RUT, nombre o #ítem…" value="${esc(_filtros.q)}" />
       <select class="fselect" id="f-departamento">${opt(v.departamento, _filtros.departamento, 'Todos los departamentos')}</select>
       <select class="fselect" id="f-tamano">${opt(v.tamano, _filtros.tamano, 'Todos los tamaños')}</select>
       <select class="fselect" id="f-naturaleza">${opt(v.naturaleza.map(n => [n.codigo, n.nombre]), _filtros.naturaleza, 'Toda naturaleza')}</select>
@@ -58,6 +58,14 @@ export async function empresas(ctx) {
     ['q', 'departamento', 'tamano', 'naturaleza', 'disponible'].forEach(k => { _filtros[k] = $('#f-' + k).value; });
     _filtros.pagina = pagina;
     const r = await api.get('/empresas', _filtros);
+    if (r.item && r.empresas.length === 1) {  // F1.4: #1234 lleva directo a la ficha, pestaña Muestras, con la fila resaltada
+      ctx.ir(`empresas/${r.empresas[0].rut}?tab=muestras&item=${r.item}`);
+      return;
+    }
+    if (r.item && !r.empresas.length) {
+      $('#e-res').innerHTML = `<div class="empty-state"><span class="ei">🔎</span>No hay ningún ítem de muestra con EC_ID_ITEM ${num(r.item)}</div>`;
+      return;
+    }
     const paginas = Math.max(1, Math.ceil(r.total / 50));
     $('#e-res').innerHTML = tabla([
       { t: 'RUT', f: e => `<a class="link mono" href="#/empresas/${e.rut}">${rutFmt(e.rut)}</a>` },
@@ -179,8 +187,10 @@ export async function ficha(ctx, rut, params) {
     el.innerHTML = card('Muestras', tabla([
       { t: 'Muestra', f: m => `<a class="link" href="#/muestras/${m.muestra_id}">${esc(m.nombre)}</a>` }, { t: 'Estudio', k: 'estudio' },
       { t: 'Estado', f: m => estDe('muestra', m.estado) }, { t: 'Estrato', k: 'estrato' }, { t: 'Rol', f: m => est(m.rol) },
-      { t: 'Liberado', f: m => m.liberado ? 'sí' : 'no' }, { t: 'Ítem', cls: 'num', k: 'item_id' },
-    ], e.muestras, 'Nunca entró a una muestra'), '', true);
+      { t: 'Liberado', f: m => m.liberado ? 'sí' : 'no' }, { t: 'Ítem (EC_ID_ITEM)', cls: 'num', k: 'item_id' },
+    ], e.muestras.map(m => ({ ...m, __tr: String(m.item_id) === params.get('item') ? 'class="fila-resaltada" id="f-item"' : '' })),
+    'Nunca entró a una muestra'), '', true);
+    if ($('#f-item')) $('#f-item').scrollIntoView({ block: 'center' });
   } else if (tab === 'tiempo') {
     const clase = { llamada: 't-llamada', resultado: 't-resultado', dato: 't-dato', 'no llamar': 't-no' };
     el.innerHTML = card('Línea de tiempo', e.linea_de_tiempo.length ? `<ul class="timeline">${e.linea_de_tiempo.map(x => `

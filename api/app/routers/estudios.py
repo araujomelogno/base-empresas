@@ -115,12 +115,16 @@ def marco(criterios: dict, conn=Depends(get_conn), u: Usuario = Depends(usuario_
 
 
 @router.get("/muestras")
-def listar_muestras(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+def listar_muestras(estado: str | None = None, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+    """Lista de muestras; con estado=activa es la lista a la que lleva el contador de Inicio (F1.1)."""
     return conn.execute(
         "SELECT m.id, m.nombre, m.estado, m.semilla, m.config_version, m.sorteada, m.estudio_id, e.nombre AS estudio_nombre,"
         " (SELECT count(*) FROM muestra_item i WHERE i.muestra_id = m.id) AS n_items,"
-        " (SELECT count(*) FROM muestra_item i WHERE i.muestra_id = m.id AND i.liberado) AS n_liberados"
-        " FROM muestra m JOIN estudio e ON e.id = m.estudio_id ORDER BY m.id DESC").fetchall()
+        " (SELECT count(*) FROM muestra_item i WHERE i.muestra_id = m.id AND i.liberado) AS n_liberados,"
+        " (SELECT t.estado FROM tarea t WHERE t.tipo = 'muestra.borrar' AND (t.payload->>'borrar_muestra_id')::int = m.id"
+        "   ORDER BY t.id DESC LIMIT 1) AS tarea_borrado"
+        " FROM muestra m JOIN estudio e ON e.id = m.estudio_id"
+        " WHERE (%s::text IS NULL OR m.estado = %s) ORDER BY m.id DESC", (estado, estado)).fetchall()
 
 
 @router.get("/muestras/{muestra_id}")
@@ -144,8 +148,10 @@ def borrar_muestra(muestra_id: int, u: Usuario = Depends(requiere("admin"))):
 
 
 @router.get("/muestras/{muestra_id}/items")
-def items(muestra_id: int, estrato: str | None = None, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
-    return muestras.items(conn, muestra_id, estrato)
+def items(muestra_id: int, estrato: str | None = None, rol: str | None = None, liberado: bool | None = None,
+          parte_id: int | None = None, estado: str | None = None, q: str | None = None, pagina: int = 1,
+          por_pagina: int = muestras.POR_PAGINA, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+    return muestras.items(conn, muestra_id, estrato, rol, liberado, parte_id, estado, q, pagina, por_pagina)
 
 
 class Sorteo(BaseModel):

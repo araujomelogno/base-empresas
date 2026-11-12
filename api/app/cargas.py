@@ -646,8 +646,8 @@ def deshacer(conn, carga_id: int, actor: str) -> dict:
     conn.execute("UPDATE carga SET estado = 'deshecha', deshecha = now() WHERE id = %s", (carga_id,))
     # El origen que esta carga sumó a vínculos que ya existían
     conn.execute("DELETE FROM telefono_vinculo_origen WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))
-    vincs = conn.execute("DELETE FROM telefono_vinculo WHERE fuente_tipo = 'carga' AND fuente_id = %s RETURNING id",
-                         (carga_id,)).fetchall()
+    vincs = conn.execute("DELETE FROM telefono_vinculo WHERE fuente_tipo = 'carga' AND fuente_id = %s"
+                         " RETURNING id, telefono_id", (carga_id,)).fetchall()
     conn.execute("UPDATE telefono_vinculo SET contacto_id = NULL WHERE contacto_id IN "
                  "(SELECT id FROM contacto WHERE fuente_tipo = 'carga' AND fuente_id = %s)", (carga_id,))
     conn.execute("DELETE FROM contacto WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))
@@ -668,6 +668,10 @@ def deshacer(conn, carga_id: int, actor: str) -> dict:
         if quedan == 0:
             conn.execute("UPDATE empresa SET baja = 'anulada' WHERE id = %s", (eid,))
             anuladas += 1
+    intermediarios.reevaluar(conn, [v["telefono_id"] for v in vincs]
+                             + [r["telefono_id"] for r in conn.execute(
+                                 "SELECT DISTINCT telefono_id FROM telefono_vinculo WHERE empresa_id = ANY(%s)", (ids,))],
+                             actor)
     resumen = {"estado": "deshecha", "empresas_anuladas": anuladas, "empresas_recalculadas": len(ids), "vinculos_borrados": len(vincs)}
     auditoria.registrar(conn, actor, "carga.deshacer", "carga", carga_id, resumen)
     return resumen

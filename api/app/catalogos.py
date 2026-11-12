@@ -60,8 +60,7 @@ def _limpiar_atributo(datos: dict, actual: dict | None = None) -> dict:
     opciones = [str(o).strip() for o in (d.get("opciones") or []) if str(o).strip()]
     if len(set(opciones)) != len(opciones):
         raise HTTPException(422, "Las opciones de la lista no pueden repetirse")
-    if tipo == "lista" and not opciones:
-        raise HTTPException(422, "Un atributo de tipo lista necesita al menos una opción")
+    # F1.5: una lista puede quedar sin opciones; se completan en la carga, con la traducción de valores
     if tipo != "lista":
         opciones = []
     sinonimos = sorted({normalizar(s) for s in (d.get("sinonimos") or []) if normalizar(s)})
@@ -73,14 +72,31 @@ def _limpiar_atributo(datos: dict, actual: dict | None = None) -> dict:
             "activo": bool(d.get("activo", True))}
 
 
+def clave_libre(conn, nombre: str) -> str:
+    """Clave automática a partir del nombre (F1.5): minúsculas, sin tildes, guiones bajos, hasta 40 caracteres;
+    si ya existe se agrega _2, _3…"""
+    base = slug(nombre)
+    if base == "origen" and not normalizar(nombre):
+        base = "atributo"
+    clave, n = base, 1
+    while atributo_por_clave(conn, clave):
+        n += 1
+        sufijo = f"_{n}"
+        clave = base[:40 - len(sufijo)] + sufijo
+    return clave
+
+
 def crear_atributo(conn, datos: dict, actor: str) -> dict:
-    clave = str(datos.get("clave") or "").strip()
-    if not CLAVE.match(clave):
-        raise HTTPException(422, "La clave va en minúsculas, sin espacios ni tildes, empieza con una letra"
-                                 " (p. ej. cantidad_empleados) y tiene hasta 40 caracteres")
-    if atributo_por_clave(conn, clave):
-        raise HTTPException(409, f"Ya existe un atributo con la clave {clave}")
     d = _limpiar_atributo(datos)
+    clave = str(datos.get("clave") or "").strip()
+    if clave:  # la API sigue aceptando una clave explícita (scripts); la web nunca la pide
+        if not CLAVE.match(clave):
+            raise HTTPException(422, "La clave va en minúsculas, sin espacios ni tildes, empieza con una letra"
+                                     " (p. ej. cantidad_empleados) y tiene hasta 40 caracteres")
+        if atributo_por_clave(conn, clave):
+            raise HTTPException(409, f"Ya existe un atributo con la clave {clave}")
+    else:
+        clave = clave_libre(conn, d["nombre"])
     a = conn.execute(
         "INSERT INTO atributo (clave, nombre, tipo, opciones, sinonimos, filtrable, estratificable, activo, creado_por)"
         " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",

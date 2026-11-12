@@ -202,6 +202,43 @@ export async function nuevaMuestra(ctx, estudioId) {
 }
 
 // ── Muestra ──
+// F1.1: la lista a la que lleva el contador «Muestras activas» de Inicio
+export async function muestras(ctx, params) {
+  const estado = params.get('estado') || 'activa';
+  const lista = await api.get('/muestras', { estado });
+  const titulo = { activa: 'Muestras activas', cerrada: 'Muestras cerradas', borrador: 'Muestras en borrador' }[estado] || 'Muestras';
+  const sinEmpresas = lista.filter(m => m.estado === 'activa' && !m.n_items).length;
+  main().innerHTML = pageHeader(titulo, '', 'Las muestras activas bloquean a sus empresas para otras muestras.') +
+    (sinEmpresas ? `<div class="alert alert-warn"><span><strong>${sinEmpresas === 1 ? 'Una muestra activa no tiene' : `${num(sinEmpresas)} muestras activas no tienen`} empresas:</strong>
+      se borraron todas sus empresas (borrar empresa o borrar carga). Cerrala o borrala desde acá.</span></div>` : '') +
+    card(titulo, tabla([
+      { t: 'Estudio', f: m => `<a class="link" href="#/estudios/${m.estudio_id}">${esc(m.estudio_nombre)}</a>` },
+      { t: 'Muestra', f: m => `<a class="link td-strong" href="#/muestras/${m.id}">${esc(m.nombre)}</a>` },
+      { t: 'Estado', f: m => (m.estado === 'activa' && !m.n_items ? est('sospechoso', 'activa, sin empresas') : estDe('muestra', m.estado)) +
+        (['error', 'cancelada'].includes(m.tarea_borrado) ? ` ${est('error', 'borrado sin terminar')}` : '') },
+      { t: 'Ítems', cls: 'num', f: m => num(m.n_items) }, { t: 'Liberados', cls: 'num', f: m => num(m.n_liberados) },
+      { t: 'Sorteada', f: m => m.sorteada ? fechaHora(m.sorteada) : '—' },
+      { t: '', f: m => m.estado === 'activa' && !m.n_items ? `<span class="gap">
+        ${ctx.puede('jefe') ? `<button class="btn btn-outline btn-sm" data-cerrar="${m.id}">Cerrar</button>` : ''}
+        ${ctx.puede() ? `<button class="btn btn-danger btn-sm" data-borrar="${m.id}" data-nombre="${esc(m.nombre)}">Borrar</button>` : ''}</span>` : '' },
+    ], lista, estado === 'activa' ? 'No hay muestras activas' : 'No hay muestras'), '', true);
+  $$('[data-cerrar]').forEach(b => b.onclick = async () => {
+    if (!await confirmar('Cerrar muestra', 'La muestra no tiene empresas. Al cerrarla deja de contar como activa.', 'Cerrar', 'btn-danger')) return;
+    await api.post(`/muestras/${b.dataset.cerrar}/cerrar`);
+    toast('Muestra cerrada', 'ok'); muestras(ctx, params);
+  });
+  $$('[data-borrar]').forEach(b => b.onclick = async () => {
+    const ok = await confirmarEscrito({ titulo: `Borrar muestra «${b.dataset.nombre}»`, palabra: 'BORRAR',
+      cuerpo: '<p>La muestra no tiene empresas. Se elimina junto con su marco congelado. <strong>No se puede deshacer.</strong> Queda el registro en Auditoría.</p>' });
+    if (!ok) return;
+    try {
+      await borrarConTarea(`/muestras/${b.dataset.borrar}`, 'Borrar muestra', 'Borrando la muestra');
+      toast('Muestra borrada', 'ok');
+    } catch (err) { toast(err.message, 'err'); }
+    muestras(ctx, params);
+  });
+}
+
 function criteriosTexto(c, atributos, origenes) {
   const nombreA = Object.fromEntries(atributos.map(a => [a.clave, a.nombre]));
   const nombreO = Object.fromEntries(origenes.map(o => [o.codigo, o.nombre]));
@@ -222,6 +259,10 @@ export async function muestra(ctx, id) {
     `<button class="btn btn-outline" id="mu-verificar">Verificar reproducibilidad</button>` +
     (m.estado === 'activa' && ctx.puede('jefe') ? `<button class="btn btn-outline btn-del" id="mu-cerrar">Cerrar muestra</button>` : '') +
     (ctx.puede() ? `<button class="btn btn-danger" id="mu-borrar">Borrar muestra</button>` : '')) +
+    (m.borrado_fallido ? `<div class="alert alert-error"><span><strong>El borrado de esta muestra no terminó</strong>
+      (tarea #${m.borrado_fallido.id}, ${esc(etiqueta(m.borrado_fallido.estado))}${m.borrado_fallido.terminado ? ` el ${fechaHora(m.borrado_fallido.terminado)}` : ''}${m.borrado_fallido.error ? `: ${esc(m.borrado_fallido.error)}` : ''}).
+      La muestra sigue existiendo${m.estado === 'activa' ? ' y cuenta como activa' : ''}. Volvé a usar «Borrar muestra».</span></div>` : '') +
+    (m.estado === 'activa' && !m.avance.length ? `<div class="alert alert-warn"><span><strong>Activa, sin empresas:</strong> se borraron todas sus empresas. Cerrala o borrala para que deje de contar como activa.</span></div>` : '') +
     (m.n_items_borrados ? `<div class="alert alert-warn"><span><strong>${num(m.n_items_borrados)} empresa${m.n_items_borrados > 1 ? 's' : ''}
       borrada${m.n_items_borrados > 1 ? 's' : ''} después del sorteo.</strong> El marco congelado no cambia: «Verificar reproducibilidad» las tiene en cuenta.</span></div>` : '') +
     (r.avisos && r.avisos.length ? `<div class="alert alert-warn"><div><strong>Avisos del sorteo</strong><ul class="aviso-lista">${r.avisos.map(a => `<li>${esc(a)}</li>`).join('')}</ul></div></div>` : '') +
@@ -249,21 +290,41 @@ export async function muestra(ctx, id) {
       { t: '', f: x => m.estado === 'activa' && ctx.puede('jefe') && x.reemplazos > x.reemplazos_liberados
         ? `<button class="btn btn-outline btn-sm" data-liberar="${esc(x.estrato)}" data-max="${x.reemplazos - x.reemplazos_liberados}">Liberar reemplazos</button>` : '' },
     ], m.avance), '', true) +
-    `<div class="card mt"><div class="card-header"><div class="card-header-title">Ítems</div><div class="gap">
-      <select class="fselect" id="mu-estrato" style="width:auto"><option value="">Todos los estratos</option>${m.avance.map(x => `<option>${esc(x.estrato)}</option>`).join('')}</select></div></div>
-      <div class="card-body tight" id="mu-items"></div></div>`;
+    `<div class="card mt"><div class="card-header"><div class="card-header-title">Empresas de la muestra <span class="muted small" id="mu-total"></span></div></div>
+      <div class="card-body"><div class="toolbar">
+      <input type="search" class="grow" id="mu-q" style="min-width:260px" placeholder="RUT, razón social o EC_ID_ITEM…" />
+      <select class="fselect" id="mu-estrato" style="width:auto"><option value="">Todos los estratos</option>${m.avance.map(x => `<option>${esc(x.estrato)}</option>`).join('')}</select>
+      <select class="fselect" id="mu-rol" style="width:auto"><option value="">Titulares y reemplazos</option><option value="titular">Titulares</option><option value="reemplazo">Reemplazos</option></select>
+      <select class="fselect" id="mu-liberado" style="width:auto"><option value="">Liberados o no</option><option value="true">Liberados</option><option value="false">No liberados</option></select>
+      <select class="fselect" id="mu-eparte" style="width:auto"><option value="">En cualquier parte</option>${m.partes.map(p => `<option value="${p.id}">${esc(p.nombre)}</option>`).join('')}</select>
+      <select class="fselect" id="mu-estado" style="width:auto"><option value="">Cualquier estado</option>${['pendiente', 'en_curso', 'completa', 'rechazo', 'no_contactable', 'fuera_de_marco'].map(x => `<option value="${x}">${esc(etiqueta(x))}</option>`).join('')}</select>
+      </div></div>
+      <div class="card-body tight" id="mu-items"></div><div class="card-body gap" style="justify-content:space-between" id="mu-pag"></div></div>`;
 
+  let pagina = 1;
   const items = async () => {
-    const lista = await api.get(`/muestras/${id}/items`, { estrato: $('#mu-estrato').value });
+    const r = await api.get(`/muestras/${id}/items`, { estrato: $('#mu-estrato').value, rol: $('#mu-rol').value,
+      liberado: $('#mu-liberado').value, parte_id: $('#mu-eparte').value, estado: $('#mu-estado').value,
+      q: $('#mu-q').value.trim(), pagina });
+    const lista = r.items;
+    $('#mu-total').textContent = `· ${num(r.total)} empresa${r.total === 1 ? '' : 's'}`;
+    $('#mu-pag').innerHTML = `<span class="small muted">${num(r.total)} empresas · página ${r.pagina} de ${r.paginas} · ${r.por_pagina} por página</span>
+      <span class="gap"><button class="btn btn-outline btn-sm" id="mu-ant" ${r.pagina <= 1 ? 'disabled' : ''}>‹ Anterior</button>
+      <button class="btn btn-outline btn-sm" id="mu-sig" ${r.pagina >= r.paginas ? 'disabled' : ''}>Siguiente ›</button></span>`;
+    $('#mu-ant').onclick = () => { pagina--; items(); };
+    $('#mu-sig').onclick = () => { pagina++; items(); };
     $('#mu-items').innerHTML = tabla([
-      { t: 'Ítem', cls: 'num', k: 'id' }, { t: 'Estrato', k: 'estrato' }, { t: 'Orden', cls: 'num', k: 'orden' }, { t: 'Rol', f: i => est(i.rol) },
+      { t: 'EC_ID_ITEM', cls: 'num', k: 'id' }, { t: 'Estrato', k: 'estrato' }, { t: 'Orden', cls: 'num', k: 'orden' }, { t: 'Rol', f: i => est(i.rol) },
       { t: 'Empresa', f: i => `<a class="link" href="#/empresas/${i.rut}">${esc(i.razon_social || i.rut)}</a>` },
       { t: 'Liberado', f: i => i.liberado ? `sí <span class="small muted">${esc(i.liberado_motivo || '')}</span>` : 'no' },
       { t: 'Intentos', cls: 'num', k: 'intentos' },
       { t: 'Estado por parte', f: i => Object.entries(i.estados || {}).map(([p, s]) => `<span class="small muted">${esc(p)}:</span> ${est(s)}`).join(' ') || '—' },
-    ], lista, 'Sin ítems');
+    ], lista, 'Ninguna empresa con esos filtros');
   };
-  $('#mu-estrato').onchange = items;
+  const filtrar = () => { pagina = 1; items(); };  // los filtros se mantienen al cambiar de página
+  ['#mu-estrato', '#mu-rol', '#mu-liberado', '#mu-eparte', '#mu-estado'].forEach(sel => { $(sel).onchange = filtrar; });
+  $('#mu-q').addEventListener('keydown', e => { if (e.key === 'Enter') filtrar(); });
+  $('#mu-q').addEventListener('search', filtrar);
   items();
   const recargar = () => muestra(ctx, id);
   $('#mu-verificar').onclick = async () => {

@@ -6,7 +6,7 @@ liberado no vuelve a marcarse salvo que sume RUTs nuevos.
 """
 from fastapi import HTTPException
 
-from . import auditoria, empresas
+from . import auditoria, config, empresas
 
 _CONTEO = """
 SELECT t.id, t.intermediario, t.intermediario_n, count(DISTINCT v.empresa_id) AS n
@@ -60,6 +60,33 @@ def sospechosos(conn, estado: str = "sospechoso") -> list[dict]:
         """,
         (estado,),
     ).fetchall()
+
+
+# Mismo criterio que la lista (sospechosos): teléfonos con al menos una empresa activa (F1.2)
+SQL_CONTADOR = ("SELECT count(*) FROM telefono t WHERE t.intermediario = 'sospechoso' AND EXISTS ("
+                "SELECT 1 FROM telefono_vinculo v JOIN empresa e ON e.id = v.empresa_id AND e.baja IS NULL"
+                " WHERE v.telefono_id = t.id)")
+
+
+def reevaluar(conn, telefono_ids, actor: str = "sistema") -> list[int]:
+    """Después de borrar empresas, deshacer o borrar una carga, o fusionar: el sospechoso que quedó con menos
+    empresas activas que el umbral vuelve a «sin marca». Los confirmados no se tocan (decisión humana)."""
+    ids = sorted({i for i in telefono_ids or [] if i is not None})
+    if not ids:
+        return []
+    umbral = config.vigente(conn)[1]["umbral_intermediario"]
+    filas = conn.execute(
+        "SELECT t.id, (SELECT count(DISTINCT v.empresa_id) FROM telefono_vinculo v JOIN empresa e ON e.id = v.empresa_id"
+        "  AND e.baja IS NULL WHERE v.telefono_id = t.id) AS n"
+        " FROM telefono t WHERE t.id = ANY(%s) AND t.intermediario = 'sospechoso'", (ids,)).fetchall()
+    retirar = [f["id"] for f in filas if f["n"] < umbral]
+    if retirar:
+        conn.execute("UPDATE telefono SET intermediario = NULL, intermediario_n = NULL, intermediario_fecha = now(),"
+                     " intermediario_por = %s WHERE id = ANY(%s)", (actor, retirar))
+        auditoria.registrar(conn, actor, "telefono.sospechoso_retirado", "telefono", None,
+                            {"ids": retirar, "umbral": umbral,
+                             "empresas": {str(f["id"]): f["n"] for f in filas if f["id"] in retirar}})
+    return retirar
 
 
 def resolver(conn, telefono_id: int, accion: str, actor: str, motivo: str | None = None) -> dict:

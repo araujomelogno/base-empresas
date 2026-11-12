@@ -171,6 +171,10 @@ tbody tr:hover td { background: #FAFAFA; }
 .stat.s-warn::before { background: var(--amber); }
 .stat.s-free::before { background: var(--blue); }
 .stat .stat-num { font-size: 1.9rem; font-weight: 800; color: var(--dark); letter-spacing: -0.03em; line-height: 1; }
+a.stat.stat-link { display: block; text-decoration: none; transition: border-color .15s, box-shadow .15s; }
+a.stat.stat-link:hover { border-color: var(--orange, #e8590c); box-shadow: 0 2px 6px rgba(0,0,0,.06); }
+a.stat.stat-link .stat-label::after { content: ' ›'; }
+tr.fila-resaltada td { background: #fff4e5 !important; box-shadow: inset 0 0 0 9999px rgba(232, 89, 12, .06); }
 .stat .stat-label { font-size: 0.68rem; font-weight: 700; color: var(--gray); text-transform: uppercase; letter-spacing: 0.07em; margin-top: 0.4rem; }
 
 /* ══ BADGES / ESTADOS ══ */
@@ -374,3 +378,4 @@ tr.fila-total td { font-weight: 700; border-top: 2px solid var(--border); backgr
 .tabla-simple { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
 .tabla-simple td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
 .tabla-simple td.num { text-align: right; white-space: nowrap; }
+.req { color: var(--red); font-weight: 700; }

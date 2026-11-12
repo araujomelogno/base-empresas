@@ -68,8 +68,11 @@ export function pageHeader(titulo, acento, sub, acciones = '') {
 }
 
 export function stats(items) {
-  return `<div class="stat-grid">${items.map(([v, l, cls]) =>
-    `<div class="stat ${cls || ''}"><div class="stat-num mono">${typeof v === 'number' ? num(v) : esc(v ?? '—')}</div><div class="stat-label">${esc(l)}</div></div>`).join('')}</div>`;
+  // [valor, etiqueta, clase, enlace opcional]: con enlace, el indicador lleva a la lista que cuenta
+  return `<div class="stat-grid">${items.map(([v, l, cls, href]) => {
+    const tag = href ? 'a' : 'div';
+    return `<${tag} class="stat ${cls || ''}${href ? ' stat-link' : ''}"${href ? ` href="${esc(href)}"` : ''}><div class="stat-num mono">${typeof v === 'number' ? num(v) : esc(v ?? '—')}</div><div class="stat-label">${esc(l)}</div></${tag}>`;
+  }).join('')}</div>`;
 }
 
 export function tabla(cols, filas, vacio = 'Sin datos') {

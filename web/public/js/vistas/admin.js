@@ -202,14 +202,16 @@ const NUCLEO = [['rut', 'RUT (obligatorio)'], ['razon_social', 'Razón social'],
 
 function formAtributo(a = {}) {
   const nuevo = !a.id;
-  return `<div class="form-row"><div class="form-group"><label>Nombre visible</label><input type="text" id="at-nombre" value="${esc(a.nombre || '')}" placeholder="p. ej. Cantidad de empleados" /></div>
-    <div class="form-group"><label>Clave</label><input type="text" id="at-clave" value="${esc(a.clave || '')}" ${nuevo ? '' : 'disabled'} placeholder="cantidad_empleados" />
-    <div class="field-hint">${nuevo ? 'En minúsculas, sin espacios ni tildes. No se puede cambiar después.' : 'La clave no se puede cambiar.'}</div></div></div>
-    <div class="form-row"><div class="form-group"><label>Tipo</label><select class="fselect" id="at-tipo" ${nuevo || !a.n_valores ? '' : 'disabled'}>${
+  // F1.5: la clave se genera sola a partir del nombre; acá solo se muestra (de solo lectura) al editar
+  return `<div class="form-row"><div class="form-group"><label>Nombre visible <span class="req">*</span></label><input type="text" id="at-nombre" value="${esc(a.nombre || '')}" placeholder="p. ej. Cantidad de empleados" /></div>
+    ${nuevo ? `<div class="form-group"><label>Clave</label><div class="field-hint">Se genera sola a partir del nombre (minúsculas, sin tildes, con guiones bajos). Si ya existe, se agrega _2, _3…</div></div>`
+      : `<div class="form-group"><label>Clave</label><div class="mono" style="padding:.45rem 0">${esc(a.clave)}</div><div class="field-hint">No cambia aunque cambies el nombre.</div></div>`}</div>
+    <div class="form-row"><div class="form-group"><label>Tipo <span class="req">*</span></label><select class="fselect" id="at-tipo" ${nuevo || !a.n_valores ? '' : 'disabled'}>${
       Object.entries(TIPOS_ATRIBUTO).map(([k, t]) => `<option value="${k}" ${k === (a.tipo || 'texto') ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
-    <div class="form-group" id="at-opciones-g"><label>Opciones (una por línea)</label><textarea id="at-opciones" rows="3">${esc((a.opciones || []).join('\n'))}</textarea></div></div>
+    <div class="form-group" id="at-opciones-g"><label>Opciones (una por línea, opcional)</label><textarea id="at-opciones" rows="3">${esc((a.opciones || []).join('\n'))}</textarea>
+    <div class="field-hint">Pueden quedar vacías: se completan en la carga, con la traducción de valores.</div></div></div>
     <div class="form-group"><label>Sinónimos para el mapeo automático (separados por coma)</label><input type="text" id="at-sinonimos" value="${esc((a.sinonimos || []).join(', '))}" placeholder="p. ej. empleados, personal, cant. empleados" />
-    <div class="field-hint">Si una columna del archivo se llama así, la carga la reconoce sola. También se reconocen el nombre y la clave.</div></div>
+    <div class="field-hint">Opcional. Si una columna del archivo se llama así, la carga la reconoce sola. También se reconocen el nombre y la clave.</div></div>
     <label class="check"><input type="checkbox" id="at-filtro" ${a.filtrable ? 'checked' : ''} /> Sirve como filtro del sorteo</label>
     <label class="check" id="at-estrato-g"><input type="checkbox" id="at-estrato" ${a.estratificable ? 'checked' : ''} /> Sirve como estrato (solo listas)</label>
     ${nuevo ? '' : `<label class="check"><input type="checkbox" id="at-activo" ${a.activo ? 'checked' : ''} /> Activo</label>`}`;
@@ -217,7 +219,7 @@ function formAtributo(a = {}) {
 
 function leerAtributo(b) {
   return {
-    clave: $('#at-clave', b).value.trim() || null, nombre: $('#at-nombre', b).value.trim(), tipo: $('#at-tipo', b).value,
+    nombre: $('#at-nombre', b).value.trim(), tipo: $('#at-tipo', b).value,
     opciones: $('#at-opciones', b).value.split('\n').map(s => s.trim()).filter(Boolean),
     sinonimos: $('#at-sinonimos', b).value.split(',').map(s => s.trim()).filter(Boolean),
     filtrable: $('#at-filtro', b).checked, estratificable: $('#at-estrato', b).checked,
