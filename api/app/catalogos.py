@@ -147,9 +147,8 @@ def _limpiar_atributo(datos: dict, actual: dict | None = None) -> dict:
     if tipo != "lista":
         opciones = []
     sinonimos = sorted({normalizar(s) for s in (d.get("sinonimos") or []) if normalizar(s)})
+    # D44: «filtro» y «estrato» ya no restringen el sorteo (todo atributo activo de empresa sirve); se conservan
     estratificable = bool(d.get("estratificable"))
-    if estratificable and tipo != "lista":
-        raise HTTPException(422, "Solo un atributo de tipo lista puede usarse como estrato")
     ambito = d.get("ambito") or "empresa"
     if ambito not in AMBITOS:
         raise HTTPException(422, "El ámbito de un atributo es «empresa» o «contacto»")

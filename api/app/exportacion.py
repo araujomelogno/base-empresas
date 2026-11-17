@@ -233,10 +233,10 @@ def generar_csv(conn, muestra_id: int, parte_id: int, usuario: Usuario, formato:
     fmt = ctx["cfg"]["csv_ucontact"]
     if formato == "planilla":
         columnas = [(c, c) for c in ctx["columnas_planilla"]]
-        nombre = f"planilla_muestra{muestra_id}_parte{parte_id}.csv"
+        nombre = f"muestra{muestra_id}_parte{parte_id}_por_empresa.csv"   # R1: «Una fila por empresa»
     else:
         columnas = [(c["columna"], c["campo"]) for c in fmt["columnas"]] + [(c, c) for c in ctx["columnas_extra"]]
-        nombre = f"ucontact_muestra{muestra_id}_parte{parte_id}.csv"
+        nombre = f"muestra{muestra_id}_parte{parte_id}_por_numero.csv"    # R1: «Una fila por número»
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=fmt.get("separador", ";"), lineterminator="\r\n")
     w.writerow([c for c, _ in columnas])

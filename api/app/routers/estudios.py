@@ -1,11 +1,11 @@
 """Estudios, partes, muestras y CSV para uContact (R1.5, R1.6, R1.7)."""
 import datetime as dt
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from .. import borrado, exportacion, muestras, tareas
+from .. import borrado, config, criterios as crit, exportacion, muestras, tareas, templates
 from ..auth import Usuario, requiere, usuario_actual
 from ..db import conexion, get_conn
 
@@ -101,11 +101,140 @@ class NuevaMuestra(BaseModel):
     estudio_id: int
     nombre: str
     criterios: dict
+    template_id: int | None = None   # R2: de qué template partió (la muestra guarda su propia copia)
 
 
 @router.post("/muestras")
 def crear_muestra(body: NuevaMuestra, conn=Depends(get_conn), u: Usuario = Depends(requiere("jefe"))):
-    return muestras.crear_muestra(conn, body.estudio_id, body.nombre, body.criterios, u.email)
+    return muestras.crear_muestra(conn, body.estudio_id, body.nombre, body.criterios, u.email, body.template_id)
+
+
+# ── R4: datos disponibles para filtrar y estratificar ──
+
+@router.get("/muestras/datos-sorteo")
+def datos_sorteo(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+    """Campos fijos y atributos de empresa activos (nunca de contacto), con su tipo y opciones."""
+    defs = crit.definiciones(conn)
+    _, cfg = config.vigente(conn)
+
+    def distintos(sql):
+        return [r["v"] for r in conn.execute(
+            f"SELECT DISTINCT {sql} AS v FROM empresa e LEFT JOIN naturaleza_juridica n ON n.id = e.naturaleza_id"
+            f" WHERE e.baja IS NULL AND {sql} IS NOT NULL AND {sql}::text <> '' ORDER BY 1 LIMIT 500")]
+    datos = []
+    for k, m in defs.items():
+        d = {x: m.get(x) for x in ("clave", "nombre", "tipo", "grupo", "opciones")}
+        if m["tipo"] == "lista" and d["opciones"] is None:
+            d["opciones"] = distintos(m["sql"])
+        datos.append(d)
+    return {"datos": datos,
+            "naturalezas": conn.execute("SELECT codigo, nombre, excluida FROM naturaleza_juridica ORDER BY nombre").fetchall(),
+            "regla_sin_telefono": bool((cfg.get("reglas_disponibilidad") or {}).get("sin_telefono_discable", True))}
+
+
+@router.get("/muestras/valores-dato")
+def valores_dato(dato: str, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+    """Para «Es uno de…»: los valores existentes de un dato de texto (sin mayúsculas ni tildes), con cuántas
+    empresas tienen cada uno, hasta 200."""
+    defs = crit.definiciones(conn)
+    if dato not in defs:
+        raise HTTPException(422, f"Dato desconocido: {dato}")
+    q = crit.Consulta(defs)
+    x = q.expr(dato)
+    return conn.execute(
+        f"SELECT mode() WITHIN GROUP (ORDER BY btrim({x}::text)) AS valor, count(*) AS empresas FROM empresa e"
+        " LEFT JOIN naturaleza_juridica n ON n.id = e.naturaleza_id " + " ".join(q.joins.values())
+        + f" WHERE e.baja IS NULL AND norm_txt({x}::text) IS NOT NULL GROUP BY norm_txt({x}::text)"
+        " ORDER BY 2 DESC, 1 LIMIT 200").fetchall()
+
+
+class Tramos(BaseModel):
+    dato: str
+    criterios: dict | None = None
+    n: int = 4
+
+
+@router.post("/muestras/tramos")
+def tramos(body: Tramos, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+    """Tramos sugeridos para estratificar un dato numérico: cuartiles del marco o tramos iguales."""
+    defs = crit.definiciones(conn)
+    if body.dato not in defs or defs[body.dato]["tipo"] != "numero":
+        raise HTTPException(422, "Los tramos se sugieren para un dato numérico")
+    c = muestras._validar_criterios(conn, {**(body.criterios or {}), "estratificar_por": []}, [], tamanos=False)
+    universo = {f["id"] for f in muestras._universo(conn, c, defs)}
+    q = crit.Consulta(defs)
+    x = q.expr(body.dato)
+    vals = sorted(r["v"] for r in conn.execute(
+        f"SELECT {x} AS v FROM empresa e " + " ".join(q.joins.values()) + f" WHERE e.id = ANY(%s) AND {x} IS NOT NULL",
+        (list(universo),)))
+    if not vals:
+        return {"cuartiles": [], "iguales": [], "min": None, "max": None, "n": 0}
+    n = max(2, min(body.n, 10))
+    cuant = sorted({vals[int(len(vals) * k / n)] for k in range(n)})
+    lo, hi = vals[0], vals[-1]
+    paso = (hi - lo) / n if hi > lo else 1
+    iguales = sorted({lo + paso * k for k in range(n)})
+    fmt = lambda v: format(v.normalize(), "f") if hasattr(v, "normalize") else str(v)  # noqa: E731
+    redondear = lambda v: v.to_integral_value() if all(x == x.to_integral_value() for x in vals[:200]) else v  # noqa: E731
+    return {"cuartiles": [fmt(redondear(v)) for v in cuant], "iguales": sorted({fmt(redondear(v)) for v in iguales}, key=float),
+            "min": fmt(lo), "max": fmt(hi), "n": len(vals)}
+
+
+# ── R2: templates de sorteo (jefe y administrador) ──
+
+class Template(BaseModel):
+    nombre: str | None = None
+    descripcion: str | None = None
+    criterios: dict | None = None
+    activo: bool | None = None
+
+
+@router.get("/muestra-templates")
+def listar_templates(activos: bool | None = None, conn=Depends(get_conn), u: Usuario = Depends(requiere("jefe"))):
+    return templates.listar(conn, activos)
+
+
+@router.post("/muestra-templates")
+def crear_template(body: Template, conn=Depends(get_conn), u: Usuario = Depends(requiere("jefe"))):
+    return templates.crear(conn, body.nombre, body.descripcion, body.criterios or {}, u.email)
+
+
+@router.get("/muestra-templates/{template_id}")
+def ver_template(template_id: int, conn=Depends(get_conn), u: Usuario = Depends(requiere("jefe"))):
+    return templates.obtener(conn, template_id)
+
+
+@router.put("/muestra-templates/{template_id}")
+def editar_template(template_id: int, body: Template, conn=Depends(get_conn), u: Usuario = Depends(requiere("jefe"))):
+    return templates.editar(conn, template_id, body.model_dump(exclude_unset=True), u.email)
+
+
+@router.post("/muestra-templates/{template_id}/duplicar")
+def duplicar_template(template_id: int, conn=Depends(get_conn), u: Usuario = Depends(requiere("jefe"))):
+    return templates.duplicar(conn, template_id, u.email)
+
+
+@router.delete("/muestra-templates/{template_id}")
+def borrar_template(template_id: int, conn=Depends(get_conn), u: Usuario = Depends(requiere("jefe"))):
+    return templates.borrar(conn, template_id, u.email)
+
+
+@router.post("/muestra-templates/{template_id}/aplicar")
+def aplicar_template(template_id: int, conn=Depends(get_conn), u: Usuario = Depends(requiere("jefe"))):
+    """Criterios revalidados con las reglas actuales, avisos de lo que se sacó y el marco por estrato."""
+    return templates.aplicar(conn, template_id)
+
+
+class DesdeMuestra(BaseModel):
+    nombre: str
+    descripcion: str | None = None
+
+
+@router.post("/muestras/{muestra_id}/template")
+def template_desde_muestra(muestra_id: int, body: DesdeMuestra, conn=Depends(get_conn),
+                           u: Usuario = Depends(requiere("jefe"))):
+    """«Guardar configuración como template» desde el detalle de una muestra ya creada."""
+    return templates.desde_muestra(conn, muestra_id, body.nombre, body.descripcion, u.email)
 
 
 @router.post("/muestras/marco")
@@ -150,8 +279,9 @@ def borrar_muestra(muestra_id: int, u: Usuario = Depends(requiere("admin"))):
 @router.get("/muestras/{muestra_id}/items")
 def items(muestra_id: int, estrato: str | None = None, rol: str | None = None, liberado: bool | None = None,
           parte_id: int | None = None, estado: str | None = None, q: str | None = None, pagina: int = 1,
-          por_pagina: int = muestras.POR_PAGINA, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
-    return muestras.items(conn, muestra_id, estrato, rol, liberado, parte_id, estado, q, pagina, por_pagina)
+          por_pagina: int = muestras.POR_PAGINA, sin_telefono: bool | None = None, conn=Depends(get_conn),
+          u: Usuario = Depends(usuario_actual)):
+    return muestras.items(conn, muestra_id, estrato, rol, liberado, parte_id, estado, q, pagina, por_pagina, sin_telefono)
 
 
 class Sorteo(BaseModel):

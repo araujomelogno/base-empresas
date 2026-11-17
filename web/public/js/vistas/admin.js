@@ -215,9 +215,7 @@ function formAtributo(a = {}) {
     <div class="field-hint">Pueden quedar vacías: se completan en la carga, con la traducción de valores.</div></div></div>
     <div class="form-group"><label>Sinónimos para el mapeo automático (separados por coma)</label><input type="text" id="at-sinonimos" value="${esc((a.sinonimos || []).join(', '))}" placeholder="p. ej. empleados, personal, cant. empleados" />
     <div class="field-hint">Opcional. Si una columna del archivo se llama así, la carga la reconoce sola. También se reconocen el nombre y la clave.</div></div>
-    ${(a.ambito || 'empresa') === 'contacto' ? '<input type="hidden" id="at-filtro" /><span id="at-estrato-g"><input type="hidden" id="at-estrato" /></span>' : `
-    <label class="check"><input type="checkbox" id="at-filtro" ${a.filtrable ? 'checked' : ''} /> Sirve como filtro del sorteo</label>
-    <label class="check" id="at-estrato-g"><input type="checkbox" id="at-estrato" ${a.estratificable ? 'checked' : ''} /> Sirve como estrato (solo listas)</label>`}
+    ${(a.ambito || 'empresa') === 'empresa' ? '<div class="field-hint">Todo atributo de empresa activo sirve como filtro y como estrato al crear una muestra.</div>' : ''}
     ${nuevo ? '' : `<label class="check"><input type="checkbox" id="at-activo" ${a.activo ? 'checked' : ''} /> Activo</label>`}`;
 }
 
@@ -226,7 +224,6 @@ function leerAtributo(b) {
     nombre: $('#at-nombre', b).value.trim(), tipo: $('#at-tipo', b).value, normalizar_texto: $('#at-norm', b).value,
     opciones: $('#at-opciones', b).value.split('\n').map(s => s.trim()).filter(Boolean),
     sinonimos: $('#at-sinonimos', b).value.split(',').map(s => s.trim()).filter(Boolean),
-    filtrable: $('#at-filtro', b).checked, estratificable: $('#at-estrato', b).checked,
     ...($('#at-activo', b) ? { activo: $('#at-activo', b).checked } : {}),
   };
 }
@@ -236,8 +233,6 @@ function activarFormAtributo() {
     const lista = $('#at-tipo').value === 'lista';
     $('#at-opciones-g').style.display = lista ? '' : 'none';
     $('#at-norm-g').style.display = $('#at-tipo').value === 'texto' ? '' : 'none';
-    $('#at-estrato-g').style.display = lista ? '' : 'none';
-    if (!lista) $('#at-estrato').checked = false;
   };
   $('#at-tipo').onchange = ver;
   ver();
@@ -250,14 +245,13 @@ export async function atributos(ctx, params) {
   const deContacto = ambito === 'contacto';
   main().innerHTML = pageHeader('Atributos', deContacto ? 'de contacto' : 'de empresa', deContacto
     ? 'Datos de las personas de contacto: decisor sí/no, antigüedad en el cargo… Se cargan desde la carga (bloque Contacto), el .sav o la ficha, y se pueden exportar. No se usan para filtrar ni estratificar el sorteo.'
-    : 'Datos que traen las bases y que no son campos del sistema: cantidad de empleados, exporta sí/no, cámara a la que pertenece… Un atributo nuevo se puede mapear en la próxima carga y usar para filtrar y estratificar.',
+    : 'Datos que traen las bases y que no son campos del sistema: cantidad de empleados, exporta sí/no, cámara a la que pertenece… Un atributo nuevo se puede mapear en la próxima carga y usar para filtrar y estratificar el sorteo, sin habilitarlo antes.',
     editable ? `<button class="btn btn-orange" id="at-nuevo">+ Nuevo atributo</button>` : '') +
     tabs('atributos', [['empresa', 'De empresa'], ['contacto', 'De contacto']], ambito) +
     card(deContacto ? 'Atributos de contacto' : 'Atributos de empresa', tabla([
       { t: 'Nombre', f: a => `<span class="td-strong">${esc(a.nombre)}</span><div class="small muted mono">${esc(a.clave)}</div>` },
       { t: 'Tipo', f: a => esc(TIPOS_ATRIBUTO[a.tipo]) + (a.opciones.length ? `<div class="small muted">${a.opciones.map(esc).join(' · ')}</div>` : '') },
       { t: 'Sinónimos', f: a => `<span class="small">${a.sinonimos.map(esc).join(', ') || '—'}</span>` },
-      ...(deContacto ? [] : [{ t: 'Filtro', f: a => a.filtrable ? est('ok', 'sí') : '—' }, { t: 'Estrato', f: a => a.estratificable ? est('ok', 'sí') : '—' }]),
       { t: deContacto ? 'Contactos con valor' : 'Empresas con valor', cls: 'num', f: a => num(a.n_valores) }, { t: 'Estado', f: a => a.activo ? est('activa', 'activo') : est('pendiente', 'inactivo') },
       { t: '', f: a => editable && a.fusionado_en ? `<span class="small muted">${esc(a.nota || 'fusionado')}</span>` : editable ? `<div class="td-actions"><button class="btn btn-outline btn-sm" data-at-editar="${a.id}">Editar</button>
         <button class="btn btn-outline btn-sm" data-at-fusionar="${a.id}">Fusionar con…</button>
