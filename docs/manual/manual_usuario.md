@@ -257,9 +257,10 @@ Cada **parte** es una encuesta de Alchemer con su survey ID, su link base y su r
 
 Desde el estudio, **Nueva muestra**:
 
-1. **Filtros:** tamaño, departamento, naturaleza jurídica y prefijos de CIIU. Sin filtros entra toda la base disponible.
-2. **Estratos:** elegí por qué estratificar (tamaño, departamento, naturaleza, CIIU a 1 o 2 dígitos) y tocá **Ver marco disponible**. El sistema muestra cuántas empresas cumplen los filtros, cuántas están disponibles y cuántas excluye cada regla.
-3. **Tamaño por estrato:** titulares y reemplazos de cada estrato (con "Aplicar a todos" para cargarlos de una vez). Opcionalmente, una semilla.
+0. **Partir de un template** (opcional): elegí uno y los pasos 1 a 3 se completan con sus valores. Todo se puede ajustar antes de sortear (ver «Templates de sorteo»).
+1. **Filtros:** «+ Agregar filtro» ofrece cualquier dato de la empresa (ver «Filtros y estratos»), los orígenes de los teléfonos, «Incluir la base provisoria» e «Incluir empresas sin teléfono discable». Sin filtros entra toda la base disponible.
+2. **Estratos:** «+ Agregar estrato» con cualquier dato, y **Ver marco disponible**. El sistema muestra cuántas empresas cumplen los filtros, cuántas están disponibles, cuántas excluye cada regla y cuántas hay en cada estrato.
+3. **Tamaño por estrato:** titulares y reemplazos de cada estrato (con "Aplicar a todos" para cargarlos de una vez). Opcionalmente, una semilla. **Guardar como template…** guarda los pasos 1 a 3 para la próxima vez.
 
 ![Armado de una muestra](img/16-nueva-muestra.png)
 
@@ -267,9 +268,44 @@ Al tocar **Crear y sortear** el sistema congela el marco (snapshot), aplica las 
 
 **Incluir la base provisoria.** Desmarcado por defecto: el marco es solo la base definitiva. Si lo marcás, las empresas sin RUT entran con su estrato y las mismas reglas de disponibilidad.
 
-**Filtros por atributo y por origen.** Los atributos marcados como filtro aparecen en el bloque Filtros (listas con botones, números y fechas con desde/hasta, textos con «contiene»), y los de lista marcados como estrato, en «Estratificar por». **Origen de los teléfonos** deja solo las empresas con al menos un teléfono discable de los orígenes elegidos; el cuadro de exclusiones dice cuántas dejó afuera.
+### Filtros y estratos
 
-![Filtros por atributo y por origen](img/38-muestra-filtros.png)
+Al crear una muestra (y en los templates) sirve **cualquier dato de la empresa**, sin que un administrador lo habilite antes: los campos fijos (razón social, nombre de fantasía, naturaleza jurídica, CIIU completo, a 2 y a 1 dígito, tamaño, departamento, localidad, dirección, web y estado) y **todos los atributos de empresa activos**. Los atributos de contacto no se usan. El selector los agrupa en «Campos de la empresa» y «Atributos», con un buscador.
+
+| Tipo de dato | Filtro | Estratos |
+| --- | --- | --- |
+| Lista (y naturaleza, tamaño, departamento, estado) | Una o varias opciones | Uno por opción |
+| Texto (y razón social, localidad, dirección, web, CIIU) | «Contiene…», «Es uno de…» (con los valores que existen y cuántas empresas tienen cada uno), «Tiene dato» o «No tiene dato» | Uno por valor, sin distinguir mayúsculas, tildes ni espacios. Con muchos valores, «Agrupar en Otros los de menos de N empresas» o «Los N más frecuentes y el resto en Otros» |
+| Número | Desde / hasta | **Tramos**: por ejemplo, 1, 5, 20, 100 da 1–4, 5–19, 20–99 y 100 o más. «Cuartiles» y «Tramos iguales» los sugieren a partir del marco |
+| Fecha | Desde / hasta | Por año, por semestre o por tramos |
+
+- Cada filtro tiene **«Incluir empresas sin dato»**. Los filtros se combinan con «y».
+- Las empresas sin dato van al estrato «(sin dato)». Se pueden combinar varios datos (tamaño × departamento × tramo de empleados); si hay demasiados estratos o un texto con muchos valores, la vista previa avisa.
+- El estrato de cada empresa se calcula al sortear y queda congelado: cambiar después un dato de una empresa sorteada no altera «Verificar reproducibilidad».
+
+**Origen de los teléfonos** deja solo las empresas con al menos un teléfono discable de los orígenes elegidos; el cuadro de exclusiones dice cuántas dejó afuera.
+
+![Filtros y estratos: (1) agregar un filtro con cualquier dato, (2) origen de los teléfonos, (3) incluir empresas sin teléfono, (4) tramos de un número, (5) ver el marco](img/54-asistente-filtros.png)
+
+### Empresas sin teléfono
+
+**Incluir empresas sin teléfono discable** (paso 1) viene desmarcado: como siempre, las empresas sin un número que se pueda llamar no entran. Marcado, entran **solo en esa muestra** (para estudios donde el teléfono se consigue después); las demás reglas se aplican igual. Si la regla está apagada en la Configuración general, la opción aparece marcada y deshabilitada.
+
+- La vista previa y el resultado del sorteo dicen cuántas empresas sin teléfono entraron, por estrato.
+- Con un filtro por origen, una empresa sin teléfonos no tiene ningún número de ese origen: no entra.
+- En la muestra, **Empresas de la muestra → Sin teléfono** las lista, para completarlas desde la ficha. En cuanto tienen un número, la próxima exportación lo incluye.
+- El CSV «Una fila por empresa» las trae con las columnas de teléfono vacías; «Una fila por número» no (no tienen números).
+
+### Templates de sorteo
+
+Un **template** guarda los pasos 1 a 3 de una muestra (filtros, estratos con sus tramos y agrupamientos, y tamaños por estrato) para reusarlos en la próxima ola o en otro estudio. No guarda la semilla, el estudio, el nombre ni las opciones de exportación. Los usan el jefe de proyecto y el administrador.
+
+- **Crear:** en el paso 3, **Guardar como template…** (si partiste de uno, también **Actualizar template X**), o desde el detalle de una muestra ya creada, **Guardar configuración como template**.
+- **Usar:** en «Nueva muestra», **Partir de un template**. Si el template usa algo que ya no existe (un atributo desactivado, un origen borrado), se avisa («se quitó el filtro por X: el atributo ya no está activo») y se sigue. En el paso 3, un estrato del template que hoy no tiene empresas aparece marcado, y los estratos nuevos del marco aparecen con tamaño 0 y la marca «nuevo».
+- **Administrar:** menú **Templates de sorteo**: resumen de filtros y estratos, tamaño, cuántas veces se usó y la última muestra; **Editar** (los pasos 1 a 3, sin sortear), **Duplicar**, **Desactivar** y **Borrar** (solo si nunca se usó).
+- **Las muestras guardan su propia copia:** editar un template después no cambia las muestras que ya lo usaron ni su reproducibilidad.
+
+![Templates de sorteo](img/53-templates.png)
 
 > **Muestras auditables.** Con la misma semilla, el mismo snapshot y la misma configuración, el sorteo da exactamente la misma lista en el mismo orden. El botón **Verificar reproducibilidad** lo comprueba en cualquier momento.
 
@@ -313,7 +349,9 @@ En la muestra, en **Exportar a uContact**, elegí la parte y tocá **Descargar C
 - El link de Alchemer ya trae `EC_ID_ITEM`, `EC_RUT` y `EC_TEL_USADO`.
 - La columna de contacto sugerido solo se completa si tu usuario tiene permiso para exportar contactos personales. Toda exportación queda auditada, con las columnas incluidas.
 - **Qué incluir** (plegado): los **atributos de empresa** (uno por uno, «todos» y «ninguno»), los **números** (todos los discables o solo los verificados) y, si tu usuario tiene el permiso, los **contactos** (nombre, cargo, área, email, teléfonos y atributos de contacto). Por defecto, todo. La elección queda guardada en la muestra. Van al final del archivo: `EC_ID_EMPRESA` (el RUT o el código provisorio), `atr_<clave>` y `contacto_1_*`, `contacto_2_*`… (hasta 3 por empresa; se configura).
-- **Formato:** **uContact** (un renglón por teléfono, como siempre) o **Planilla de la muestra** (un renglón por empresa, con los teléfonos en `tel_1`, `tel_2`… y sus orígenes).
+- **Formato:** **Una fila por empresa** (la opción por defecto: cada empresa una vez, con sus números en `tel_1`, `tel_2`… y sus orígenes; las sin teléfono salen con esas columnas vacías) o **Una fila por número** (una fila por cada número discable: una empresa con 3 números sale 3 veces). La ayuda debajo del botón cambia según la opción, y el archivo se llama `…_por_empresa.csv` o `…_por_numero.csv`.
+
+![Formato del CSV](img/55-formatos-csv.png)
 
 ![Qué incluir al exportar](img/51-que-incluir.png)
 - **Orígenes a exportar:** todos (por defecto) o solo los elegidos; un teléfono con varios orígenes pasa si alguno está elegido. **Orden de los teléfonos:** por prioridad de origen y, dentro de cada origen, primero los verificados (por defecto). Las dos opciones quedan guardadas en la muestra y el resumen dice cuántos ítems quedan sin teléfono exportable por el filtro de origen.
@@ -464,7 +502,7 @@ Estos datos se guardan con **Guardar nueva versión**, como el resto de la confi
 
 ### Atributos de empresa y de contacto
 
-En **Administración → Atributos** hay dos pestañas: **De empresa** (cantidad de empleados, exporta, cámara…) y **De contacto** (decisor sí/no, antigüedad en el cargo…). **Solo el nombre y el tipo** (texto, número, fecha o lista) son obligatorios; la **clave se genera sola** a partir del nombre (`cantidad_de_empleados`; si ya existe, `_2`) y no cambia aunque después cambies el nombre. Una lista puede quedar sin opciones: se completan en la carga. Opcionales: sinónimos para el mapeo automático, si sirve como filtro y como estrato (solo listas de empresa) y, para los de texto, normalizar a mayúscula inicial o MAYÚSCULAS. Si al crear uno el nombre se parece a otro que ya existe, el sistema avisa y ofrece usar el existente.
+En **Administración → Atributos** hay dos pestañas: **De empresa** (cantidad de empleados, exporta, cámara…) y **De contacto** (decisor sí/no, antigüedad en el cargo…). **Solo el nombre y el tipo** (texto, número, fecha o lista) son obligatorios; la **clave se genera sola** a partir del nombre (`cantidad_de_empleados`; si ya existe, `_2`) y no cambia aunque después cambies el nombre. Una lista puede quedar sin opciones: se completan en la carga. Opcionales: sinónimos para el mapeo automático y, para los de texto, normalizar a mayúscula inicial o MAYÚSCULAS. Todo atributo de empresa activo sirve como filtro y como estrato del sorteo, sin marcar nada. Si al crear uno el nombre se parece a otro que ya existe, el sistema avisa y ofrece usar el existente.
 
 **Fusionar con…** junta un atributo duplicado dentro de otro del mismo ámbito y tipo compatible: sus valores pasan al que queda (se recalcula el vigente), su nombre y sus sinónimos pasan a los sinónimos, las opciones se unifican y el duplicado queda inactivo con la nota «fusionado en …». No se puede si se usa como filtro o estrato de una muestra activa. Desactivar un atributo lo saca del mapeo y de los filtros pero conserva sus valores; solo se borra uno sin valores y que no se use en una muestra activa. Los campos del sistema (RUT, razón social, naturaleza, CIIU, tamaño…) no se pueden borrar ni renombrar.
 
