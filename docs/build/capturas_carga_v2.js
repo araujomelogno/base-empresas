@@ -41,9 +41,7 @@ async function foto(p, selector, nombre) {
   const tarjeta = (sel) => `.card:has(${sel})`;
 
   // Guía 15: catálogos
-  await p.goto(`${BASE}/#/atributos`); await w();
-  await marcar(p, [['#at-nuevo', 1, -30, -6], ['[data-at-editar]', 2, -30, -6]]);
-  await p.screenshot({ path: `${OUT}/33-atributos.png`, clip: { x: 240, y: 0, width: 1120, height: 760 } });
+  // 33-atributos lo genera capturas_templates.js (sin las columnas «filtro» y «estrato»)
   await p.goto(`${BASE}/#/origenes`); await w();
   await marcar(p, [['#or-nuevo', 1, -30, -6], ['[data-or-subir]', 2, -30, -6]]);
   await p.screenshot({ path: `${OUT}/34-origenes.png`, clip: { x: 240, y: 0, width: 1120, height: 900 } });
@@ -68,14 +66,7 @@ async function foto(p, selector, nombre) {
     ['#c-confirmar', 4, 0, -30], ['#c-descartar', 5, 0, -30]]);
   await p.screenshot({ path: `${OUT}/37-carga-preview.png`, clip: { x: 240, y: 0, width: 1120, height: 1000 } });
 
-  // Guía 7: filtros de la muestra
-  await p.goto(`${BASE}/#/estudios/1/nueva-muestra`); await w(1200);
-  await p.fill('#ma-empleados-desde', '30');
-  await p.click('[data-chips="origenes"] .chip >> text=Estudio anterior');
-  await p.click('[data-chips="por"] .chip >> text=Exporta'); await p.click('#m-marco'); await w(1200);
-  await p.locator('#ma-empleados-desde').scrollIntoViewIfNeeded();
-  await marcar(p, [['#ma-empleados-desde', 1, -32, 8], ['[data-chips="origenes"]', 2, -32, 0], ['[data-chips="por"]', 3, -32, 0]]);
-  await foto(p, '.grid-2', '38-muestra-filtros');
+  // Guía 7: los filtros de la muestra (antes 38-muestra-filtros) los captura capturas_templates.js (54-asistente-filtros)
 
   // Guía 10: exportación por origen
   await p.goto(`${BASE}/#/muestras/1`); await w(1500);

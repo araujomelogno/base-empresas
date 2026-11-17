@@ -59,12 +59,7 @@ const W = 1280, H = 820;
 
   await ir('estudios'); await foto('14-estudios');
   await ir('estudios/1'); await foto('15-estudio');
-  await ir('estudios/1/nueva-muestra');
-  await p.click('[data-chips="por"] .chip[data-v="tamano"]');
-  await p.click('#m-marco');
-  await espera(1500);
-  await p.fill('#m-n-todos', '10'); await p.fill('#m-r-todos', '4'); await p.click('#m-aplicar');
-  await foto('16-nueva-muestra', { alto: 1500 });
+  // 16-nueva-muestra la genera capturas_templates.js (asistente de sorteo con templates)
   await ir('muestras/1', 1800); await foto('17-muestra', { alto: 1350 });
   await p.click('[data-liberar]');
   await espera(500);

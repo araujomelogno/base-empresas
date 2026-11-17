@@ -7,6 +7,7 @@ import * as base from './vistas/base.js';
 import * as cargas from './vistas/cargas.js';
 import * as estudios from './vistas/estudios.js';
 import * as provisorias from './vistas/provisorias.js';
+import * as sorteo from './vistas/sorteo.js';
 import * as campo from './vistas/campo.js';
 import * as admin from './vistas/admin.js';
 
@@ -19,7 +20,7 @@ const MENU = [
   ['General', [['inicio', '🏠', 'Inicio'], ['empresas', '🏢', 'Empresas']]],
   ['Base de datos', [['cargas', '📥', 'Cargas', ['steward']], ['intermediarios', '☎️', 'Intermediarios', ['steward']],
     ['revision', '🔀', 'Revisión de fusiones', ['steward']], ['provisorias', '🗂️', 'Base provisoria', ['steward']]]],
-  ['Estudios', [['estudios', '📋', 'Estudios y muestras', ['jefe', 'coordinador']]]],
+  ['Estudios', [['estudios', '📋', 'Estudios y muestras', ['jefe', 'coordinador']], ['templates', '🧩', 'Templates de sorteo', ['jefe']]]],
   ['Campo', [['sav', '📊', 'Ingesta .sav', ['coordinador']], ['conciliacion', '🧩', 'Conciliación', ['coordinador']],
     ['actividad', '📈', 'Actividad', ['coordinador', 'jefe']]]],
   ['Administración', [['config', '⚙️', 'Configuración', ['admin']], ['atributos', '🏷️', 'Atributos', ['admin', 'steward']],
@@ -33,7 +34,7 @@ const RUTAS = [
   [/^cargas$/, cargas.lista], [/^cargas\/nueva$/, cargas.nueva], [/^cargas\/(\d+)$/, cargas.detalle],
   [/^intermediarios$/, cargas.intermediarios], [/^revision$/, cargas.revision],
   [/^estudios$/, estudios.lista], [/^estudios\/(\d+)$/, estudios.detalle], [/^estudios\/(\d+)\/nueva-muestra$/, estudios.nuevaMuestra],
-  [/^muestras$/, estudios.muestras], [/^muestras\/(\d+)$/, estudios.muestra],
+  [/^templates$/, sorteo.lista], [/^templates\/(\d+)$/, sorteo.editar], [/^muestras$/, estudios.muestras], [/^muestras\/(\d+)$/, estudios.muestra],
   [/^sav$/, campo.sav], [/^sav\/(\d+)$/, campo.savDetalle], [/^conciliacion$/, campo.conciliacion], [/^actividad$/, campo.actividad], [/^actividad\/empresas$/, campo.empresasLlamadas],
   [/^config$/, admin.config], [/^atributos$/, admin.atributos], [/^origenes$/, admin.origenes], [/^naturalezas$/, admin.naturalezas], [/^no-llamar$/, admin.noLlamar],
   [/^usuarios$/, admin.usuarios], [/^auditoria$/, admin.auditoria],

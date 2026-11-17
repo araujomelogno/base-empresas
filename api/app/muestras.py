@@ -12,10 +12,9 @@ from collections import Counter, defaultdict
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
-from . import auditoria, catalogos, config
+from . import auditoria, catalogos, config, criterios as crit
 
-FILTROS = ("ciiu", "tamano", "departamento", "naturaleza")
-ESTRATIFICADORES = ("tamano", "departamento", "naturaleza", "ciiu2", "ciiu1")
+# Filtros y estratos: ver criterios.py (R4: todo dato de la empresa sirve)
 SIN_DATO = "(sin dato)"
 ESTADOS_PARTE = ("pendiente", "en_curso", "completa", "rechazo", "no_contactable", "fuera_de_marco")
 
@@ -132,86 +131,35 @@ def sortear_snapshot(marco: list[tuple[int, str]], semilla: int, definicion: dic
     return salida
 
 
-def _filtro_atributo(a: dict, spec) -> dict | None:
-    """Normaliza el filtro de un atributo según su tipo. None: no filtra."""
-    spec = spec or {}
-    if a["tipo"] == "lista":
-        valores = [v for v in (spec.get("valores") or []) if v]
-        fuera = set(valores) - set(a["opciones"] or [])
-        if fuera:
-            raise HTTPException(422, f"{a['nombre']}: valores que no son opciones del atributo: {', '.join(sorted(fuera))}")
-        return {"valores": valores} if valores else None
-    if a["tipo"] == "texto":
-        t = str(spec.get("contiene") or "").strip()
-        return {"contiene": t} if t else None
-    rango = {}
-    for k in ("desde", "hasta"):
-        v = spec.get(k)
-        if v in (None, ""):
-            continue
-        r = catalogos.interpretar(a, v)
-        if not r["valido"]:
-            raise HTTPException(422, f"{a['nombre']}: «{v}» no es un{'a fecha' if a['tipo'] == 'fecha' else ' número'} válid{'a' if a['tipo'] == 'fecha' else 'o'}")
-        rango[k] = r["texto"]
-    return rango or None
+def _validar_criterios(conn, c: dict, avisos: list | None = None, tamanos: bool = True) -> dict:
+    """R4: todo dato de la empresa sirve como filtro y estrato (criterios.validar)."""
+    return crit.validar(conn, c, avisos, tamanos)
 
 
-def _validar_criterios(conn, c: dict) -> dict:
-    c = dict(c or {})
-    filtros = {k: v for k, v in (c.get("filtros") or {}).items() if v}
-    for k in filtros:
-        if k not in FILTROS:
-            raise HTTPException(422, f"Filtro desconocido: {k}")
-    defs = {a["clave"]: a for a in catalogos.atributos(conn, ambito="empresa")}
-    atributos = {}
-    for clave, spec in (c.get("atributos") or {}).items():
-        a = defs.get(clave)
-        if a is None or not a["activo"] or not a["filtrable"]:
-            raise HTTPException(422, f"El atributo {clave} no existe o no se puede usar como filtro")
-        f = _filtro_atributo(a, spec)
-        if f:
-            atributos[clave] = f
-    origenes = sorted({o for o in (c.get("origenes") or []) if o})
-    if origenes:
-        conocidos = {o["codigo"] for o in catalogos.origenes(conn)}
-        if set(origenes) - conocidos:
-            raise HTTPException(422, f"Orígenes de teléfono desconocidos: {', '.join(sorted(set(origenes) - conocidos))}")
-    por = c.get("estratificar_por") or []
-    for k in por:
-        if k.startswith(catalogos.PREFIJO):
-            a = defs.get(k[len(catalogos.PREFIJO):])
-            if a is None or not a["activo"] or not a["estratificable"]:
-                raise HTTPException(422, f"No se puede estratificar por {k}")
-        elif k not in ESTRATIFICADORES:
-            raise HTTPException(422, f"No se puede estratificar por {k}")
-    estratos = c.get("estratos") or []
-    for e in estratos:
-        if int(e.get("n", 0)) < 0 or int(e.get("reemplazos", 0)) < 0:
-            raise HTTPException(422, "Tamaños y reemplazos no pueden ser negativos")
-    if not estratos and c.get("n_por_estrato") is None:
-        raise HTTPException(422, "Indicá el tamaño por estrato (lista de estratos o n_por_estrato)")
-    salida = {"filtros": filtros, "atributos": atributos, "origenes": origenes, "estratificar_por": por, "estratos": estratos,
-              "n_por_estrato": c.get("n_por_estrato"), "reemplazos_por_estrato": c.get("reemplazos_por_estrato", 0)}
-    if c.get("incluir_provisoria"):  # F6.1 (Q2): desmarcado por defecto; solo se guarda si se marca (reproducibilidad)
-        salida["incluir_provisoria"] = True
-    return salida
-
-
-def crear_muestra(conn, estudio_id: int, nombre: str, criterios: dict, actor: str) -> dict:
+def crear_muestra(conn, estudio_id: int, nombre: str, criterios: dict, actor: str,
+                  template_id: int | None = None) -> dict:
     if conn.execute("SELECT 1 FROM estudio WHERE id = %s", (estudio_id,)).fetchone() is None:
         raise HTTPException(404, "Estudio inexistente")
     criterios = _validar_criterios(conn, criterios)
-    m = conn.execute("INSERT INTO muestra (estudio_id, nombre, criterios, creado_por) VALUES (%s,%s,%s,%s) RETURNING *",
-                     (estudio_id, nombre, Jsonb(criterios), actor)).fetchone()
-    auditoria.registrar(conn, actor, "muestra.crear", "muestra", m["id"], {"criterios": criterios})
+    if template_id is not None:  # R2: la muestra guarda su propia copia de los criterios y de dónde salió
+        if conn.execute("UPDATE muestra_template SET veces_usado = veces_usado + 1 WHERE id = %s RETURNING id",
+                        (template_id,)).fetchone() is None:
+            raise HTTPException(404, "Template inexistente")
+    m = conn.execute("INSERT INTO muestra (estudio_id, nombre, criterios, creado_por, template_id) VALUES (%s,%s,%s,%s,%s)"
+                     " RETURNING *", (estudio_id, nombre, Jsonb(criterios), actor, template_id)).fetchone()
+    auditoria.registrar(conn, actor, "muestra.crear", "muestra", m["id"], {"criterios": criterios, "template_id": template_id})
     return m
 
 
-def _universo(conn, criterios: dict) -> list[dict]:
+def _universo(conn, criterios: dict, defs: dict | None = None) -> list[dict]:
+    """Empresas que cumplen los filtros, con una columna "e:<dato>" por cada dato de estratificación."""
+    defs = defs or crit.definiciones(conn)
+    q = crit.Consulta(defs)
     filtros = criterios.get("filtros") or {}
     where, args = ["TRUE"], []
     if not criterios.get("incluir_provisoria"):
         where.append("e.base = 'definitiva'")
+    # Formato anterior de filtros (listas y prefijos de CIIU)
     if filtros.get("ciiu"):
         where.append("(" + " OR ".join(["e.ciiu LIKE %s"] * len(filtros["ciiu"])) + ")")
         args += [f"{x}%" for x in filtros["ciiu"]]
@@ -224,38 +172,29 @@ def _universo(conn, criterios: dict) -> list[dict]:
     if filtros.get("naturaleza"):
         where.append("n.codigo = ANY(%s)")
         args.append(filtros["naturaleza"])
-    defs = {a["clave"]: a for a in catalogos.atributos(conn, ambito="empresa")}
-    for clave, f in (criterios.get("atributos") or {}).items():
-        a = defs[clave]
-        cond, cargs = [], [a["id"]]
-        if "valores" in f:
-            cond.append("ea.valor_texto = ANY(%s)")
-            cargs.append(f["valores"])
-        if "contiene" in f:
-            cond.append("ea.valor_texto ILIKE %s")
-            cargs.append(f"%{f['contiene']}%")
-        col = "ea.valor_numero" if a["tipo"] == "numero" else "ea.valor_fecha"
-        cast = "numeric" if a["tipo"] == "numero" else "date"
-        if "desde" in f:
-            cond.append(f"{col} >= %s::{cast}")
-            cargs.append(f["desde"])
-        if "hasta" in f:
-            cond.append(f"{col} <= %s::{cast}")
-            cargs.append(f["hasta"])
-        where.append("EXISTS (SELECT 1 FROM empresa_atributo ea WHERE ea.empresa_id = e.id AND ea.atributo_id = %s AND "
-                     + " AND ".join(cond) + ")")
-        args += cargs
-    cols, cargs = [], []
-    for k in criterios.get("estratificar_por") or []:
-        if k.startswith(catalogos.PREFIJO):
-            cols.append(f"(SELECT ea.valor_texto FROM empresa_atributo ea WHERE ea.empresa_id = e.id AND ea.atributo_id = %s)"
-                        f' AS "{k}"')
-            cargs.append(defs[k[len(catalogos.PREFIJO):]]["id"])
-    extra = "".join(", " + c for c in cols)
+    for campo, spec in (criterios.get("campos") or {}).items():
+        where.append(q.condicion(campo, spec, args))
+    for clave, spec in (criterios.get("atributos") or {}).items():
+        where.append(q.condicion(crit.PREFIJO + clave, spec, args))
+    cols = "".join(f', {q.expr(k)} AS "e:{k}"' for k in criterios.get("estratificar_por") or [])
     return conn.execute(
-        f"SELECT e.id, e.rut, e.ciiu, e.tamano, e.departamento, n.codigo AS naturaleza{extra} FROM empresa e"
-        " LEFT JOIN naturaleza_juridica n ON n.id = e.naturaleza_id WHERE " + " AND ".join(where),
-        cargs + args).fetchall()
+        f"SELECT e.id, e.rut, e.ciiu, e.tamano, e.departamento, n.codigo AS naturaleza{cols} FROM empresa e"
+        " LEFT JOIN naturaleza_juridica n ON n.id = e.naturaleza_id " + " ".join(q.joins.values())
+        + " WHERE " + " AND ".join(where), args).fetchall()
+
+
+def _con_telefono(conn) -> set[int]:
+    return {r["empresa_id"] for r in conn.execute("SELECT DISTINCT empresa_id FROM v_vinculo_discable")}
+
+
+def _sin_telefono_permitido(criterios: dict, bloqueos: dict) -> None:
+    """R3: con «Incluir empresas sin teléfono discable» esa regla no se aplica a esta muestra (las demás sí)."""
+    if not criterios.get("incluir_sin_telefono"):
+        return
+    for eid in list(bloqueos):
+        bloqueos[eid].discard("sin_telefono_discable")
+        if not bloqueos[eid]:
+            del bloqueos[eid]
 
 
 def _filtro_origen(conn, universo: list[dict], origenes: list[str], bloqueos: dict) -> None:
@@ -270,17 +209,26 @@ def _filtro_origen(conn, universo: list[dict], origenes: list[str], bloqueos: di
             bloqueos[f["id"]].add("filtro_origen")
 
 
-def previsualizar_marco(conn, criterios: dict) -> dict:
-    """Cuántas empresas quedan en cada estrato y cuántas excluye cada regla, sin sortear."""
-    criterios = _validar_criterios(conn, {**criterios, "n_por_estrato": criterios.get("n_por_estrato", 0)})
+def previsualizar_marco(conn, criterios: dict, avisos: list | None = None) -> dict:
+    """Cuántas empresas quedan en cada estrato y cuántas excluye cada regla, sin sortear.
+    avisos (aplicar un template): lo que ya no existe se saca con aviso en lugar de rechazar."""
+    criterios = _validar_criterios(conn, criterios, avisos, tamanos=False)
     _, cfg = config.vigente(conn)
-    universo = _universo(conn, criterios)
+    defs = crit.definiciones(conn)
+    universo = _universo(conn, criterios, defs)
     bloqueos = _bloqueos(conn, cfg, None)
+    _sin_telefono_permitido(criterios, bloqueos)
     _filtro_origen(conn, universo, criterios["origenes"], bloqueos)
     excl, marco = _aplicar_bloqueos(universo, bloqueos)
-    por_estrato = Counter(estrato_de(f, criterios["estratificar_por"]) for f in marco)
+    etiq = crit.etiquetas(marco, criterios, defs)
+    con_tel = _con_telefono(conn)
+    por_estrato, sin_tel = Counter(etiq), Counter(e for f, e in zip(marco, etiq) if f["id"] not in con_tel)
     return {"universo": len(universo), "marco": len(marco), "exclusiones": excl,
-            "estratos": [{"estrato": k, "disponibles": v} for k, v in sorted(por_estrato.items())]}
+            "estratos": [{"estrato": k, "disponibles": por_estrato[k], "sin_telefono": sin_tel.get(k, 0)}
+                         for k in sorted(por_estrato, key=crit.orden_natural)],
+            "sin_telefono": sum(sin_tel.values()), "avisos": crit.avisos_estratos(marco, criterios, defs, len(por_estrato)),
+            "regla_sin_telefono": bool((cfg.get("reglas_disponibilidad") or {}).get("sin_telefono_discable", True)),
+            "criterios": criterios}
 
 
 def _bloqueos(conn, cfg, muestra_id):
@@ -313,11 +261,14 @@ def sortear(conn, muestra_id: int, actor: str, semilla: int | None = None) -> di
         raise HTTPException(409, "La muestra ya fue sorteada")
     criterios = m["criterios"]
     version, cfg = config.vigente(conn)
-    universo = _universo(conn, criterios)
+    defs = crit.definiciones(conn)
+    universo = _universo(conn, criterios, defs)
     bloqueos = _bloqueos(conn, cfg, muestra_id)
+    _sin_telefono_permitido(criterios, bloqueos)
     _filtro_origen(conn, universo, criterios.get("origenes") or [], bloqueos)
     excl, marco_filas = _aplicar_bloqueos(universo, bloqueos)
-    marco = [(f["id"], estrato_de(f, criterios["estratificar_por"])) for f in marco_filas]
+    # El estrato de cada empresa se calcula ahora y se congela en el snapshot (R4: tramos, «Otros», textos)
+    marco = list(zip([f["id"] for f in marco_filas], crit.etiquetas(marco_filas, criterios, defs)))
 
     snapshot_id = conn.execute(
         "INSERT INTO marco_snapshot (config_version, criterios, n) VALUES (%s,%s,%s) RETURNING id",
@@ -338,19 +289,23 @@ def sortear(conn, muestra_id: int, actor: str, semilla: int | None = None) -> di
     _pendientes_partes(conn, muestra_id)
 
     disponibles = Counter(e for _, e in marco)
+    con_tel = _con_telefono(conn)
+    sin_tel = Counter(est for eid, est, _, _ in sorteados if eid not in con_tel)
     avisos, por_estrato = [], []
-    for est in sorted(definicion):
+    for est in sorted(definicion, key=crit.orden_natural):
         n, r = definicion[est]
         d = disponibles.get(est, 0)
         por_estrato.append({"estrato": est, "pedido": n, "reemplazos": r, "disponibles": d,
-                            "titulares": min(n, d), "reemplazos_sorteados": max(0, min(r, d - n))})
+                            "titulares": min(n, d), "reemplazos_sorteados": max(0, min(r, d - n)),
+                            "sin_telefono": sin_tel.get(est, 0)})
         if d < n:
             avisos.append(f"El estrato {est} no alcanza: pidió {n} y hay {d} disponibles")
         elif d < n + r:
             avisos.append(f"El estrato {est} tiene solo {d - n} reemplazos de {r} pedidos")
     sin_pedir = sorted(set(disponibles) - set(definicion))
     resultado = {"universo": len(universo), "marco": len(marco), "exclusiones": excl, "estratos": por_estrato,
-                 "avisos": avisos, "estratos_no_pedidos": sin_pedir}
+                 "avisos": avisos, "estratos_no_pedidos": sin_pedir, "sin_telefono": sum(sin_tel.values()),
+                 "incluir_sin_telefono": bool(criterios.get("incluir_sin_telefono"))}
     conn.execute(
         "UPDATE muestra SET estado = 'activa', semilla = %s, config_version = %s, snapshot_id = %s, resultado = %s,"
         " sorteada_por = %s, sorteada = now() WHERE id = %s",
@@ -544,14 +499,14 @@ POR_PAGINA = 50
 
 def items(conn, muestra_id: int, estrato: str | None = None, rol: str | None = None, liberado: bool | None = None,
           parte_id: int | None = None, estado: str | None = None, q: str | None = None,
-          pagina: int = 1, por_pagina: int = POR_PAGINA) -> dict:
+          pagina: int = 1, por_pagina: int = POR_PAGINA, sin_telefono: bool | None = None) -> dict:
     """«Empresas de la muestra», paginada del lado del servidor (F1.3).
     estado se mira en la parte elegida (o en cualquiera); «pendiente» incluye a los ítems sin estado en esa parte.
     q busca por RUT, razón social o EC_ID_ITEM (el id del ítem, con o sin «#»)."""
     pagina, por_pagina = max(1, pagina), min(max(1, por_pagina), 500)
     q = (q or "").strip() or None
     digitos = q.lstrip("#").strip() if q else None
-    p = {"m": muestra_id, "estrato": estrato or None, "rol": rol or None, "liberado": liberado, "parte": parte_id,
+    p = {"sin_tel": sin_telefono, "m": muestra_id, "estrato": estrato or None, "rol": rol or None, "liberado": liberado, "parte": parte_id,
          "estado": estado or None, "q": q, "q_like": f"%{q}%" if q else None,
          "rut": "".join(ch for ch in q if ch.isdigit()) if q else None,
          "item": int(digitos) if digitos and digitos.isdigit() and len(digitos) <= 9 else None}
@@ -560,6 +515,8 @@ def items(conn, muestra_id: int, estrato: str | None = None, rol: str | None = N
           AND (%(estrato)s::text IS NULL OR i.estrato = %(estrato)s)
           AND (%(rol)s::text IS NULL OR i.rol = %(rol)s)
           AND (%(liberado)s::bool IS NULL OR i.liberado = %(liberado)s)
+          AND (%(sin_tel)s::bool IS NULL OR %(sin_tel)s = NOT EXISTS (
+                 SELECT 1 FROM v_vinculo_discable d WHERE d.empresa_id = i.empresa_id))
           AND (%(estado)s::text IS NULL
                OR EXISTS (SELECT 1 FROM item_parte_estado ps WHERE ps.item_id = i.id AND ps.estado = %(estado)s
                           AND (%(parte)s::int IS NULL OR ps.parte_id = %(parte)s))
@@ -574,6 +531,7 @@ def items(conn, muestra_id: int, estrato: str | None = None, rol: str | None = N
         f"""
         SELECT i.id, i.estrato, i.rol, i.orden, i.liberado, i.liberado_por, i.liberado_motivo, i.liberado_fecha,
                e.codigo AS rut, e.base, e.razon_social, e.departamento, e.tamano,
+               NOT EXISTS (SELECT 1 FROM v_vinculo_discable d WHERE d.empresa_id = i.empresa_id) AS sin_telefono,
                (SELECT count(*) FROM intento t WHERE t.item_id = i.id) AS intentos,
                (SELECT json_object_agg(p.nombre, ps.estado) FROM item_parte_estado ps JOIN parte p ON p.id = ps.parte_id
                  WHERE ps.item_id = i.id) AS estados

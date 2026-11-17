@@ -85,7 +85,7 @@ def test_solo_verificados_y_cantidad_de_contactos(api, sql):
 def test_planilla_de_la_muestra(api, sql):
     e, mid, parte = preparar(api, sql)
     r = api.get(f"/muestras/{mid}/csv?parte_id={parte}&formato=planilla", rol="coordinador")
-    assert r.status_code == 200 and "planilla_muestra" in r.headers["content-disposition"]
+    assert r.status_code == 200 and "_por_empresa.csv" in r.headers["content-disposition"]
     filas = leer_csv(r)
     n_items = sql.execute("SELECT count(*) AS n FROM muestra_item WHERE muestra_id = %s AND liberado", (mid,)).fetchone()["n"]
     assert len(filas) == n_items                                   # un renglón por empresa

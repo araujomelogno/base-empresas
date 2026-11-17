@@ -44,8 +44,9 @@ def test_catalogo_de_atributos(api):
     # F1.5: una lista puede crearse sin opciones (se completan en la carga)
     sin_op = api.post("/atributos", json={"clave": "exporta", "nombre": "Exporta", "tipo": "lista"})
     assert sin_op.status_code == 200 and sin_op.json()["opciones"] == []
+    # D44: «estrato» ya no restringe (todo atributo activo de empresa sirve como estrato)
     assert api.post("/atributos", json={"clave": "zona", "nombre": "Zona", "tipo": "texto",
-                                        "estratificable": True}).status_code == 422
+                                        "estratificable": True}).status_code == 200
     # la clave es inmutable
     assert api.put(f"/atributos/{a['id']}", json={"clave": "otra"}).status_code == 422
     r = api.put(f"/atributos/{a['id']}", json={"nombre": "Empleados", "sinonimos": ["Cant. empleados", "personal"]})

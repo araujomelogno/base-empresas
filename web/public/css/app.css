@@ -389,3 +389,9 @@ details.tl-grupo > summary { cursor: pointer; list-style: revert; }
 .map-fila.regla { grid-template-columns: 22px minmax(150px, 1fr) 110px 76px auto; align-items: center; }
 .map-fila.regla input[type=number] { padding: .45rem .5rem; }
 td a.mono, td .mono { white-space: nowrap; }
+/* Asistente de sorteo: filtros y estratos con cualquier dato (SPEC_templates_sorteo, R4) */
+.filtro-dato { border: 1px solid var(--border); border-radius: 4px; padding: .6rem .75rem; margin-bottom: .55rem; background: var(--white); }
+.filtro-dato .filtro-cab { display: flex; align-items: center; gap: .4rem; margin-bottom: .45rem; }
+.filtro-dato .filtro-cab .btn-del { margin-left: auto; }
+.filtro-dato input[type=text], .filtro-dato input[type=number], .filtro-dato input[type=date] { max-width: 260px; }
+.filtro-dato .chips { margin-bottom: .3rem; }

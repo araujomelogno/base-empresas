@@ -1,5 +1,6 @@
 // Estudios, partes, muestras, reemplazos y CSV para uContact (R1.5, R1.6, R1.7)
 import * as api from '../api.js';
+import { asistente, criteriosTexto } from './sorteo.js';
 import { $, $$, esc, main, toast, num, pct, fecha, fechaHora, rutFmt, est, estDe, etiqueta, pageHeader, stats, tabla, card, modal,
   confirmar, confirmarEscrito, seguirTarea, chips, activarChips, chipsSel } from '../ui.js';
 
@@ -12,7 +13,6 @@ async function borrarConTarea(url, titulo, texto) {
   return (await seguirTarea(tarea_id, $('#b-prog'), { texto })).resultado || {};
 }
 
-const ESTRATIF = [['tamano', 'Tamaño'], ['departamento', 'Departamento'], ['naturaleza', 'Naturaleza'], ['ciiu2', 'CIIU 2 dígitos'], ['ciiu1', 'CIIU 1 dígito']];
 
 function formParte(p = {}) {
   return `<div class="form-group"><label>Nombre de la parte</label><input type="text" data-p="nombre" value="${esc(p.nombre || '')}" placeholder="p. ej. Parte A — RRHH" /></div>
@@ -115,94 +115,8 @@ export async function detalle(ctx, id) {
 }
 
 // ── Armado de la muestra ──
-function filtroAtributo(a) {
-  const id = `ma-${a.clave}`;
-  if (a.tipo === 'lista') return `<div class="form-group"><label>${esc(a.nombre)}</label>${chips('attr:' + a.clave, a.opciones)}</div>`;
-  if (a.tipo === 'texto') return `<div class="form-group"><label>${esc(a.nombre)} (contiene)</label><input type="text" id="${id}-contiene" /></div>`;
-  const tipo = a.tipo === 'fecha' ? 'date' : 'number';
-  return `<div class="form-group"><label>${esc(a.nombre)}</label><div class="form-row">
-    <input type="${tipo}" id="${id}-desde" placeholder="desde" /><input type="${tipo}" id="${id}-hasta" placeholder="hasta" /></div></div>`;
-}
-
-function leerFiltrosAtributo(atributos) {
-  const salida = {};
-  for (const a of atributos) {
-    let f = null;
-    if (a.tipo === 'lista') { const s = chipsSel(main(), 'attr:' + a.clave); if (s.length) f = { valores: s }; }
-    else if (a.tipo === 'texto') { const t = $(`#ma-${a.clave}-contiene`).value.trim(); if (t) f = { contiene: t }; }
-    else {
-      const d = $(`#ma-${a.clave}-desde`).value, h = $(`#ma-${a.clave}-hasta`).value;
-      if (d || h) { f = {}; if (d) f.desde = d; if (h) f.hasta = h; }
-    }
-    if (f) salida[a.clave] = f;
-  }
-  return salida;
-}
-
-export async function nuevaMuestra(ctx, estudioId) {
-  const [e, v, atributos, origenes] = await Promise.all([api.get('/estudios/' + estudioId), api.get('/empresas/valores'),
-    api.get('/atributos', { activos: true }), api.get('/origenes-telefono', { activos: true })]);
-  const filtrables = atributos.filter(a => a.filtrable);
-  const estratif = [...ESTRATIF, ...atributos.filter(a => a.estratificable).map(a => ['atributo.' + a.clave, a.nombre])];
-  main().innerHTML = pageHeader('Nueva muestra', '— ' + e.nombre, 'Definí filtros y estratos, mirá el marco disponible y después sorteá. El sorteo congela el marco y guarda la semilla y la versión de configuración.') +
-    `<div class="grid-2">${card('1 · Filtros', `
-      <div class="form-group"><label>Tamaño</label>${chips('tamano', v.tamano)}</div>
-      <div class="form-group"><label>Departamento</label>${chips('departamento', v.departamento)}</div>
-      <div class="form-group"><label>Naturaleza jurídica</label>${chips('naturaleza', v.naturaleza.filter(n => !n.excluida).map(n => [n.codigo, n.nombre]))}</div>
-      <div class="form-group"><label>CIIU (prefijos)</label><input type="text" id="m-ciiu" placeholder="p. ej. 47, 56, 1071" />
-        <div class="field-hint">Vacío = todos. Sin filtros, entra toda la base disponible.</div></div>
-      ${filtrables.length ? `<div class="card-header-title mb mt">Atributos</div>${filtrables.map(filtroAtributo).join('')}` : ''}
-      <div class="form-group mt"><label>Origen de los teléfonos</label>${chips('origenes', origenes.map(o => [o.codigo, o.nombre]))}
-        <div class="field-hint">Solo empresas con al menos un teléfono discable de estos orígenes. Sin selección, no filtra.</div></div>
-      <label class="check mt"><input type="checkbox" id="m-provisoria" /> Incluir la base provisoria (empresas sin RUT)</label>
-      <div class="field-hint">Desmarcado por defecto: no cambia el marco de los estudios en curso. Las provisorias entran con su estrato y las mismas reglas de disponibilidad.</div>`)}
-    ${card('2 · Estratos', `<div class="form-group"><label>Estratificar por</label>${chips('por', estratif)}</div>
-      <button class="btn btn-dark" id="m-marco">Ver marco disponible</button><div id="m-marco-res" class="mt"></div>`)}</div>
-    <div id="m-estratos"></div>`;
-  activarChips(main());
-  const criteriosBase = () => {
-    const f = {};
-    ['tamano', 'departamento', 'naturaleza'].forEach(k => { const s = chipsSel(main(), k); if (s.length) f[k] = s; });
-    const ciiu = $('#m-ciiu').value.split(/[,\s]+/).filter(Boolean);
-    if (ciiu.length) f.ciiu = ciiu;
-    return { filtros: f, atributos: leerFiltrosAtributo(filtrables), origenes: chipsSel(main(), 'origenes'),
-      estratificar_por: chipsSel(main(), 'por'), ...($('#m-provisoria').checked ? { incluir_provisoria: true } : {}) };
-  };
-  $('#m-marco').onclick = async () => {
-    const c = criteriosBase();
-    const r = await api.post('/muestras/marco', c);
-    const ex = Object.entries(r.exclusiones).filter(([k]) => k !== 'total_excluidas');
-    $('#m-marco-res').innerHTML = stats([[r.universo, 'Cumplen filtros', 's-total'], [r.marco, 'Disponibles', 's-ok'],
-      [r.exclusiones.total_excluidas || 0, 'Excluidas', 's-bad']]) +
-      (ex.length ? `<div class="small"><strong>Excluidas por regla</strong> (una empresa puede caer en varias): ${ex.map(([k, n]) => `${esc(etiqueta(k))} <strong>${num(n)}</strong>`).join(' · ')}</div>` : '');
-    $('#m-estratos').innerHTML = card('3 · Tamaño por estrato y reemplazos', `
-      <div class="toolbar mb"><span class="small muted">Aplicar a todos:</span><input type="number" id="m-n-todos" placeholder="n" style="width:90px" />
-        <input type="number" id="m-r-todos" placeholder="reemplazos" style="width:120px" /><button class="btn btn-outline btn-sm" id="m-aplicar">Aplicar</button></div>
-      ${tabla([{ t: 'Estrato', f: x => `<span class="td-strong">${esc(x.estrato)}</span>` }, { t: 'Disponibles', cls: 'num', f: x => num(x.disponibles) },
-        { t: 'Titulares', f: x => `<input type="number" min="0" data-n="${esc(x.estrato)}" value="0" style="width:100px" />` },
-        { t: 'Reemplazos', f: x => `<input type="number" min="0" data-r="${esc(x.estrato)}" value="0" style="width:100px" />` }], r.estratos, 'No hay empresas disponibles con esos filtros')}
-      <div class="form-row mt"><div class="form-group"><label>Nombre de la muestra</label><input type="text" id="m-nombre" value="Muestra ${e.muestras.length + 1}" /></div>
-      <div class="form-group"><label>Semilla (opcional)</label><input type="number" id="m-semilla" placeholder="se genera al azar" />
-      <div class="field-hint">Con la misma semilla y el mismo marco, el sorteo da la misma lista.</div></div></div>
-      <button class="btn btn-orange" id="m-sortear">Crear y sortear</button>`);
-    $('#m-aplicar').onclick = () => {
-      $$('[data-n]').forEach(i => { if ($('#m-n-todos').value !== '') i.value = $('#m-n-todos').value; });
-      $$('[data-r]').forEach(i => { if ($('#m-r-todos').value !== '') i.value = $('#m-r-todos').value; });
-    };
-    if ($('#m-sortear')) $('#m-sortear').onclick = async () => {
-      const estratos = $$('[data-n]').map(i => ({ estrato: i.dataset.n, n: +i.value || 0, reemplazos: +($(`[data-r="${CSS.escape(i.dataset.n)}"]`).value) || 0 }))
-        .filter(x => x.n || x.reemplazos);
-      if (!estratos.length) return toast('Indicá el tamaño de al menos un estrato', 'err');
-      const total = estratos.reduce((a, x) => a + x.n, 0);
-      if (!await confirmar('Sortear muestra', `Se sortean ${num(total)} titulares y ${num(estratos.reduce((a, x) => a + x.reemplazos, 0))} reemplazos en ${estratos.length} estratos. Las empresas sorteadas quedan bloqueadas para otras muestras mientras esta esté activa.`, 'Sortear')) return;
-      const m = await api.post('/muestras', { estudio_id: +estudioId, nombre: $('#m-nombre').value, criterios: { ...c, estratos } });
-      const semilla = $('#m-semilla').value;
-      await api.post(`/muestras/${m.id}/sortear`, { semilla: semilla ? +semilla : null });
-      toast('Muestra sorteada', 'ok');
-      ctx.ir('muestras/' + m.id);
-    };
-  };
-}
+// «Nueva muestra»: el asistente vive en sorteo.js (filtros y estratos con todos los datos, templates)
+export const nuevaMuestra = (ctx, estudioId, params) => asistente(ctx, { estudioId, params });
 
 // ── Muestra ──
 // F1.1: la lista a la que lleva el contador «Muestras activas» de Inicio
@@ -242,24 +156,16 @@ export async function muestras(ctx, params) {
   });
 }
 
-function criteriosTexto(c, atributos, origenes) {
-  const nombreA = Object.fromEntries(atributos.map(a => [a.clave, a.nombre]));
-  const nombreO = Object.fromEntries(origenes.map(o => [o.codigo, o.nombre]));
-  const partes = Object.entries(c.filtros || {}).map(([k, v]) => `${etiqueta(k)}: ${[].concat(v).join(', ')}`);
-  Object.entries(c.atributos || {}).forEach(([k, f]) => partes.push(`${nombreA[k] || k}: ${f.valores ? f.valores.join(', ')
-    : f.contiene ? 'contiene «' + f.contiene + '»' : [f.desde ? 'desde ' + f.desde : '', f.hasta ? 'hasta ' + f.hasta : ''].filter(Boolean).join(' ')}`));
-  if ((c.origenes || []).length) partes.push(`teléfonos de: ${c.origenes.map(o => nombreO[o] || o).join(', ')}`);
-  if ((c.estratificar_por || []).length) partes.push(`estratos: ${c.estratificar_por.map(k => k.startsWith('atributo.') ? (nombreA[k.slice(9)] || k) : (Object.fromEntries(ESTRATIF)[k] || etiqueta(k))).join(' × ')}`);
-  return partes.length ? partes.map(esc).join(' · ') : 'Sin filtros: toda la base disponible';
-}
 
 export async function muestra(ctx, id) {
-  const [m, atributos, origenes] = await Promise.all([api.get('/muestras/' + id), api.get('/atributos'), api.get('/origenes-telefono')]);
+  const [m, atributos, origenes, ds] = await Promise.all([api.get('/muestras/' + id), api.get('/atributos'), api.get('/origenes-telefono'),
+    api.get('/muestras/datos-sorteo')]);
   const exp = m.exportacion || { origenes: [], orden: 'prioridad' };
   const r = m.resultado || {};
   const tot = (k) => m.avance.reduce((a, x) => a + (x[k] || 0), 0);
   main().innerHTML = pageHeader(m.nombre, '', `<a class="link" href="#/estudios/${m.estudio_id}">${esc(m.estudio_nombre)}</a> · ${estDe('muestra', m.estado)} · semilla <span class="mono">${m.semilla ?? '—'}</span> · configuración v${m.config_version ?? '—'} · snapshot #${m.snapshot_id ?? '—'}`,
     `<button class="btn btn-outline" id="mu-verificar">Verificar reproducibilidad</button>` +
+    (ctx.puede('jefe') ? `<button class="btn btn-outline" id="mu-template">Guardar configuración como template</button>` : '') +
     (m.estado === 'activa' && ctx.puede('jefe') ? `<button class="btn btn-outline btn-del" id="mu-cerrar">Cerrar muestra</button>` : '') +
     (ctx.puede() ? `<button class="btn btn-danger" id="mu-borrar">Borrar muestra</button>` : '')) +
     (m.borrado_fallido ? `<div class="alert alert-error"><span><strong>El borrado de esta muestra no terminó</strong>
@@ -272,7 +178,9 @@ export async function muestra(ctx, id) {
     stats([[tot('titulares'), 'Titulares', 's-total'], [tot('liberados'), 'Liberados', 's-free'], [tot('llamados'), 'Con llamadas', ''],
       [tot('completas'), 'Con alguna completa', 's-ok'], [tot('rechazos'), 'Rechazos', 's-bad'], [r.marco, 'Marco congelado', '']]) +
     `<div class="grid-2">${card('Exclusiones al sortear', tabla([{ t: 'Regla', f: x => esc(etiqueta(x[0])) }, { t: 'Empresas', cls: 'num', f: x => num(x[1]) }],
-      Object.entries(r.exclusiones || {}).sort((a, b) => b[1] - a[1]), 'Ninguna') + `<div class="card-body small muted">Universo que cumplía los filtros: <strong>${num(r.universo)}</strong> · marco disponible: <strong>${num(r.marco)}</strong><br>Criterios: ${criteriosTexto(m.criterios || {}, atributos, origenes)}</div>`, '', true)}
+      Object.entries(r.exclusiones || {}).sort((a, b) => b[1] - a[1]), 'Ninguna') + `<div class="card-body small muted">Universo que cumplía los filtros: <strong>${num(r.universo)}</strong> · marco disponible: <strong>${num(r.marco)}</strong><br>Criterios: ${criteriosTexto(m.criterios || {}, ds.datos, origenes)}
+      ${r.incluir_sin_telefono ? `<br>Entraron <strong>${num(r.sin_telefono || 0)}</strong> empresas sin teléfono discable (la muestra las incluye).` : ''}
+      ${m.template_id ? `<br>Armada desde un template (#${m.template_id}); guarda su propia copia de los criterios.` : ''}</div>`, '', true)}
     ${card('Exportar a uContact', m.estado === 'activa' && ctx.puede('coordinador', 'jefe') ? `
       <div class="form-group"><label>Parte</label><select class="fselect" id="mu-parte">${m.partes.map(p => `<option value="${p.id}">${esc(p.nombre)}</option>`).join('')}</select></div>
       <div class="form-group"><label>Orígenes a exportar</label>${chips('exp-origenes', origenes.filter(o => o.activo || exp.origenes.includes(o.codigo)).map(o => [o.codigo, o.nombre]), exp.origenes)}
@@ -293,10 +201,10 @@ export async function muestra(ctx, id) {
           <div class="field-hint">Van en columnas contacto_1_*, contacto_2_*… (hasta ${num(m.contactos_por_empresa_csv || 3)} por empresa; primero el que coincide con el respondente objetivo de la parte).</div></div>` : ''}
         <div class="field-hint">La elección queda guardada en la muestra para la próxima exportación.</div></details>
       <div class="form-group"><label>Formato</label><select class="fselect" id="mu-formato">
-        <option value="ucontact">uContact: un renglón por teléfono</option><option value="planilla">Planilla de la muestra: un renglón por empresa</option></select></div>
+        <option value="planilla" selected>Una fila por empresa</option><option value="ucontact">Una fila por número</option></select></div>
       <div id="mu-csv-res" class="small muted mb"></div>
       <button class="btn btn-orange" id="mu-csv">Descargar CSV</button>
-      <p class="field-hint mt">Un renglón por teléfono discable de cada ítem liberado y pendiente en la parte. Nunca incluye intermediarios, inexistentes, "no corresponde" ni no llamar.${ctx.me.exportar_contactos ? '' : ' Tu usuario no tiene permiso para exportar contactos personales: no salen en el archivo.'}</p>`
+      <p class="field-hint mt"><span id="mu-formato-ayuda"></span> Nunca incluye intermediarios, inexistentes, «no corresponde» ni no llamar.${ctx.me.exportar_contactos ? '' : ' Tu usuario no tiene permiso para exportar contactos personales: no salen en el archivo.'}</p>`
       : '<div class="muted small">Solo se exporta una muestra activa, con rol coordinador o jefe de proyecto.</div>')}</div>` +
     card('Avance por estrato', tabla([
       { t: 'Estrato', f: x => `<span class="td-strong">${esc(x.estrato)}</span>` }, { t: 'Titulares', cls: 'num', k: 'titulares' },
@@ -313,6 +221,7 @@ export async function muestra(ctx, id) {
       <select class="fselect" id="mu-estrato" style="width:auto"><option value="">Todos los estratos</option>${m.avance.map(x => `<option>${esc(x.estrato)}</option>`).join('')}</select>
       <select class="fselect" id="mu-rol" style="width:auto"><option value="">Titulares y reemplazos</option><option value="titular">Titulares</option><option value="reemplazo">Reemplazos</option></select>
       <select class="fselect" id="mu-liberado" style="width:auto"><option value="">Liberados o no</option><option value="true">Liberados</option><option value="false">No liberados</option></select>
+      <select class="fselect" id="mu-sintel" style="width:auto"><option value="">Con y sin teléfono</option><option value="true">Sin teléfono</option><option value="false">Con teléfono</option></select>
       <select class="fselect" id="mu-eparte" style="width:auto"><option value="">En cualquier parte</option>${m.partes.map(p => `<option value="${p.id}">${esc(p.nombre)}</option>`).join('')}</select>
       <select class="fselect" id="mu-estado" style="width:auto"><option value="">Cualquier estado</option>${['pendiente', 'en_curso', 'completa', 'rechazo', 'no_contactable', 'fuera_de_marco'].map(x => `<option value="${x}">${esc(etiqueta(x))}</option>`).join('')}</select>
       </div></div>
@@ -321,7 +230,7 @@ export async function muestra(ctx, id) {
   let pagina = 1;
   const items = async () => {
     const r = await api.get(`/muestras/${id}/items`, { estrato: $('#mu-estrato').value, rol: $('#mu-rol').value,
-      liberado: $('#mu-liberado').value, parte_id: $('#mu-eparte').value, estado: $('#mu-estado').value,
+      liberado: $('#mu-liberado').value, sin_telefono: $('#mu-sintel').value, parte_id: $('#mu-eparte').value, estado: $('#mu-estado').value,
       q: $('#mu-q').value.trim(), pagina });
     const lista = r.items;
     $('#mu-total').textContent = `· ${num(r.total)} empresa${r.total === 1 ? '' : 's'}`;
@@ -332,18 +241,27 @@ export async function muestra(ctx, id) {
     $('#mu-sig').onclick = () => { pagina++; items(); };
     $('#mu-items').innerHTML = tabla([
       { t: 'EC_ID_ITEM', cls: 'num', k: 'id' }, { t: 'Estrato', k: 'estrato' }, { t: 'Orden', cls: 'num', k: 'orden' }, { t: 'Rol', f: i => est(i.rol) },
-      { t: 'Empresa', f: i => `<a class="link" href="#/empresas/${i.rut}">${esc(i.razon_social || i.rut)}</a>` },
+      { t: 'Empresa', f: i => `<a class="link" href="#/empresas/${i.rut}">${esc(i.razon_social || i.rut)}</a>${i.sin_telefono ? ` ${est('sospechoso', 'sin teléfono')}` : ''}` },
       { t: 'Liberado', f: i => i.liberado ? `sí <span class="small muted">${esc(i.liberado_motivo || '')}</span>` : 'no' },
       { t: 'Intentos', cls: 'num', k: 'intentos' },
       { t: 'Estado por parte', f: i => Object.entries(i.estados || {}).map(([p, s]) => `<span class="small muted">${esc(p)}:</span> ${est(s)}`).join(' ') || '—' },
     ], lista, 'Ninguna empresa con esos filtros');
   };
   const filtrar = () => { pagina = 1; items(); };  // los filtros se mantienen al cambiar de página
-  ['#mu-estrato', '#mu-rol', '#mu-liberado', '#mu-eparte', '#mu-estado'].forEach(sel => { $(sel).onchange = filtrar; });
+  ['#mu-estrato', '#mu-rol', '#mu-liberado', '#mu-sintel', '#mu-eparte', '#mu-estado'].forEach(sel => { $(sel).onchange = filtrar; });
   $('#mu-q').addEventListener('keydown', e => { if (e.key === 'Enter') filtrar(); });
   $('#mu-q').addEventListener('search', filtrar);
   items();
   const recargar = () => muestra(ctx, id);
+  if ($('#mu-template')) $('#mu-template').onclick = async () => {
+    const r = await modal({ titulo: 'Guardar configuración como template', ancho: 560, cuerpo: `
+      <div class="form-group"><label>Nombre</label><input type="text" id="t-nombre" value="${esc(m.nombre)}" /></div>
+      <div class="form-group"><label>Descripción</label><input type="text" id="t-desc" /></div>
+      <p class="small muted">Guarda los filtros, estratos y tamaños de esta muestra para usarlos en otra muestra u otro estudio.</p>`,
+      acciones: [{ t: 'Cancelar' }, { t: 'Guardar', cls: 'btn-orange', fn: (b) => api.post(`/muestras/${id}/template`, {
+        nombre: $('#t-nombre', b).value, descripcion: $('#t-desc', b).value || null }) }] });
+    if (r) toast(r.avisos && r.avisos.length ? `Template guardado. Se quitó lo que ya no existe: ${r.avisos.join('; ')}` : 'Template guardado', 'ok');
+  };
   $('#mu-verificar').onclick = async () => {
     const v = await api.post(`/muestras/${id}/verificar`);
     if (v.resultado === 'reproducible') {
@@ -407,6 +325,11 @@ export async function muestra(ctx, id) {
     activarChips($('#mu-csv').closest('.card'), guardarExportacion);
     $('#mu-orden').onchange = guardarExportacion;
     $('#mu-parte').onchange = resumen;
+    // R1: la ayuda dice qué genera cada formato
+    const AYUDA = { planilla: 'Una fila por empresa liberada y pendiente en la parte, con sus números y orígenes en columnas tel_1, tel_2… (las empresas sin teléfono salen con esas columnas vacías).',
+      ucontact: 'Una fila por cada número discable de cada empresa: una empresa con 3 números sale 3 veces (las empresas sin teléfono no salen).' };
+    const ayuda = () => { $('#mu-formato-ayuda').textContent = AYUDA[$('#mu-formato').value]; };
+    $('#mu-formato').onchange = ayuda; ayuda();
     resumen();
     $('#mu-csv').onclick = async () => {
       const r = await api.descargar(`/muestras/${id}/csv`, { parte_id: $('#mu-parte').value, formato: $('#mu-formato').value });

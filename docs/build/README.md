@@ -104,3 +104,21 @@ Después, `docs/build/manual_mejoras.py` agregó las guías al Word (`docs/Manua
 ```bash
 soffice --headless --convert-to pdf --outdir docs docs/Manual_de_usuario_Base_de_Empresas.docx
 ```
+
+## Capturas de templates de sorteo, filtros y estratos, y formatos del CSV
+
+`capturas_templates.js` saca `16-nueva-muestra` (asistente partiendo de un template), `33-atributos` (ya sin las casillas «filtro» y «estrato»), `53-templates`, `54-asistente-filtros` (con las marcas 1 a 5 de la guía 7) y `55-formatos-csv`. Necesita la demo **recién cargada, sin templates**: el script guarda uno.
+
+```bash
+BASE=http://localhost:8080 node docs/build/capturas_templates.js docs/manual/img
+```
+
+`manual_templates.py` actualiza el Word (guías 7, 10, 15 y 24, guía 25 nueva, tabla de lectura y glosario) a partir del manual anterior; después se regenera el PDF:
+
+```bash
+python docs/build/manual_templates.py docs/Manual_de_usuario_Base_de_Empresas.docx docs/manual/img
+```
+
+```bash
+soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
+```

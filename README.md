@@ -20,6 +20,7 @@ Registro maestro de empresas por RUT del que salen muestras aleatorias y auditab
 | Despliegue del borrado de estudios, muestras y cargas en curso | [`docs/despliegue_borrado_estudios.md`](docs/despliegue_borrado_estudios.md) |
 | Despliegue del conteo de llamadas del CDR y empresas llamadas | [`docs/despliegue_conteo_llamadas.md`](docs/despliegue_conteo_llamadas.md) |
 | Despliegue de .sav, contactos, atributos, exportación y base provisoria | [`docs/despliegue_mejoras_sav_contactos.md`](docs/despliegue_mejoras_sav_contactos.md) |
+| Despliegue de templates de sorteo, empresas sin teléfono, filtros y estratos y formatos del CSV | [`docs/despliegue_templates_sorteo.md`](docs/despliegue_templates_sorteo.md) |
 
 ## Estructura
 
