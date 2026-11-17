@@ -261,6 +261,8 @@ def validar(conn, c: dict, avisos: list | None = None, tamanos: bool = True) -> 
         salida["incluir_provisoria"] = True
     if c.get("incluir_sin_telefono"):  # R3 (Q1): desmarcado por defecto
         salida["incluir_sin_telefono"] = True
+    if c.get("una_por_grupo"):  # Fase 2, B4 (Q3): la pantalla la trae marcada; sin la clave, como antes
+        salida["una_por_grupo"] = True
     return salida
 
 

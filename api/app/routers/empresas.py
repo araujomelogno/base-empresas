@@ -16,10 +16,9 @@ def me(u: Usuario = Depends(usuario_actual)):
     return u.__dict__
 
 
-@router.get("/empresas")
-def buscar(q: str | None = None, departamento: str | None = None, tamano: str | None = None,
-           naturaleza: str | None = None, disponible: bool | None = None, pagina: int = 1, base: str = "definitiva",
-           conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+def filtros_busqueda(conn, q=None, departamento=None, tamano=None, naturaleza=None, disponible=None,
+                     base="definitiva", sin_telefono=None, sin_web=None) -> tuple[list[str], list, int | None]:
+    """WHERE del buscador de Empresas (lo reusa «Enriquecer estas N empresas»). Devuelve (where, args, ítem)."""
     where, args = ["e.baja IS NULL"], []
     prov = empresas.CODIGO_PROVISORIO.match(q or "")
     if base in ("definitiva", "provisoria") and not prov and _item_buscado(q) is None:
@@ -60,6 +59,19 @@ def buscar(q: str | None = None, departamento: str | None = None, tamano: str | 
     if disponible is not None:
         where.append("d.disponible = %s")
         args.append(disponible)
+    if sin_telefono is not None:  # Fase 2: para enriquecer una lista filtrada
+        where.append(("NOT " if sin_telefono else "") + "EXISTS (SELECT 1 FROM v_vinculo_discable x WHERE x.empresa_id = e.id)")
+    if sin_web is not None:
+        where.append("coalesce(e.web, '') = ''" if sin_web else "coalesce(e.web, '') <> ''")
+    return where, args, item
+
+
+@router.get("/empresas")
+def buscar(q: str | None = None, departamento: str | None = None, tamano: str | None = None,
+           naturaleza: str | None = None, disponible: bool | None = None, pagina: int = 1, base: str = "definitiva",
+           sin_telefono: bool | None = None, sin_web: bool | None = None,
+           conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+    where, args, item = filtros_busqueda(conn, q, departamento, tamano, naturaleza, disponible, base, sin_telefono, sin_web)
     pagina = max(1, pagina)
     filas = conn.execute(
         "SELECT e.id, e.codigo AS rut, e.base, e.razon_social, e.fantasia, e.departamento, e.tamano, e.ciiu, e.estado,"
@@ -110,12 +122,18 @@ def ficha(rut: str, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)
                                        (eid,)).fetchone()
     e["historia"] = conn.execute(
         "SELECT h.id, h.campo, h.valor, h.fuente_tipo, h.fuente_id, h.confianza, h.actor, h.fecha, h.detalle,"
-        " (c.estado = 'deshecha' OR f.deshecha IS NOT NULL) AS anulada,"
+        " (c.estado = 'deshecha' OR f.deshecha IS NOT NULL OR ec.deshecha IS NOT NULL) AS anulada,"
         " (h.fuente_tipo IN ('sav', 'sala') AND h.fuente_id IS NOT NULL"
         "  AND NOT EXISTS (SELECT 1 FROM sav_ingesta s WHERE s.id = h.fuente_id)) AS ingesta_borrada"
         " FROM empresa_campo_historia h LEFT JOIN carga c ON h.fuente_tipo = 'carga' AND c.id = h.fuente_id"
         " LEFT JOIN empresa_fusion f ON h.fuente_tipo = 'fusion' AND f.id = h.fuente_id"
+        " LEFT JOIN enriquecimiento_corrida ec ON h.fuente_tipo IN ('enriquecimiento', 'descubrimiento') AND ec.id = h.fuente_id"
         " WHERE h.empresa_id = %s ORDER BY h.campo, h.fecha DESC, h.id DESC", (eid,)).fetchall()
+    # Fase 2 (B4): grupo económico y las otras empresas que lo forman
+    e["grupo"] = None
+    if e.get("grupo_economico_id"):
+        from .. import duplicados
+        e["grupo"] = duplicados.grupo(conn, e["grupo_economico_id"])
     vig = empresas.vigentes(conn, eid)
     for h in e["historia"]:
         h["vigente"] = bool(vig.get(h["campo"]) and vig[h["campo"]]["id"] == h["id"])

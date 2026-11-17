@@ -239,6 +239,75 @@ Las filas de una carga que coinciden con una empresa existente pero no se fusion
 
 Comparás la fila que llegó con la empresa existente y elegís: **Alta nueva** (es otra empresa: se crea con su RUT, o en la base provisoria si no trae RUT), **Actualizar existente** (los datos se aplican a la empresa que ya estaba) o **Descartar**.
 
+### Calidad de la base
+
+**Administración → Calidad de la base** (data steward, jefes y administrador) tiene una tarjeta por dimensión, con su meta, su estado (**cumple**, **cerca** o **no cumple**) y la evolución de los últimos meses. Cada indicador tiene **Ver la lista**: las empresas, teléfonos o pares que lo incumplen, con enlace a cada ficha. Es la lista de trabajo de la semana.
+
+| Dimensión | Qué mide | Meta |
+| --- | --- | --- |
+| Validez | RUT con dígito verificador correcto; teléfonos en formato uruguayo válido | 100 % |
+| Unicidad | Una empresa por RUT, un teléfono por número y los posibles duplicados sin resolver | 100 % y 0 pendientes |
+| Completitud | Empresas disponibles con al menos 1 teléfono discable, CIIU y departamento | ≥ 90 % |
+| Exactitud | Teléfonos verificados por la sala sobre el total de discables | Que suba cada trimestre |
+| Actualidad | Teléfonos discables verificados en los últimos 24 meses | ≥ 70 % |
+| Consistencia | Naturaleza jurídica que no coincide con la razón social (por ejemplo, «SRL» con «… S.A.») | Alertas revisadas |
+| Base provisoria | Empresas sin RUT y cuántas tienen candidata en la definitiva | Informativo |
+
+En **Consistencia**, cada alerta tiene **Revisada**: corregí la naturaleza o la razón social en la ficha, o marcala si está bien así. Vuelve a aparecer si después cambia alguno de los dos datos. Todos los días, temprano, el sistema guarda una foto de los indicadores: la evolución se arma con esas fotos (el administrador puede guardar la de hoy con **Guardar la foto de hoy**).
+
+La tarjeta **Enriquecimiento** muestra el gasto del mes contra el tope mensual, el gasto por proveedor y el **costo por teléfono verificado** (lo gastado en enriquecimiento sobre los teléfonos de Google Places o del sitio web que la sala después verificó). La meta es US$0,10 o menos.
+
+![Calidad de la base](img/56-calidad.png)
+
+### Enriquecer empresas
+
+El enriquecimiento busca, para empresas sin teléfono, un **teléfono**, el **sitio web**, la **dirección** y un **email institucional** (info@, contacto@…), en este orden y de lo más barato a lo más caro: lo que ya hay en la base (gratis), **Google Places**, una **búsqueda web** (solo si falta el sitio) y la **lectura del sitio con Claude** (solo si todavía falta el teléfono). Por defecto se corta apenas consigue un teléfono.
+
+Se lanza desde:
+
+- **Empresas**, con los filtros de la pantalla (hay filtros nuevos **Teléfono** y **Sitio web**, por ejemplo «pymes de Canelones sin teléfono»): **Enriquecer estas N empresas**, al pie de la lista;
+- la **ficha** de una empresa: **✨ Enriquecer**;
+- una **muestra**: **✨ Enriquecer** (también el jefe de proyecto), con las empresas sin teléfono discable o todas.
+
+**Antes de gastar** se muestra la estimación: cuántas empresas se enriquecen y cuántas se saltean y por qué (ya tienen un teléfono verificado o discable, se enriquecieron en los últimos 90 días, están en no llamar, o son provisorias con candidata: conviene fusionarlas), el **costo máximo** y el **esperado**, cuántas llamadas entran en las gratuitas del mes y cuánto queda del tope mensual. Si el máximo supera lo permitido, elegís cuántas enriquecer (las primeras o al azar). Nada se gasta hasta tocar **Aprobar y enriquecer**.
+
+![Estimación antes de enriquecer](img/57-estimacion.png)
+
+La corrida avanza empresa por empresa y se puede **Cancelar**. Antes de cada llamada paga se verifica el tope: si se llega, la corrida se detiene («detenida por tope»). En los dos casos lo conseguido queda guardado. Al terminar muestra cuántas empresas tienen teléfono nuevo, el gasto real por proveedor y la lista de empresas con su resultado. **Base de datos → Enriquecimiento** lista todas las corridas.
+
+![Una corrida de enriquecimiento](img/58-corrida.png)
+
+**Qué pasa con lo encontrado:**
+
+- Los teléfonos entran **sin verificar**, con origen **Google Places** o **Sitio web**. Salen en el CSV como cualquier teléfono discable (en el orden de prioridad de su origen) y los verifica la sala con el .sav. En la ficha, la pestaña Teléfonos dice de qué corrida salió cada uno.
+- El sitio, la dirección y el email entran con **confianza 30**: nunca reemplazan un dato de una carga (50) ni de la sala (80).
+- Si el sitio es de un **estudio contable o jurídico**, sus teléfonos quedan como **intermediario sospechoso** y van a la bandeja de Intermediarios, con el motivo.
+- Nunca se guardan datos personales: ni nombres ni celulares ni emails de personas que aparezcan en el sitio.
+- **Deshacer** (en la corrida) quita lo que trajo, salvo los teléfonos que la sala ya verificó.
+- En **Actividad → Rendimiento por origen**, Google Places y Sitio web se miden como cualquier origen.
+
+### Posibles duplicados y grupos económicos
+
+**Base de datos → Posibles duplicados** muestra pares de empresas con **RUT distinto** que comparten un teléfono, el sitio web, la dirección (con el departamento) o una razón social casi igual. Se detectan todos los días; **Detectar ahora** lo hace en el momento. Cada par aparece lado a lado, con lo que coincide. Para cada uno:
+
+| Para… | Hacé esto |
+| --- | --- |
+| Son la misma empresa | **Fusionar: queda …** (elegí cuál queda). Es la fusión de siempre: se puede deshacer desde la ficha |
+| Son empresas distintas del mismo grupo | **Son grupo económico** (con un nombre opcional). Quedan relacionadas, sin fusionarse. Si una ya estaba en un grupo, la otra se suma |
+| No tienen nada que ver | **Sin relación**: el par no se vuelve a proponer |
+
+Los pares con más de 14 días sin resolver se marcan. La ficha de una empresa de un grupo muestra el grupo y las otras empresas que lo forman, y permite cambiarle el nombre o sacarla del grupo.
+
+![Posibles duplicados](img/59-duplicados.png)
+
+### Buscar empresas nuevas
+
+**Base de datos → Buscar empresas nuevas** busca en Google Places por rubro y zona: escribí la búsqueda («imprentas en Salto») o armala con rubro, departamento y localidad, y elegí cuántas páginas pedir (20 resultados cada una; cada página es una llamada paga). **Ver el costo** muestra cuánto cuesta con los mismos topes del enriquecimiento; **Buscar** hace las llamadas.
+
+Cada resultado se compara con la base y queda en uno de tres casos: **nueva** (se ofrece el alta en la base provisoria), **coincide** con una empresa por teléfono, sitio o nombre y dirección (se ofrece completarla; si la coincidencia es por similitud, revisala) o **ya guardada** (el mismo lugar ya está en la base). Elegí qué hacer con cada uno y tocá **Confirmar**: nada se guarda antes. El lote **Descubrimiento #N** queda con su linaje y se puede **Deshacer**. Las empresas nuevas entran a la base provisoria con código P-, teléfono sin verificar (origen Google Places) y el rubro buscado; después siguen el circuito de siempre (agregar el RUT o fusionar).
+
+![Buscar empresas nuevas](img/60-descubrimiento.png)
+
 ## Jefe de proyecto
 
 ### Estudios y partes
@@ -258,7 +327,7 @@ Cada **parte** es una encuesta de Alchemer con su survey ID, su link base y su r
 Desde el estudio, **Nueva muestra**:
 
 0. **Partir de un template** (opcional): elegí uno y los pasos 1 a 3 se completan con sus valores. Todo se puede ajustar antes de sortear (ver «Templates de sorteo»).
-1. **Filtros:** «+ Agregar filtro» ofrece cualquier dato de la empresa (ver «Filtros y estratos»), los orígenes de los teléfonos, «Incluir la base provisoria» e «Incluir empresas sin teléfono discable». Sin filtros entra toda la base disponible.
+1. **Filtros:** «+ Agregar filtro» ofrece cualquier dato de la empresa (ver «Filtros y estratos»), los orígenes de los teléfonos, «Incluir la base provisoria», «Incluir empresas sin teléfono discable» y «Como máximo una empresa por grupo económico» (marcada: si sale una empresa de un grupo que ya tiene otra en la muestra, se saltea y sigue la siguiente del orden). Sin filtros entra toda la base disponible.
 2. **Estratos:** «+ Agregar estrato» con cualquier dato, y **Ver marco disponible**. El sistema muestra cuántas empresas cumplen los filtros, cuántas están disponibles, cuántas excluye cada regla y cuántas hay en cada estrato.
 3. **Tamaño por estrato:** titulares y reemplazos de cada estrato (con "Aplicar a todos" para cargarlos de una vez). Opcionalmente, una semilla. **Guardar como template…** guarda los pasos 1 a 3 para la próxima vez.
 
@@ -327,6 +396,8 @@ La pantalla de la muestra muestra los totales, las exclusiones del sorteo, los a
 ![Empresas de la muestra](img/45-empresas-muestra.png)
 
 > **Muestras activas.** El indicador **Muestras activas** de Inicio lleva a la lista (estudio, nombre, ítems, fecha de sorteo). Una muestra activa que quedó **sin empresas** (se borraron todas) se muestra «activa, sin empresas» y se puede cerrar o borrar desde ahí. Si un «Borrar muestra» quedó con error o cancelado, el detalle de la muestra lo avisa.
+
+**✨ Enriquecer** busca teléfono para las empresas de la muestra que no tienen uno discable (o para todas), con la estimación de costo antes de gastar (ver «Enriquecer empresas»). Las corridas de la muestra aparecen arriba, con cuántas consiguieron teléfono.
 
 Mientras la muestra está activa, sus empresas no pueden salir en otra muestra. **Cerrar muestra** las libera y deja de permitir exportaciones.
 
@@ -500,6 +571,20 @@ Estos datos se guardan con **Guardar nueva versión**, como el resto de la confi
 
 **Correr el job a mano.** **Correr ahora** lee las llamadas nuevas sin esperar a las 4:00. **Reprocesar desde** (con **Hasta** opcional) vuelve a leer un período, por ejemplo para cargar el histórico la primera vez o recuperar días en que el job falló. Reprocesar no duplica llamadas ni hace que el job nocturno retroceda. Con **Prueba sin guardar intentos (dry-run)** el job cuenta lo que haría sin escribir nada. La tarjeta sigue la corrida y muestra el resultado al terminar; no se puede lanzar otra mientras una está en curso.
 
+### Enriquecimiento (configuración)
+
+La tarjeta **Enriquecimiento** de Configuración tiene:
+
+- **Proveedores:** Google Places, Brave Search y Claude, cada uno con su estado (activo, desactivado o **no configurado**), la casilla **usar** y su **clave**. La clave se pega y se guarda con **Guardar clave**: va a Secret Manager y no se vuelve a mostrar. Sin clave, la cascada saltea ese proveedor.
+- **Precios** de cada paso (los usa la estimación; se actualizan a mano si el proveedor cambia precios): Places por llamada y llamadas gratis por mes, Brave por búsqueda, y el modelo de Claude con sus precios por millón de tokens.
+- **Topes:** mensual duro (US$100 al empezar), por corrida (US$20) y máximo de empresas por corrida (2.000).
+- **Confianza** de los datos enriquecidos (30), días antes de volver a enriquecer una empresa (90) y **dónde se corta la cascada**: apenas consigue un teléfono (lo más barato) o cuando tiene teléfono y sitio web.
+- **Dominios genéricos** que no cuentan como «mismo sitio» en los posibles duplicados (gmail.com, facebook.com…).
+
+Todo, salvo las claves, se guarda con **Guardar nueva versión** y queda en el historial y en Auditoría.
+
+![Configuración del enriquecimiento](img/61-config-enriquecimiento.png)
+
 ### Atributos de empresa y de contacto
 
 En **Administración → Atributos** hay dos pestañas: **De empresa** (cantidad de empleados, exporta, cámara…) y **De contacto** (decisor sí/no, antigüedad en el cargo…). **Solo el nombre y el tipo** (texto, número, fecha o lista) son obligatorios; la **clave se genera sola** a partir del nombre (`cantidad_de_empleados`; si ya existe, `_2`) y no cambia aunque después cambies el nombre. Una lista puede quedar sin opciones: se completan en la carga. Opcionales: sinónimos para el mapeo automático y, para los de texto, normalizar a mayúscula inicial o MAYÚSCULAS. Todo atributo de empresa activo sirve como filtro y como estrato del sorteo, sin marcar nada. Si al crear uno el nombre se parece a otro que ya existe, el sistema avisa y ofrece usar el existente.
@@ -598,3 +683,6 @@ Registro inalterable de cargas, fusiones, exclusiones, sorteos, exportaciones, i
 | Linaje | Registro de de dónde salió cada dato: fuente, lote, fecha, actor y confianza |
 | Conciliación | Asociación manual de una respuesta o una llamada que el sistema no pudo asociar solo |
 | CDR | Registro de llamadas de uContact |
+| Enriquecimiento | Búsqueda de teléfono, sitio, dirección y email de una empresa en Google Places, la web y su sitio, con costo estimado y tope |
+| Grupo económico | Empresas con RUT distinto relacionadas entre sí (no fusionadas); el sorteo puede tomar como máximo una por grupo |
+| Descubrimiento | Búsqueda de empresas nuevas por rubro y zona en Google Places; las nuevas entran a la base provisoria |

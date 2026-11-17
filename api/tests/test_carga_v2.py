@@ -144,7 +144,7 @@ def test_mapeo_con_contactos_y_plantilla_vieja(api, sql):
 def test_origen_desde_columnas_emparejadas_fijo_y_por_defecto(api, sql):
     origen(api, "guia", "Guía telefónica", 30)
     origen(api, "dgi", "DGI", 40)
-    origen(api, "web", "Web de la empresa", 50)
+    # «web» (Sitio web) ya es un origen de sistema desde la Fase 2 (enriquecimiento)
     filas = [
         {"RUT": rut_valido(0), "Tel 1": "29001111 / 29001112", "Origen 1": "guia", "Tel 2": "099111222", "Origen 2": "dgi",
          "Celular": "099333444"},

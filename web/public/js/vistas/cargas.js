@@ -517,7 +517,8 @@ export async function intermediarios(ctx, params) {
       { t: 'RUTs', cls: 'num', f: t => `<strong>${t.n_empresas}</strong>` }, { t: 'Rubros distintos', cls: 'num', k: 'n_rubros' },
       { t: 'Empresas', f: t => `<details><summary class="link">${esc(t.empresas.slice(0, 2).map(e => e.razon_social || e.rut).join(', '))}${t.empresas.length > 2 ? '…' : ''}</summary>
         ${t.empresas.map(e => `<div class="small"><a class="link mono" href="#/empresas/${e.rut}">${rutFmt(e.rut)}</a> ${esc(e.razon_social || '')} <span class="muted">${esc(e.ciiu || '')}</span></div>`).join('')}</details>` },
-      { t: 'Marcado', f: t => `${fechaHora(t.intermediario_fecha)}<div class="small muted">${esc(t.intermediario_por || '')}</div>` },
+      { t: 'Marcado', f: t => `${fechaHora(t.intermediario_fecha)}<div class="small muted">${esc(t.intermediario_por || '')}</div>`
+        + (t.intermediario_motivo ? `<div class="small">${est('sospechoso', t.intermediario_motivo)}</div>` : '') },
       { t: '', f: t => ctx.puede('steward') ? `<div class="td-actions">${estado !== 'confirmado' ? `<button class="btn btn-danger btn-sm" data-acc="confirmar" data-id="${t.id}">Confirmar</button>` : ''}
         ${estado !== 'liberado' ? `<button class="btn btn-outline btn-sm" data-acc="liberar" data-id="${t.id}">Liberar</button>` : ''}</div>` : '' },
     ], r.telefonos, estado === 'sospechoso' ? 'No hay sospechosos pendientes 🎉' : 'Sin teléfonos en este estado'), '', true) +

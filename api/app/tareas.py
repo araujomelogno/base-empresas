@@ -146,6 +146,9 @@ def _marcar_error_objeto(c, t, e):
         c.execute("UPDATE carga SET estado='error', error=%s WHERE id=%s", (msg, p["carga_id"]))
     if "ingesta_id" in p:
         c.execute("UPDATE sav_ingesta SET estado='error', error=%s WHERE id=%s", (msg, p["ingesta_id"]))
+    if "corrida_id" in p:
+        c.execute("UPDATE enriquecimiento_corrida SET estado='error', error=%s, terminada=now() WHERE id=%s"
+                  " AND estado IN ('en_curso','preview')", (msg, p["corrida_id"]))
 
 
 def obtener(conn, tarea_id: int) -> dict | None:

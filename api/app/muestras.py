@@ -116,12 +116,38 @@ def estrato_de(fila: dict, por: list[str]) -> str:
     return " | ".join(partes)
 
 
-def sortear_snapshot(marco: list[tuple[int, str]], semilla: int, definicion: dict[str, tuple[int, int]]):
+def sortear_snapshot(marco: list[tuple[int, str]], semilla: int, definicion: dict[str, tuple[int, int]],
+                     grupos: dict[int, int] | None = None):
     """Función pura del sorteo. marco: [(empresa_id, estrato)].
-    definicion: {estrato: (n_titulares, n_reemplazos)}. Devuelve [(empresa_id, estrato, rol, orden)]."""
+    definicion: {estrato: (n_titulares, n_reemplazos)}. Devuelve [(empresa_id, estrato, rol, orden)].
+    grupos ({empresa_id: grupo_id}, B4): como máximo una empresa por grupo económico en toda la muestra. Si sale
+    una empresa de un grupo que ya tiene otra, se saltea y sigue la siguiente del orden. Primero se completan los
+    titulares de todos los estratos y después los reemplazos, así un reemplazo no le quita el lugar a un titular."""
     por_estrato = defaultdict(list)
     for empresa_id, estrato in marco:
         por_estrato[estrato].append(empresa_id)
+    if grupos:
+        orden = {e: sorted(por_estrato.get(e, []), key=lambda eid: (clave_orden(semilla, eid), eid)) for e in definicion}
+        elegidos, pos, usados = {e: [] for e in definicion}, dict.fromkeys(definicion, 0), set()
+
+        def tomar(est, hasta):
+            lista = orden[est]
+            while len(elegidos[est]) < hasta and pos[est] < len(lista):
+                eid = lista[pos[est]]
+                pos[est] += 1
+                g = grupos.get(eid)
+                if g is not None:
+                    if g in usados:
+                        continue
+                    usados.add(g)
+                elegidos[est].append(eid)
+
+        for est in sorted(definicion):
+            tomar(est, definicion[est][0])
+        for est in sorted(definicion):
+            tomar(est, sum(definicion[est]))
+        return [(eid, est, "titular" if k < definicion[est][0] else "reemplazo", k + 1)
+                for est in sorted(definicion) for k, eid in enumerate(elegidos[est])]
     salida = []
     for estrato in sorted(definicion):
         n, r = definicion[estrato]
@@ -269,17 +295,21 @@ def sortear(conn, muestra_id: int, actor: str, semilla: int | None = None) -> di
     excl, marco_filas = _aplicar_bloqueos(universo, bloqueos)
     # El estrato de cada empresa se calcula ahora y se congela en el snapshot (R4: tramos, «Otros», textos)
     marco = list(zip([f["id"] for f in marco_filas], crit.etiquetas(marco_filas, criterios, defs)))
+    # B4: la pertenencia a grupos económicos se congela en el snapshot (Verificar reproducibilidad)
+    grupos = {r["id"]: r["grupo_economico_id"] for r in conn.execute(
+        "SELECT id, grupo_economico_id FROM empresa WHERE grupo_economico_id IS NOT NULL AND id = ANY(%s)",
+        ([eid for eid, _ in marco],))}
 
     snapshot_id = conn.execute(
         "INSERT INTO marco_snapshot (config_version, criterios, n) VALUES (%s,%s,%s) RETURNING id",
         (version, Jsonb(criterios), len(marco))).fetchone()["id"]
     with conn.cursor() as cur:
-        cur.executemany("INSERT INTO marco_snapshot_item (snapshot_id, empresa_id, estrato) VALUES (%s,%s,%s)",
-                        [(snapshot_id, eid, est) for eid, est in marco])
+        cur.executemany("INSERT INTO marco_snapshot_item (snapshot_id, empresa_id, estrato, grupo_id) VALUES (%s,%s,%s,%s)",
+                        [(snapshot_id, eid, est, grupos.get(eid)) for eid, est in marco])
 
     definicion = definicion_estratos(criterios, {e for _, e in marco})
     semilla = semilla if semilla is not None else secrets.randbits(62)
-    sorteados = sortear_snapshot(marco, semilla, definicion)
+    sorteados = sortear_snapshot(marco, semilla, definicion, grupos if criterios.get("una_por_grupo") else None)
     with conn.cursor() as cur:
         cur.executemany(
             "INSERT INTO muestra_item (muestra_id, empresa_id, estrato, rol, orden, liberado, liberado_por, liberado_motivo, liberado_fecha)"
@@ -305,7 +335,8 @@ def sortear(conn, muestra_id: int, actor: str, semilla: int | None = None) -> di
     sin_pedir = sorted(set(disponibles) - set(definicion))
     resultado = {"universo": len(universo), "marco": len(marco), "exclusiones": excl, "estratos": por_estrato,
                  "avisos": avisos, "estratos_no_pedidos": sin_pedir, "sin_telefono": sum(sin_tel.values()),
-                 "incluir_sin_telefono": bool(criterios.get("incluir_sin_telefono"))}
+                 "incluir_sin_telefono": bool(criterios.get("incluir_sin_telefono")),
+                 "una_por_grupo": bool(criterios.get("una_por_grupo")), "en_grupos": len(grupos)}
     conn.execute(
         "UPDATE muestra SET estado = 'activa', semilla = %s, config_version = %s, snapshot_id = %s, resultado = %s,"
         " sorteada_por = %s, sorteada = now() WHERE id = %s",
@@ -347,8 +378,10 @@ def verificar(conn, muestra_id: int) -> dict:
         raise HTTPException(404, "Muestra inexistente")
     if m["snapshot_id"] is None:
         raise HTTPException(409, "La muestra no está sorteada")
-    marco = [(r["empresa_id"], r["estrato"]) for r in conn.execute(
-        "SELECT empresa_id, estrato FROM marco_snapshot_item WHERE snapshot_id = %s", (m["snapshot_id"],))]
+    filas = conn.execute("SELECT empresa_id, estrato, grupo_id FROM marco_snapshot_item WHERE snapshot_id = %s",
+                         (m["snapshot_id"],)).fetchall()
+    marco = [(r["empresa_id"], r["estrato"]) for r in filas]
+    grupos = {r["empresa_id"]: r["grupo_id"] for r in filas if r["grupo_id"] is not None}
     borrados = items_borrados(conn, muestra_id)
     base = {"semilla": m["semilla"], "snapshot_id": m["snapshot_id"], "config_version": m["config_version"],
             "items_borrados": borrados, "snapshot_incompleto": len(marco) < m["snapshot_n"]}
@@ -358,7 +391,8 @@ def verificar(conn, muestra_id: int) -> dict:
     if base["snapshot_incompleto"]:
         return {**base, "reproducible": False, "resultado": "no_verificable"}
     definicion = definicion_estratos(m["criterios"], {e for _, e in marco})
-    nuevo = sorted(sortear_snapshot(marco, m["semilla"], definicion), key=lambda x: (x[1], x[3]))
+    nuevo = sorted(sortear_snapshot(marco, m["semilla"], definicion, grupos if m["criterios"].get("una_por_grupo") else None),
+                   key=lambda x: (x[1], x[3]))
     completo = sorted(guardado + [(b["empresa_id"], b["estrato"], b["rol"], b["orden"]) for b in borrados],
                       key=lambda x: (x[1], x[3]))
     ok = nuevo == completo

@@ -1,6 +1,7 @@
 // Estudios, partes, muestras, reemplazos y CSV para uContact (R1.5, R1.6, R1.7)
 import * as api from '../api.js';
 import { asistente, criteriosTexto } from './sorteo.js';
+import { enriquecer } from './fase2.js';
 import { $, $$, esc, main, toast, num, pct, fecha, fechaHora, rutFmt, est, estDe, etiqueta, pageHeader, stats, tabla, card, modal,
   confirmar, confirmarEscrito, seguirTarea, chips, activarChips, chipsSel } from '../ui.js';
 
@@ -166,6 +167,7 @@ export async function muestra(ctx, id) {
   main().innerHTML = pageHeader(m.nombre, '', `<a class="link" href="#/estudios/${m.estudio_id}">${esc(m.estudio_nombre)}</a> · ${estDe('muestra', m.estado)} · semilla <span class="mono">${m.semilla ?? '—'}</span> · configuración v${m.config_version ?? '—'} · snapshot #${m.snapshot_id ?? '—'}`,
     `<button class="btn btn-outline" id="mu-verificar">Verificar reproducibilidad</button>` +
     (ctx.puede('jefe') ? `<button class="btn btn-outline" id="mu-template">Guardar configuración como template</button>` : '') +
+    (m.estado === 'activa' && ctx.puede('steward', 'jefe') ? `<button class="btn btn-outline" id="mu-enriquecer">✨ Enriquecer</button>` : '') +
     (m.estado === 'activa' && ctx.puede('jefe') ? `<button class="btn btn-outline btn-del" id="mu-cerrar">Cerrar muestra</button>` : '') +
     (ctx.puede() ? `<button class="btn btn-danger" id="mu-borrar">Borrar muestra</button>` : '')) +
     (m.borrado_fallido ? `<div class="alert alert-error"><span><strong>El borrado de esta muestra no terminó</strong>
@@ -177,10 +179,12 @@ export async function muestra(ctx, id) {
     (r.avisos && r.avisos.length ? `<div class="alert alert-warn"><div><strong>Avisos del sorteo</strong><ul class="aviso-lista">${r.avisos.map(a => `<li>${esc(a)}</li>`).join('')}</ul></div></div>` : '') +
     stats([[tot('titulares'), 'Titulares', 's-total'], [tot('liberados'), 'Liberados', 's-free'], [tot('llamados'), 'Con llamadas', ''],
       [tot('completas'), 'Con alguna completa', 's-ok'], [tot('rechazos'), 'Rechazos', 's-bad'], [r.marco, 'Marco congelado', '']]) +
+    `<div id="mu-enr"></div>` +
     `<div class="grid-2">${card('Exclusiones al sortear', tabla([{ t: 'Regla', f: x => esc(etiqueta(x[0])) }, { t: 'Empresas', cls: 'num', f: x => num(x[1]) }],
       Object.entries(r.exclusiones || {}).sort((a, b) => b[1] - a[1]), 'Ninguna') + `<div class="card-body small muted">Universo que cumplía los filtros: <strong>${num(r.universo)}</strong> · marco disponible: <strong>${num(r.marco)}</strong><br>Criterios: ${criteriosTexto(m.criterios || {}, ds.datos, origenes)}
       ${r.incluir_sin_telefono ? `<br>Entraron <strong>${num(r.sin_telefono || 0)}</strong> empresas sin teléfono discable (la muestra las incluye).` : ''}
-      ${m.template_id ? `<br>Armada desde un template (#${m.template_id}); guarda su propia copia de los criterios.` : ''}</div>`, '', true)}
+      ${m.template_id ? `<br>Armada desde un template (#${m.template_id}); guarda su propia copia de los criterios.` : ''}
+      ${r.una_por_grupo ? `<br>Como máximo una empresa por grupo económico (${num(r.en_grupos || 0)} empresas del marco están en algún grupo).` : ''}</div>`, '', true)}
     ${card('Exportar a uContact', m.estado === 'activa' && ctx.puede('coordinador', 'jefe') ? `
       <div class="form-group"><label>Parte</label><select class="fselect" id="mu-parte">${m.partes.map(p => `<option value="${p.id}">${esc(p.nombre)}</option>`).join('')}</select></div>
       <div class="form-group"><label>Orígenes a exportar</label>${chips('exp-origenes', origenes.filter(o => o.activo || exp.origenes.includes(o.codigo)).map(o => [o.codigo, o.nombre]), exp.origenes)}
@@ -253,6 +257,18 @@ export async function muestra(ctx, id) {
   $('#mu-q').addEventListener('search', filtrar);
   items();
   const recargar = () => muestra(ctx, id);
+  // Fase 2: enriquecer las empresas de la muestra (sin teléfono discable o todas) y sus corridas
+  api.get('/enriquecimiento', { muestra_id: id }).then(cs => {
+    if (!cs.length || !$('#mu-enr')) return;
+    $('#mu-enr').innerHTML = `<div class="alert alert-info"><span>Enriquecimiento: ${cs.map(c => `<a class="link" href="#/enriquecimiento/${c.id}">#${c.id}</a>
+      ${esc(({ en_curso: 'en curso', terminada: 'terminada', detenida_tope: 'detenida por tope', cancelada: 'cancelada', error: 'con error', deshecha: 'deshecha' })[c.estado] || c.estado)}${c.con_telefono_nuevo !== null ? ` (${num(c.con_telefono_nuevo)} con teléfono nuevo)` : ''}`).join(' · ')}</span></div>`;
+  }).catch(() => {});
+  if ($('#mu-enriquecer')) $('#mu-enriquecer').onclick = async () => {
+    const alcance = await modal({ titulo: 'Enriquecer la muestra', cuerpo: `<p>Busca teléfono, sitio web, dirección y email institucional en Google Places, la web y el sitio de cada empresa.
+      Antes de gastar se muestra el costo estimado y hay que aprobarlo.</p>`,
+      acciones: [{ t: 'Cancelar' }, { t: 'Todas las de la muestra', valor: 'todas' }, { t: 'Las que no tienen teléfono discable', cls: 'btn-orange', valor: 'sin_telefono' }] });
+    if (alcance) enriquecer(ctx, { origen: 'muestra', muestra_id: +id, alcance });
+  };
   if ($('#mu-template')) $('#mu-template').onclick = async () => {
     const r = await modal({ titulo: 'Guardar configuración como template', ancho: 560, cuerpo: `
       <div class="form-group"><label>Nombre</label><input type="text" id="t-nombre" value="${esc(m.nombre)}" /></div>

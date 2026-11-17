@@ -23,6 +23,7 @@ export function criteriosTexto(c, datosLista, origenes) {
   if ((c.origenes || []).length) partes.push(`teléfonos de: ${c.origenes.map(o => nombreO[o] || o).join(', ')}`);
   if (c.incluir_provisoria) partes.push('incluye la base provisoria');
   if (c.incluir_sin_telefono) partes.push('incluye empresas sin teléfono');
+  if (c.una_por_grupo) partes.push('una empresa por grupo económico');
   if ((c.estratificar_por || []).length) partes.push(`estratos: ${c.estratificar_por.map(k => {
     const d = (c.estratos_def || {})[k];
     const det = !d ? '' : d.cortes && !d.por ? ` (tramos ${d.cortes.join(', ')})` : d.por ? ` (${d.por === 'anio' ? 'por año' : d.por === 'semestre' ? 'por semestre' : 'tramos ' + d.cortes.join(', ')})`
@@ -36,6 +37,8 @@ export function criteriosTexto(c, datosLista, origenes) {
 function estadoDe(c = {}) {
   const st = { filtros: {}, legado: { ...(c.filtros || {}) }, origenes: [...(c.origenes || [])],
     incluir_provisoria: !!c.incluir_provisoria, incluir_sin_telefono: !!c.incluir_sin_telefono,
+    // Fase 2 (Q3): una muestra nueva la trae marcada; un template o una muestra guardada, como estaba
+    una_por_grupo: Object.keys(c).length ? !!c.una_por_grupo : true,
     por: [...(c.estratificar_por || [])], defs: JSON.parse(JSON.stringify(c.estratos_def || {})), tamanos: {},
     n_todos: c.n_por_estrato ?? '', r_todos: c.n_por_estrato != null ? (c.reemplazos_por_estrato || 0) : '',
     template_estratos: (c.estratos || []).map(e => e.estrato) };
@@ -109,6 +112,7 @@ export async function asistente(ctx, { estudioId = null, templateId = null, para
     st.origenes = chipsSel(main(), 'origenes');
     st.incluir_provisoria = $('#m-provisoria').checked;
     st.incluir_sin_telefono = $('#m-sintel').checked && ds.regla_sin_telefono;
+    st.una_por_grupo = $('#m-grupo').checked;
   };
   const controlFiltro = (k, s) => {
     const d = datos[k]; const id = esc(k);
@@ -144,7 +148,9 @@ export async function asistente(ctx, { estudioId = null, templateId = null, para
       <label class="check mt"><input type="checkbox" id="m-provisoria" ${st.incluir_provisoria ? 'checked' : ''} /> Incluir la base provisoria (empresas sin RUT)</label>
       <label class="check"><input type="checkbox" id="m-sintel" ${st.incluir_sin_telefono || !ds.regla_sin_telefono ? 'checked' : ''} ${ds.regla_sin_telefono ? '' : 'disabled'} /> Incluir empresas sin teléfono discable</label>
       <div class="field-hint" id="m-sintel-hint">${ds.regla_sin_telefono ? 'Desmarcado: como siempre, las empresas sin teléfono discable no entran. Marcado: entran solo en esta muestra (las demás reglas se aplican igual).'
-        : 'Desactivado en la configuración general: las empresas sin teléfono entran en todas las muestras.'}</div>`;
+        : 'Desactivado en la configuración general: las empresas sin teléfono entran en todas las muestras.'}</div>
+      <label class="check mt"><input type="checkbox" id="m-grupo" ${st.una_por_grupo ? 'checked' : ''} /> Como máximo una empresa por grupo económico</label>
+      <div class="field-hint">Si sale sorteada una empresa de un grupo que ya tiene otra en la muestra, se saltea y sigue la siguiente del orden.</div>`;
     activarChips(el, () => {});
     activarBuscadores(el);
     $$('[data-quitar-f]', el).forEach(b => b.onclick = () => { leerPaso1(); delete st.filtros[b.dataset.quitarF]; pintarPaso1(); });
@@ -232,6 +238,7 @@ export async function asistente(ctx, { estudioId = null, templateId = null, para
     st.por.forEach(k => { if (st.defs[k]) c.estratos_def[k] = st.defs[k]; });
     if (st.incluir_provisoria) c.incluir_provisoria = true;
     if (st.incluir_sin_telefono) c.incluir_sin_telefono = true;
+    if (st.una_por_grupo) c.una_por_grupo = true;
     if (conTamanos) {
       const filas = $$('[data-n]').map(i => ({ estrato: i.dataset.n, n: +i.value || 0, reemplazos: +($(`[data-r="${CSS.escape(i.dataset.n)}"]`).value) || 0 }));
       c.estratos = filas.filter(x => x.n || x.reemplazos);

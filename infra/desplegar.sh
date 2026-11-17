@@ -125,8 +125,23 @@ base() {
     --repository-format=docker --location "$REGION"
 }
 
+# Fase 2: un secreto por proveedor del enriquecimiento. Se crean vacíos; las claves se cargan desde la
+# aplicación (Configuración → Enriquecimiento), que agrega versiones y nunca las muestra.
+secretos_proveedores() {
+  echo "▶ Secretos de los proveedores del enriquecimiento (Google Places, Brave Search, Claude)"
+  g services enable places.googleapis.com >/dev/null
+  local s rol
+  for s in empresas-places-key empresas-brave-key empresas-anthropic-key; do
+    existe g secrets describe "$s" || g secrets create "$s" --replication-policy=automatic >/dev/null
+    for rol in roles/secretmanager.secretVersionManager roles/secretmanager.secretAccessor; do
+      g secrets add-iam-policy-binding "$s" --member "serviceAccount:$SA" --role "$rol" >/dev/null
+    done
+  done
+}
+
 api() {
   limites
+  secretos_proveedores
   echo "▶ Imagen $IMAGEN"
   g builds submit --tag "$IMAGEN" .
   local url
@@ -264,15 +279,19 @@ for r in json.load(sys.stdin)["resultados"]:
 }
 
 programar() {
-  echo "▶ Cloud Scheduler: export de auditoría a BigQuery todos los días a las 5:10"
-  local url token
+  echo "▶ Cloud Scheduler: auditoría a BigQuery (5:10), foto de calidad (5:20) y duplicados difusos (5:30), Montevideo"
+  local url token nombre hora ruta
   url="$(g run services describe "$SERVICIO" --region "$REGION" --format 'value(status.url)')"
   token="$(g secrets versions access latest --secret empresas-job-token)"
-  existe g scheduler jobs describe empresas-auditoria-bq --location "$REGION" && \
-    g scheduler jobs delete empresas-auditoria-bq --location "$REGION" --quiet
-  g scheduler jobs create http empresas-auditoria-bq --location "$REGION" --schedule "10 5 * * *" \
-    --time-zone "America/Montevideo" --uri "${url}/api/jobs/auditoria-bq" --http-method POST \
-    --headers "X-Job-Token=${token}"
+  for job in "empresas-auditoria-bq|10 5 * * *|auditoria-bq" "empresas-calidad|20 5 * * *|calidad" \
+             "empresas-duplicados|30 5 * * *|duplicados"; do
+    IFS='|' read -r nombre hora ruta <<< "$job"
+    existe g scheduler jobs describe "$nombre" --location "$REGION" && \
+      g scheduler jobs delete "$nombre" --location "$REGION" --quiet
+    g scheduler jobs create http "$nombre" --location "$REGION" --schedule "$hora" \
+      --time-zone "America/Montevideo" --uri "${url}/api/jobs/${ruta}" --http-method POST \
+      --headers "X-Job-Token=${token}" --attempt-deadline 600s
+  done
 }
 
 case "${1:-}" in

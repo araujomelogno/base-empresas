@@ -44,7 +44,8 @@ def inicio(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
 @router.get("/config")
 def ver_config(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
     version, params = config.vigente(conn)
-    params = {**params, "cdr": config.cdr(params)}
+    params = {**params, "cdr": config.cdr(params), "enriquecimiento": config.enriquecimiento(params),
+              "dominios_genericos": params.get("dominios_genericos") or list(config.DOMINIOS_GENERICOS)}
     r = {"version": version, "parametros": params, "historial": config.historial(conn)}
     if u.rol == "admin":  # nunca el valor: solo si está configurada, cuándo y por quién
         r["cdr_password"] = cdr_corridas.estado_password(conn)

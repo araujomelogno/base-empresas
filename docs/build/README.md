@@ -122,3 +122,25 @@ python docs/build/manual_templates.py docs/Manual_de_usuario_Base_de_Empresas.do
 ```bash
 soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
 ```
+
+## Capturas y manual de la Fase 2 (calidad, enriquecimiento, duplicados y descubrimiento)
+
+`capturas_fase2.js` saca `56-calidad`, `57-estimacion`, `58-corrida`, `59-duplicados`, `60-descubrimiento` y `61-config-enriquecimiento`. Necesita la demo **recién cargada** y la API con los proveedores **simulados** (sin llamadas pagas):
+
+```bash
+cd api && DATABASE_URL=postgresql://postgres@localhost/empresas_demo AUTH_MODE=dev SERVE_WEB=1 TASKS_MODE=inline PROVEEDORES_MODO=simulado uvicorn app.main:app --port 8080
+```
+
+```bash
+BASE=http://localhost:8080 node docs/build/capturas_fase2.js docs/manual/img
+```
+
+`manual_fase2.py` agrega al Word las guías 26 a 29 (y la opción de grupo económico en la guía 7, la tabla de lectura y el glosario) a partir del manual anterior; después se regenera el PDF:
+
+```bash
+python docs/build/manual_fase2.py docs/Manual_de_usuario_Base_de_Empresas.docx docs/manual/img
+```
+
+```bash
+soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
+```

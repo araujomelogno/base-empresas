@@ -12,7 +12,7 @@ from psycopg.types.json import Jsonb
 
 from . import auditoria, criterios as crit
 
-CLAVES_PASOS = ("filtros", "campos", "atributos", "origenes", "incluir_provisoria", "incluir_sin_telefono",
+CLAVES_PASOS = ("filtros", "campos", "atributos", "origenes", "incluir_provisoria", "incluir_sin_telefono", "una_por_grupo",
                 "estratificar_por", "estratos_def", "estratos", "n_por_estrato", "reemplazos_por_estrato",
                 "estratos_descartados")
 
