@@ -52,6 +52,10 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 | D42 | Base provisoria: empresas sin RUT, sorteables, que pasan a la definitiva al tener RUT o al fusionarse | Vigente (12/11/2026) |
 | D43 | Reglas de fusión en cascada, exactas o flexibles, con las coincidencias decididas en el preview | Vigente (12/11/2026) |
 | D44 | Templates de sorteo como copias de criterios, empresas sin teléfono opcionales por muestra y todo dato de la empresa como filtro y estrato | Vigente (17/11/2026; reemplaza la habilitación por casillas de D34) |
+| D45 | Proveedores del enriquecimiento (Google Places, Brave Search, Claude) y riesgo aceptado de guardar el teléfono de Places | Vigente (17/11/2026) |
+| D46 | Enriquecimiento bajo demanda con estimación aprobada, tope por corrida y tope mensual duro; cascada de lo más barato a lo más caro | Vigente (17/11/2026) |
+| D47 | Duplicados difusos entre empresas con RUT y grupo económico (relacionadas sin fusionar, una por grupo en el sorteo) | Vigente (17/11/2026) |
+| D48 | Tablero de calidad por dimensión DMBOK con histórico diario | Vigente (17/11/2026) |
 
 ## D01 — Cloud SQL Postgres como núcleo
 
@@ -513,6 +517,58 @@ La configuración inicial usa 6 meses de enfriamiento desde el último contacto 
 **Descartado.** Templates que se apliquen «en vivo» (romperían la reproducibilidad); filtrar o estratificar por atributos de contacto; templates con opciones de exportación (P2); filtros combinados con «o» (P1).
 
 **Consecuencias.** Migración `0012_templates_sorteo.sql`: tabla `muestra_template`, `muestra.template_id` (ON DELETE SET NULL), se quita el CHECK de `estratificable`, índices de `empresa_atributo` por atributo y valor, y la función `norm_txt`. La vista previa del marco responde en menos de 1 segundo con 100.000 empresas. Sin costo de infraestructura.
+
+## D45 — Proveedores del enriquecimiento y riesgo de Google Places
+
+**Contexto.** Muchas empresas no tienen un teléfono discable y conseguirlo es trabajo manual de la sala. La fase 2 del PRD preveía una cascada de fuentes externas. (Spec: `specs/SPEC_fase2_enriquecimiento.md`; decisiones de Germán Araújo del 17/11/2026, D-1 y D-5.)
+
+**Decisión.**
+
+1. **Proveedores:** Google Places (Text Search, SKU Enterprise: devuelve teléfono y sitio), Brave Search (para encontrar el sitio oficial) y un **modelo chico de Claude** (hoy `claude-haiku-5-5`, parámetro de la configuración) que lee la portada y la página de contacto del sitio y devuelve, con salida estructurada (JSON schema), teléfonos, emails institucionales, dirección y si el sitio es de un estudio contable o jurídico. Tavily y SerpAPI no se integran salvo que se mida que hacen falta.
+2. **Se guarda el teléfono que devuelve Places**, con origen `google_places` en cada vínculo. Los términos de Google Maps Platform permiten guardar el `place_id` sin límite y la ubicación por 30 días, pero no habilitan expresamente guardar el teléfono ni el resto del contenido. **Riesgo aceptado** por dirección, con mitigaciones: el origen queda en cada vínculo (se puede borrar o desactivar en bloque), un interruptor de la configuración apaga Places sin desplegar, la latitud y la longitud no se piden ni se guardan, y se recomienda una consulta legal antes de usar Places en volumen (Q4).
+3. **Claves en Secret Manager**, una por proveedor (`empresas-places-key`, `empresas-brave-key`, `empresas-anthropic-key`), con el patrón de la contraseña del CDR: se cargan desde Configuración → Enriquecimiento, nunca se devuelven y la Auditoría registra solo qué secreto cambió. Sin clave, el proveedor aparece «no configurado» y la cascada lo saltea.
+4. **Datos personales (Ley 18.331):** solo datos institucionales. El prompt prohíbe nombres, celulares y emails de personas, y la salida **se valida** en el código: se descartan los teléfonos marcados como de una persona o que el texto presenta junto a un nombre o un título (Sr., Lic., Cr.…) y los emails cuya parte local no es genérica (info@, contacto@, ventas@…). El registro de cada paso guarda solo cuántos datos se descartaron, nunca cuáles.
+5. **Orígenes y atributos de sistema nuevos:** orígenes `google_places` («Google Places») y `web` («Sitio web») con prioridad baja (900 y 910, editable); atributos `email_institucional`, `google_place_id` y `rubro_descubrimiento`. Rendimiento por origen mide sola cuánto rinde cada fuente paga.
+
+**Descartado.** Enriquecimiento masivo automático (D46); scraping de directorios; Tavily y SerpAPI por ahora.
+
+## D46 — Enriquecimiento bajo demanda con topes
+
+**Contexto.** Enriquecer toda la base costaría del orden de US$2.400 cada 50.000 empresas; el gasto tiene que estar acotado y ser visible (D-2).
+
+**Decisión.**
+
+1. **Bajo demanda:** desde una muestra (empresas sin teléfono discable, o todas), desde Empresas con los filtros de la pantalla, o desde la ficha. Lanzan el administrador y el data steward; el jefe de estudio, solo desde una muestra.
+2. **Estimación aprobada antes de gastar.** La corrida nace «estimada» con la lista de empresas, las salteadas y su motivo (teléfono verificado, enriquecida en los últimos 90 días, no llamar, cerrada, provisoria con candidata en la definitiva —se sugiere fusionar— y, según el corte, las que ya tienen teléfono discable), el **costo máximo** (todos los pasos para todas, con las llamadas gratuitas de Places que quedan en el mes) y el **esperado** (con la tasa de éxito medida de Places; 60 % mientras no haya 20 pasos de historia). Si el máximo supera lo permitido (el menor entre el tope por corrida y lo que queda del mes) o el máximo de empresas por corrida, hay que reducir la cantidad (primeras o al azar) para aprobar.
+3. **Cascada de lo más barato a lo más caro:** fuentes propias (US$0) → Places → Brave (solo si falta el sitio) → lectura del sitio + Claude (solo si falta el teléfono). **El corte es configurable (Q1):** por defecto se corta apenas hay un teléfono; con «teléfono y sitio web» sigue hasta tener los dos. Un resultado de Places se acepta si el nombre tiene similitud de trigramas ≥ 0,6 y el departamento coincide cuando hay dato.
+4. **Tope duro:** antes de cada llamada paga se **reserva** su costo máximo en `enriquecimiento_paso`, en una transacción propia con un lock, verificando el gasto de la corrida y el del mes. Si no entra, la corrida se detiene («detenida por tope») sin hacer esa llamada. Después se registra el costo real (Claude, por tokens de entrada y de salida). Así ni las corridas concurrentes superan el tope mensual.
+5. **Se guarda empresa por empresa:** cancelar o llegar al tope no pierde lo conseguido. La corrida corre como tarea (Cloud Tasks) con progreso.
+6. **Los datos entran con confianza 30** (cargas 50, sala 80): el sitio, la dirección y el email son historia con fuente `enriquecimiento` y nunca pisan datos de mejor fuente; los teléfonos entran «sin verificar» y los verifica la sala con el .sav. Un sitio de estudio contable o jurídico marca sus teléfonos como intermediario sospechoso, con el motivo, y van a la bandeja de Intermediarios.
+7. **Deshacer** una corrida quita sus vínculos, su evidencia de origen y sus valores (la historia de una corrida deshecha deja de contar en la regla de supervivencia), salvo los teléfonos que la sala ya verificó.
+
+**Descartado.** Enriquecimiento automático al cargar o al sortear (queda como aviso sugerido, P1); topes «blandos» que solo avisen.
+
+**Consecuencias.** Tablas `enriquecimiento_corrida` (también los lotes de descubrimiento) y `enriquecimiento_paso`; `telefono.intermediario_motivo`; la historia acepta las fuentes `enriquecimiento` y `descubrimiento`. Bloque `enriquecimiento` en la configuración versionada (precios, topes, confianza, corte, modelo). Costo: solo el uso de las APIs, siempre bajo el tope mensual (valor inicial US$100).
+
+## D47 — Duplicados difusos y grupo económico
+
+**Contexto.** Las reglas de fusión resuelven filas sin RUT, pero no detectan dos empresas con RUT distinto que son la misma o del mismo grupo (D-3).
+
+**Decisión.**
+
+1. **Detección diaria** (Cloud Scheduler, y a mano desde la bandeja) de pares de la base definitiva con RUT distinto que comparten un teléfono discable (sin intermediarios y sin teléfonos con 5 o más RUT), el dominio del sitio (sin una lista editable de dominios genéricos), la dirección normalizada con el departamento, o una razón social con similitud ≥ 0,9 sin forma societaria.
+2. **Bandeja «Posibles duplicados»** con el par lado a lado y la evidencia. Tres decisiones, todas auditadas: **fusionar** (la fusión reversible de siempre, eligiendo cuál queda), **son grupo económico** (`grupo_economico` y `empresa.grupo_economico_id`: quedan relacionadas sin fusionarse; si una ya está en un grupo, la otra se suma) y **sin relación** (el par no se vuelve a proponer). Un par con una empresa dada de baja queda obsoleto.
+3. **Sorteo:** «Como máximo una empresa por grupo económico» (`criterios.una_por_grupo`), **marcada por defecto** en una muestra nueva (Q3). Si sale una empresa de un grupo que ya tiene otra en la muestra, se saltea y sigue la siguiente del orden; primero se completan los titulares de todos los estratos y después los reemplazos. La pertenencia a grupos se congela en el snapshot (`marco_snapshot_item.grupo_id`), así Verificar reproducibilidad sigue funcionando. La opción va en los criterios y en los templates; sin la clave (muestras viejas), el sorteo es el de siempre.
+
+**Descartado.** Fusionar automáticamente por un criterio (siempre decide el data steward). La exclusividad por cliente o tema queda fuera de esta fase (D-4).
+
+## D48 — Tablero de calidad
+
+**Contexto.** No había una medida de la calidad de la base ni una lista de trabajo semanal para el data steward.
+
+**Decisión.** Pantalla «Calidad de la base» (administrador, data steward y jefes) con una tarjeta por dimensión DMBOK del PRD —validez, unicidad, completitud, exactitud, actualidad, consistencia y base provisoria (informativa)—, cada indicador con su valor, meta, estado (cumple, cerca a 5 puntos, no cumple) y evolución. La exactitud se evalúa contra la medición de hace un trimestre («sube cada trimestre»). Cada indicador abre la lista de lo que lo incumple, con enlace a cada ficha; las alertas de consistencia (naturaleza que no coincide con la razón social, por ejemplo «SRL» con «… S.A.») se marcan como revisadas y vuelven si cambia la naturaleza o la razón social. Una tarjeta de enriquecimiento muestra el gasto del mes contra el tope, por proveedor, y el **costo por teléfono verificado** (gasto de enriquecimiento sobre los teléfonos de origen Google Places o Sitio web que pasaron a verificados), en el mes y acumulado, contra la meta de US$0,10. Un Cloud Scheduler diario guarda la foto de cada indicador en `calidad_medicion` (se puede correr dos veces: reemplaza la del día).
+
+**Descartado.** Calcular la evolución sin histórico (no se puede reconstruir); un reporte por correo (P1).
 
 ## Preguntas abiertas que heredan del PRD
 
