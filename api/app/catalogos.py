@@ -18,7 +18,7 @@ from .util import sin_tildes
 TIPOS = ("texto", "numero", "fecha", "lista")
 CLAVE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 PREFIJO = "atributo."          # campo de empresa_campo_historia
-ORIGENES_SISTEMA = ("sala", "manual", "sin_dato")
+ORIGENES_SISTEMA = ("sala", "manual", "sin_dato", "google_places", "web")
 SIN_DATO = "sin_dato"
 
 

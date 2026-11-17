@@ -46,7 +46,7 @@ def contar_nuevos(conn, umbral: int, telefono_ids: list[int] | None = None) -> i
 def sospechosos(conn, estado: str = "sospechoso") -> list[dict]:
     return conn.execute(
         """
-        SELECT t.id, t.e164, t.crudo, t.tipo, t.intermediario, t.intermediario_fecha, t.intermediario_por,
+        SELECT t.id, t.e164, t.crudo, t.tipo, t.intermediario, t.intermediario_fecha, t.intermediario_por, t.intermediario_motivo,
                count(DISTINCT v.empresa_id) AS n_empresas,
                count(DISTINCT e.ciiu) AS n_rubros,
                json_agg(json_build_object('rut', e.codigo, 'razon_social', e.razon_social, 'ciiu', e.ciiu,

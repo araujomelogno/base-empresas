@@ -23,9 +23,11 @@ SELECT h.id, h.campo, h.valor, h.fuente_tipo, h.fuente_id, h.confianza, h.actor,
 FROM empresa_campo_historia h
 LEFT JOIN carga c ON h.fuente_tipo = 'carga' AND c.id = h.fuente_id
 LEFT JOIN empresa_fusion f ON h.fuente_tipo = 'fusion' AND f.id = h.fuente_id
+LEFT JOIN enriquecimiento_corrida ec ON h.fuente_tipo IN ('enriquecimiento', 'descubrimiento') AND ec.id = h.fuente_id
 WHERE h.empresa_id = %s
   AND (c.id IS NULL OR c.estado <> 'deshecha')
   AND (f.id IS NULL OR f.deshecha IS NULL)
+  AND (ec.id IS NULL OR ec.deshecha IS NULL)
 """
 
 

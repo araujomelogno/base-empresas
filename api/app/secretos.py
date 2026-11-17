@@ -81,3 +81,19 @@ def guardar_cdr(valor: str) -> None:
         log.error("No se pudo guardar el secreto %s: %s", settings.CDR_SECRETO, type(e).__name__)
         raise HTTPException(502, f"No se pudo guardar la contraseña en Secret Manager ({type(e).__name__})."
                                  " Revisá los permisos de la cuenta de servicio sobre el secreto.") from e
+
+
+def leer(nombre: str) -> str | None:
+    try:
+        return proveedor().leer(nombre)
+    except Exception as e:
+        raise HTTPException(502, f"No se pudo leer el secreto {nombre}: {type(e).__name__}") from e
+
+
+def guardar(nombre: str, valor: str) -> None:
+    try:
+        proveedor().guardar(nombre, valor)
+    except Exception as e:
+        log.error("No se pudo guardar el secreto %s: %s", nombre, type(e).__name__)
+        raise HTTPException(502, f"No se pudo guardar la clave en Secret Manager ({type(e).__name__})."
+                                 " Revisá los permisos de la cuenta de servicio sobre el secreto.") from e

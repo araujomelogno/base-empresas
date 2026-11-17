@@ -395,3 +395,13 @@ td a.mono, td .mono { white-space: nowrap; }
 .filtro-dato .filtro-cab .btn-del { margin-left: auto; }
 .filtro-dato input[type=text], .filtro-dato input[type=number], .filtro-dato input[type=date] { max-width: 260px; }
 .filtro-dato .chips { margin-bottom: .3rem; }
+
+/* ══ Fase 2: calidad, duplicados ══ */
+.cal-ind { display: grid; grid-template-columns: 1fr auto 150px; gap: .75rem; align-items: center; padding: .6rem 0; border-top: 1px solid var(--border); }
+.cal-ind:first-of-type { border-top: none; }
+.cal-ind-valor { text-align: right; }
+.cal-ind-valor .stat-num { font-size: 1.35rem; font-weight: 800; color: var(--dark); margin-bottom: .2rem; }
+.cal-ind-spark { color: var(--orange-dark); }
+svg.spark { display: block; }
+.dup-lado { border: 1px solid var(--border); border-radius: 4px; padding: .7rem .85rem; background: var(--white); display: flex; flex-direction: column; gap: .2rem; }
+@media (max-width: 720px) { .cal-ind { grid-template-columns: 1fr auto; } .cal-ind-spark { grid-column: 1 / -1; } }

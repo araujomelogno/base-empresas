@@ -1,5 +1,6 @@
 // Configuración, naturalezas, no llamar, usuarios y auditoría (R1.4, R1.12, R1.13)
 import * as api from '../api.js';
+import { tarjetaEnriquecimiento, leerEnriquecimiento, activarEnriquecimiento } from './fase2.js';
 import { $, $$, esc, main, toast, num, fechaHora, est, pageHeader, tabla, card, modal, pedirTexto, confirmar, tabs,
   json } from '../ui.js';
 
@@ -11,6 +12,7 @@ export async function config(ctx) {
   const c = await api.get('/config');
   const p = c.parametros;
   const editable = ctx.puede('admin');
+  const enr = editable ? await api.get('/config/enriquecimiento') : null;
   const dis = editable ? '' : 'disabled';
   main().innerHTML = pageHeader('Configuración', `v${c.version}`, 'Parámetros de negocio. Cada cambio crea una versión nueva con autor y fecha; las muestras guardan la versión con la que se sortearon.') +
     `<div class="grid-2">${card('Reglas de contacto', `
@@ -37,6 +39,7 @@ export async function config(ctx) {
     card('Formato del CSV para uContact', `<div class="form-row"><div class="form-group"><label>Separador</label><input type="text" id="c-sep" value="${esc(p.csv_ucontact.separador)}" maxlength="1" ${dis} /></div><div></div></div>
       <div id="c-cols"></div>${editable ? `<button class="btn btn-outline btn-sm" id="c-col-mas">+ Columna</button>` : ''}`) +
     tarjetaCdr(p.cdr, c.cdr_password, editable) +
+    (enr ? tarjetaEnriquecimiento(p.enriquecimiento, p.dominios_genericos, enr.proveedores, editable) : '') +
     `<div class="grid-2">${editable ? card('Guardar', `<div class="form-group"><label>Comentario del cambio</label><input type="text" id="c-coment" placeholder="p. ej. enfriamiento a 12 meses (dirección, 30/10)" /></div>
       <button class="btn btn-orange" id="c-guardar">Guardar nueva versión</button>`) : ''}
       ${card('Historial de versiones', tabla([{ t: 'Versión', f: h => `<a class="link" data-ver="${h.version}">v${h.version}</a>` }, { t: 'Autor', k: 'autor' },
@@ -85,12 +88,14 @@ export async function config(ctx) {
       prefijos_salida: $('#c-prefijos').value.split(',').map(s => s.trim()).filter(Boolean),
       franjas, csv_ucontact: { separador: $('#c-sep').value || ';', columnas: cols },
       cdr: leerCdr(),
+      ...leerEnriquecimiento(p),
     };
     const r = await api.put('/config', { parametros: nuevo, comentario: $('#c-coment').value || null });
     toast(`Guardada la versión ${r.version}`, 'ok');
     config(ctx);
   };
   if (editable) activarCdr(ctx);
+  if (enr) activarEnriquecimiento(() => config(ctx));
 }
 
 // ── CDR: conexión a la base MySQL de uContact (SPEC_job_cdr_en_cloud) ──

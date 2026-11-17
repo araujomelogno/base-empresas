@@ -1,6 +1,7 @@
 // Inicio, buscador de empresas y ficha (R1.1, R1.2, R1.11)
 import * as api from '../api.js';
 import { agregarRut, fusionarCon } from './provisorias.js';
+import { enriquecer } from './fase2.js';
 import { $, $$, esc, main, toast, num, fecha, fechaHora, rutFmt, est, estDe, etiqueta, pageHeader, stats, tabla, card, modal,
   pedirTexto, confirmar, tabs } from '../ui.js';
 
@@ -39,7 +40,7 @@ export async function inicio(ctx) {
 }
 
 // ── Buscador ──
-let _filtros = { q: '', departamento: '', tamano: '', naturaleza: '', disponible: '', base: 'definitiva', pagina: 1 };
+let _filtros = { q: '', departamento: '', tamano: '', naturaleza: '', disponible: '', base: 'definitiva', sin_telefono: '', sin_web: '', pagina: 1 };
 
 export async function empresas(ctx) {
   const v = await api.get('/empresas/valores');
@@ -57,10 +58,12 @@ export async function empresas(ctx) {
       <select class="fselect" id="f-disponible">${opt([['true', 'Disponibles'], ['false', 'No disponibles']], _filtros.disponible, 'Disponibilidad')}</select>
       <select class="fselect" id="f-base" title="Base">${[['definitiva', 'Base definitiva'], ['provisoria', 'Base provisoria'], ['ambas', 'Ambas bases']].map(([k, t]) =>
         `<option value="${k}" ${k === _filtros.base ? 'selected' : ''}>${t}</option>`).join('')}</select>
+      <select class="fselect" id="f-sin_telefono">${opt([['true', 'Sin teléfono discable'], ['false', 'Con teléfono discable']], _filtros.sin_telefono, 'Teléfono')}</select>
+      <select class="fselect" id="f-sin_web">${opt([['true', 'Sin sitio web'], ['false', 'Con sitio web']], _filtros.sin_web, 'Sitio web')}</select>
       <button class="btn btn-dark btn-sm" id="f-buscar">Buscar</button></div></div>
       <div class="card-body tight" id="e-res"></div></div>`;
   const buscar = async (pagina = 1) => {
-    ['q', 'departamento', 'tamano', 'naturaleza', 'disponible', 'base'].forEach(k => { _filtros[k] = $('#f-' + k).value; });
+    ['q', 'departamento', 'tamano', 'naturaleza', 'disponible', 'base', 'sin_telefono', 'sin_web'].forEach(k => { _filtros[k] = $('#f-' + k).value; });
     _filtros.pagina = pagina;
     const r = await api.get('/empresas', _filtros);
     if (r.item && r.empresas.length === 1) {  // F1.4: #1234 lleva directo a la ficha, pestaña Muestras, con la fila resaltada
@@ -79,9 +82,15 @@ export async function empresas(ctx) {
       { t: 'Tel. discables', cls: 'num', f: e => num(e.telefonos_discables) },
       { t: 'Disponibilidad', f: e => e.disponible ? est('disponible') : e.reglas.map(r => est('no_disponible', etiqueta(r))).join(' ') },
     ], r.empresas, 'No hay empresas con esos filtros') +
-      `<div class="card-body gap" style="justify-content:space-between"><span class="small muted">${num(r.total)} empresas · página ${r.pagina} de ${paginas}</span>
+      `<div class="card-body gap" style="justify-content:space-between"><span class="small muted">${num(r.total)} empresas · página ${r.pagina} de ${paginas}
+         ${ctx.puede('steward') && r.total ? ` · <a class="link" href="javascript:void 0" id="e-enriquecer">✨ Enriquecer estas ${num(r.total)} empresas</a>` : ''}</span>
        <span class="gap"><button class="btn btn-outline btn-sm" id="p-ant" ${r.pagina <= 1 ? 'disabled' : ''}>‹ Anterior</button>
        <button class="btn btn-outline btn-sm" id="p-sig" ${r.pagina >= paginas ? 'disabled' : ''}>Siguiente ›</button></span></div>`;
+    if ($('#e-enriquecer')) $('#e-enriquecer').onclick = () => {
+      const filtros = Object.fromEntries(Object.entries(_filtros).filter(([k, v]) => k !== 'pagina' && v !== ''));
+      ['disponible', 'sin_telefono', 'sin_web'].forEach(k => { if (k in filtros) filtros[k] = filtros[k] === 'true'; });
+      enriquecer(ctx, { origen: 'lista', filtros, alcance: 'todas' });
+    };
     $('#p-ant').onclick = () => buscar(r.pagina - 1);
     $('#p-sig').onclick = () => buscar(r.pagina + 1);
   };
@@ -194,6 +203,7 @@ export async function ficha(ctx, rut, params) {
   let acciones = [
     ctx.puede('steward') && !e.baja ? `<button class="btn btn-outline btn-sm" id="a-editar">Editar datos</button>` : '',
     ctx.puede('steward') && !e.baja ? `<button class="btn btn-outline btn-sm" id="a-fusionar">Fusionar otra empresa</button>` : '',
+    ctx.puede('steward') && !e.baja ? `<button class="btn btn-outline btn-sm" id="a-enriquecer">✨ Enriquecer</button>` : '',
     ctx.puede('admin', 'steward') && !e.baja ? `<button class="btn btn-outline btn-sm btn-del" id="a-nollamar">No llamar</button>` : '',
     ctx.puede() ? `<button class="btn btn-danger btn-sm" id="a-borrar">Borrar empresa</button>` : '',
   ];
@@ -204,6 +214,9 @@ export async function ficha(ctx, rut, params) {
     ${e.fantasia ? ' · ' + esc(e.fantasia) : ''} · ${estDe('empresa', e.estado)} ${e.baja ? est('error', e.baja) : ''}`, acciones.join('')) +
     (prov && !e.baja ? `<div class="alert alert-info"><span><strong>Empresa de la base provisoria</strong> (no trae RUT). Se puede sortear y llamar.
       Pasa a la base definitiva al agregarle el RUT o al fusionarla con una empresa que lo tiene.<span id="f-cands"></span></span></div>` : '') +
+    (e.grupo ? `<div class="alert alert-info"><span><strong>Grupo económico «${esc(e.grupo.nombre)}»</strong> (relacionadas, no fusionadas):
+      ${e.grupo.empresas.filter(x => x.id !== e.id).map(x => `<a class="link" href="#/empresas/${esc(x.codigo)}">${esc(x.razon_social || x.codigo)}</a>`).join(', ')}
+      ${ctx.puede('steward') ? ` · <a class="link" href="javascript:void 0" id="a-grupo-ren">cambiar el nombre</a> · <a class="link" href="javascript:void 0" id="a-grupo-quitar">sacarla del grupo</a>` : ''}</span></div>` : '') +
     (e.baja === 'fusionada' ? `<div class="alert alert-warn">Esta empresa fue absorbida por <a class="link" href="#/empresas/${e.fusionada_en_rut}">${rutFmt(e.fusionada_en_rut)}</a>.</div>` : '') +
     (d.disponible ? `<div class="alert alert-success">Disponible para muestras.</div>`
       : `<div class="alert alert-warn"><span>No disponible: ${(d.reglas || []).map(r => `<strong>${esc(etiqueta(r))}</strong>`).join(', ')}${d.hasta ? ` · hasta ${fecha(d.hasta)}` : ''}</span></div>`) +
@@ -215,6 +228,16 @@ export async function ficha(ctx, rut, params) {
   $$('[data-tabs="ficha"] .tab').forEach(b => b.onclick = () => { location.hash = `#/empresas/${rut}?tab=${b.dataset.tab}`; });
   const el = $('#f-tab');
   const recargar = () => ficha(ctx, rut, params);
+  if ($('#a-enriquecer')) $('#a-enriquecer').onclick = () => enriquecer(ctx, { origen: 'ficha', rut: e.codigo, alcance: 'todas' });
+  if ($('#a-grupo-ren')) $('#a-grupo-ren').onclick = async () => {
+    const n = await pedirTexto('Grupo económico', 'Nombre del grupo');
+    if (!n) return;
+    await api.put(`/grupos/${e.grupo.id}`, { nombre: n }); toast('Nombre cambiado', 'ok'); recargar();
+  };
+  if ($('#a-grupo-quitar')) $('#a-grupo-quitar').onclick = async () => {
+    if (!await confirmar('Sacar del grupo', 'La empresa deja de estar relacionada con las otras del grupo (si queda una sola, el grupo se disuelve).', 'Sacar del grupo')) return;
+    await api.del(`/empresas/${e.codigo}/grupo`); toast('Listo', 'ok'); recargar();
+  };
 
   if (tab === 'datos') {
     el.innerHTML = card('Valores vigentes', `<dl class="kv">${CAMPOS.map(([c, t]) => {
@@ -249,7 +272,9 @@ export async function ficha(ctx, rut, params) {
         t.estado_telefono !== 'valido' ? est('error', t.estado_telefono) : ''].join(' ') },
       { t: 'RUTs', cls: 'num', k: 'n_empresas' }, { t: 'Intentos', cls: 'num', f: t => num(t.intentos) },
       { t: 'Último intento', f: t => fechaHora(t.ultimo_intento) },
-      { t: 'Origen', f: t => (t.origenes || []).map(o => `<div class="small" title="${esc(o.fuente_tipo)}${o.fuente_id ? ' #' + o.fuente_id : ''} · ${esc(fecha(o.fecha))}">${esc(o.nombre)}</div>`).join('') || '—' },
+      { t: 'Origen', f: t => (t.origenes || []).map(o => `<div class="small" title="${esc(o.fuente_tipo)}${o.fuente_id ? ' #' + o.fuente_id : ''} · ${esc(fecha(o.fecha))}">${esc(o.nombre)}${
+        o.fuente_tipo === 'enriquecimiento' && o.fuente_id ? ` · <a class="link" href="#/enriquecimiento/${o.fuente_id}">enriquecimiento #${o.fuente_id}</a>, ${esc(fecha(o.fecha))}`
+        : o.fuente_tipo === 'descubrimiento' && o.fuente_id ? ` · <a class="link" href="#/descubrimiento/${o.fuente_id}">descubrimiento #${o.fuente_id}</a>, ${esc(fecha(o.fecha))}` : ''}</div>`).join('') || '—' },
       { t: 'Contacto', k: 'contacto' },
     ], e.telefonos, 'Sin teléfonos'), ctx.puede('steward') ? `<button class="btn btn-orange btn-sm" id="t-agregar">+ Teléfono</button>` : '', true);
     $$('[data-vinc]').forEach(s => s.onchange = async () => {
@@ -290,11 +315,13 @@ export async function ficha(ctx, rut, params) {
     const evento = (x) => `<li class="${clase[x.tipo] || ''}"><div class="tl-fecha">${fechaHora(x.fecha)} · ${esc(x.tipo)}</div>
       <div class="tl-desc">${esc(x.descripcion)}</div><div class="tl-meta">${esc(x.fuente || '')}${x.actor ? ' · ' + esc(x.actor) : ''}</div></li>`;
     // F2.4: lo que trajo una ingesta del .sav se agrupa en una línea desplegable
-    const grupo = (g) => `<li class="t-ingesta"><div class="tl-fecha">${fechaHora(g.fecha)} · ingesta .sav</div>
-      <details class="tl-grupo"><summary class="tl-desc"><a class="link" href="#/sav/${g.ingesta_id}">${esc(g.titulo)}</a>: ${esc(g.descripcion.slice(g.titulo.length + 2))}</summary>
+    // Fase 2: lo mismo para una corrida de enriquecimiento o un lote de descubrimiento
+    const enlace = (g) => g.tipo === 'ingesta' ? `#/sav/${g.ingesta_id}` : `#/${g.tipo}/${g.corrida_id}`;
+    const grupo = (g) => `<li class="t-ingesta"><div class="tl-fecha">${fechaHora(g.fecha)} · ${g.tipo === 'ingesta' ? 'ingesta .sav' : esc(g.tipo)}</div>
+      <details class="tl-grupo"><summary class="tl-desc"><a class="link" href="${enlace(g)}">${esc(g.titulo)}</a>: ${esc(g.descripcion.slice(g.titulo.length + 2))}</summary>
       <ul class="timeline tl-sub">${g.eventos.map(evento).join('')}</ul></details>
       <div class="tl-meta">${esc(g.fuente)}${g.actor ? ' · ' + esc(g.actor) : ''}</div></li>`;
-    el.innerHTML = card('Línea de tiempo', e.linea_de_tiempo.length ? `<ul class="timeline">${e.linea_de_tiempo.map(x => x.tipo === 'ingesta' ? grupo(x) : evento(x)).join('')}</ul>`
+    el.innerHTML = card('Línea de tiempo', e.linea_de_tiempo.length ? `<ul class="timeline">${e.linea_de_tiempo.map(x => ['ingesta', 'enriquecimiento', 'descubrimiento'].includes(x.tipo) ? grupo(x) : evento(x)).join('')}</ul>`
       : '<div class="empty-state">Sin eventos</div>');
   } else if (tab === 'fusiones') {
     el.innerHTML = card('Fusiones', tabla([

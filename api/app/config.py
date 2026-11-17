@@ -122,6 +122,66 @@ class ConfigCdr(BaseModel):
         return self
 
 
+PROVEEDORES = ("google_places", "brave", "claude")
+DOMINIOS_GENERICOS = ["gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "live.com", "adinet.com.uy", "vera.com.uy",
+                      "facebook.com", "instagram.com", "linkedin.com", "twitter.com", "x.com", "wa.me", "whatsapp.com",
+                      "google.com", "sites.google.com", "wixsite.com", "blogspot.com", "mercadolibre.com.uy",
+                      "paginasamarillas.com.uy", "guiamovil.com.uy", "ancel.com.uy"]
+DIRECTORIOS = ["facebook.com", "instagram.com", "linkedin.com", "twitter.com", "x.com", "youtube.com", "tiktok.com",
+               "wa.me", "whatsapp.com", "google.com", "maps.google.com", "mercadolibre.com.uy", "paginasamarillas.com.uy",
+               "guiamovil.com.uy", "uruguayempresas.com", "empresasuruguay.com.uy", "infoisinfo.com.uy", "cylex.com.uy",
+               "dateas.com", "tuugo.com.uy", "foursquare.com", "tripadvisor.com", "wikipedia.org", "dnb.com", "bps.gub.uy",
+               "dgi.gub.uy", "gub.uy"]
+
+
+class ConfigEnriquecimiento(BaseModel):
+    """B1 (SPEC_fase2_enriquecimiento). Las claves de API NO van acá: viven en Secret Manager (una por proveedor)."""
+    google_places_activo: bool = True
+    brave_activo: bool = True
+    claude_activo: bool = True
+    # Precios unitarios (verificados el 17/11/2026; se actualizan a mano si el proveedor cambia precios)
+    precio_places: float = Field(0.035, ge=0, le=10)          # US$ por llamada Text Search Enterprise
+    places_gratis_mes: int = Field(1000, ge=0, le=1_000_000)  # llamadas sin costo por mes
+    precio_brave: float = Field(0.005, ge=0, le=10)           # US$ por búsqueda
+    modelo_claude: str = "claude-haiku-5-5"
+    precio_claude_entrada: float = Field(0.10, ge=0, le=1000)  # US$ por millón de tokens
+    precio_claude_salida: float = Field(0.50, ge=0, le=1000)
+    tokens_entrada_estimados: int = Field(6000, ge=100, le=200_000)
+    tokens_salida_estimados: int = Field(400, ge=10, le=20_000)
+    # Topes
+    tope_mensual: float = Field(100.0, ge=0, le=100_000)
+    tope_corrida: float = Field(20.0, ge=0, le=100_000)
+    max_empresas_corrida: int = Field(2000, ge=1, le=100_000)
+    # Datos que entran: confianza baja (cargas 50, sala 80) para no pisar datos de mejor fuente
+    confianza: int = Field(30, ge=1, le=100)
+    dias_sin_reenriquecer: int = Field(90, ge=0, le=3650)
+    # Q1: «telefono» corta la cascada apenas hay un teléfono; «telefono_y_web» sigue hasta tener los dos
+    corte: Literal["telefono", "telefono_y_web"] = "telefono"
+    similitud_places: float = Field(0.6, ge=0.1, le=1.0)
+    tasa_exito_places: float = Field(0.6, ge=0, le=1)          # mientras no haya historia
+    max_paginas_descubrimiento: int = Field(3, ge=1, le=3)
+    directorios: list[str] = Field(default_factory=lambda: list(DIRECTORIOS))
+
+    @field_validator("modelo_claude")
+    @classmethod
+    def modelo_ok(cls, v):
+        v = v.strip()
+        if not re.fullmatch(r"claude-[a-z0-9.\-]+", v):
+            raise ValueError("modelo de Claude inválido (por ejemplo claude-haiku-5-5)")
+        return v
+
+    @model_validator(mode="after")
+    def topes_ok(self):
+        if self.tope_corrida > self.tope_mensual:
+            raise ValueError("el tope por corrida no puede ser mayor que el tope mensual")
+        return self
+
+
+def enriquecimiento(parametros: dict) -> dict:
+    """Bloque enriquecimiento de una versión de configuración, con los valores por defecto."""
+    return ConfigEnriquecimiento.model_validate(parametros.get("enriquecimiento") or {}).model_dump()
+
+
 def cdr(parametros: dict) -> dict:
     """Bloque cdr de una versión de configuración, con los valores por defecto (las versiones
     anteriores a este cambio no lo tienen)."""
@@ -146,6 +206,9 @@ class Parametros(BaseModel):
     contacto_efectivo: list[str]
     csv_ucontact: CsvUcontact
     cdr: ConfigCdr = Field(default_factory=ConfigCdr)
+    # SPEC_fase2_enriquecimiento: enriquecimiento (B1) y dominios que no cuentan como «mismo sitio» en los duplicados (B4)
+    enriquecimiento: ConfigEnriquecimiento = Field(default_factory=ConfigEnriquecimiento)
+    dominios_genericos: list[str] = Field(default_factory=lambda: list(DOMINIOS_GENERICOS))
 
     @field_validator("reglas_disponibilidad")
     @classmethod

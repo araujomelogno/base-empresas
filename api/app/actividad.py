@@ -357,12 +357,14 @@ def linea_de_tiempo(conn, empresa_id: int, limite: int = 300, ver_contactos: boo
           SELECT h.fecha, 'dato' AS tipo,
                  h.campo || ' = ' || coalesce(h.valor, '∅') AS descripcion,
                  h.fuente_tipo || coalesce(' #' || h.fuente_id, '') AS fuente, h.actor,
-                 CASE WHEN h.fuente_tipo = 'sala' THEN h.fuente_id END AS ingesta_id, 'dato' AS clase
+                 CASE WHEN h.fuente_tipo = 'sala' THEN h.fuente_id END AS ingesta_id,
+                 CASE WHEN h.fuente_tipo IN ('enriquecimiento', 'descubrimiento') THEN 'enr_' || h.campo ELSE 'dato' END AS clase,
+                 CASE WHEN h.fuente_tipo IN ('enriquecimiento', 'descubrimiento') THEN h.fuente_tipo || ':' || h.fuente_id END AS corrida
           FROM empresa_campo_historia h WHERE h.empresa_id = %(e)s
           UNION ALL
           SELECT i.inicio, 'llamada', t.e164 || ' · ' || coalesce(i.disposicion, 'sin disposición')
                  || coalesce(' · ' || i.duracion || ' s', ''), coalesce(i.campania, 'marcador manual'), i.encuestador,
-                 NULL, 'llamada'
+                 NULL, 'llamada', NULL
           FROM intento i JOIN telefono t ON t.id = i.telefono_id WHERE i.empresas && %(ids)s::int[]
           UNION ALL
           SELECT ps.fecha, 'resultado', p.nombre || ': ' || ps.estado
@@ -370,14 +372,17 @@ def linea_de_tiempo(conn, empresa_id: int, limite: int = 300, ver_contactos: boo
                  s.nombre, ps.encuestador,
                  (SELECT sf.ingesta_id FROM sav_fila sf WHERE sf.item_id = ps.item_id AND sf.parte_id = ps.parte_id
                    ORDER BY sf.actualizado DESC LIMIT 1),
-                 'resultado_' || ps.estado
+                 'resultado_' || ps.estado, NULL
           FROM item_parte_estado ps JOIN muestra_item mi ON mi.id = ps.item_id JOIN parte p ON p.id = ps.parte_id
           JOIN estudio s ON s.id = p.estudio_id
           WHERE (mi.empresa_id = %(e)s OR mi.empresa_id IN (SELECT id FROM empresa WHERE fusionada_en = %(e)s))
             AND ps.fecha IS NOT NULL
           UNION ALL
           SELECT vh.fecha, 'teléfono', coalesce(t.e164, t.crudo) || ' → ' || vh.estado, vh.fuente_tipo, vh.actor,
-                 CASE WHEN vh.fuente_tipo = 'sala' THEN vh.fuente_id END, 'telefono_' || vh.estado
+                 CASE WHEN vh.fuente_tipo = 'sala' THEN vh.fuente_id END,
+                 CASE WHEN vh.fuente_tipo IN ('enriquecimiento', 'descubrimiento') THEN CASE WHEN vh.detalle ? 'place_id' THEN 'enr_tel_places' ELSE 'enr_tel_web' END
+                      ELSE 'telefono_' || vh.estado END,
+                 CASE WHEN vh.fuente_tipo IN ('enriquecimiento', 'descubrimiento') THEN vh.fuente_tipo || ':' || vh.fuente_id END
           FROM telefono_vinculo_historia vh JOIN telefono t ON t.id = vh.telefono_id WHERE vh.empresa_id = %(e)s
           UNION ALL
           SELECT ch.fecha, 'contacto',
@@ -385,7 +390,7 @@ def linea_de_tiempo(conn, empresa_id: int, limite: int = 300, ver_contactos: boo
                       ELSE coalesce({nombre}, 'contacto') || ': ' || ch.campo || ' = ' || coalesce(ch.valor, '∅') END,
                  ch.fuente_tipo || coalesce(' #' || ch.fuente_id, ''), ch.actor,
                  CASE WHEN ch.fuente_tipo = 'sala' THEN ch.fuente_id END,
-                 CASE WHEN ch.campo = 'alta' THEN 'contacto_alta' ELSE 'contacto_edicion' END
+                 CASE WHEN ch.campo = 'alta' THEN 'contacto_alta' ELSE 'contacto_edicion' END, NULL
           FROM contacto_historia ch LEFT JOIN contacto c ON c.id = ch.contacto_id
           WHERE (ch.empresa_id = %(e)s OR ch.contacto_id IN (SELECT id FROM contactos))
             AND (ch.campo = 'alta' OR ch.campo NOT IN ('cargo','area','email') OR ch.fuente_tipo <> 'sala'
@@ -395,17 +400,17 @@ def linea_de_tiempo(conn, empresa_id: int, limite: int = 300, ver_contactos: boo
           SELECT ct.ultima_vez, 'contacto',
                  'se habló con ' || {nombre} || ' al ' || coalesce(t.e164, t.crudo),
                  ct.fuente_tipo || coalesce(' #' || ct.fuente_id, ''), NULL,
-                 CASE WHEN ct.fuente_tipo = 'sala' THEN ct.fuente_id END, 'contacto_se_hablo'
+                 CASE WHEN ct.fuente_tipo = 'sala' THEN ct.fuente_id END, 'contacto_se_hablo', NULL
           FROM contacto_telefono ct JOIN contacto c ON c.id = ct.contacto_id JOIN telefono t ON t.id = ct.telefono_id
           WHERE ct.contacto_id IN (SELECT id FROM contactos) AND ct.relacion = 'se_hablo'
           UNION ALL
           SELECT coalesce(mi.liberado_fecha, m.sorteada), 'muestra',
                  m.nombre || ' · ' || mi.rol || ' · estrato ' || mi.estrato || CASE WHEN mi.liberado THEN '' ELSE ' (no liberado)' END,
-                 'sorteo', m.sorteada_por, NULL, 'muestra'
+                 'sorteo', m.sorteada_por, NULL, 'muestra', NULL
           FROM muestra_item mi JOIN muestra m ON m.id = mi.muestra_id WHERE mi.empresa_id = %(e)s
           UNION ALL
           SELECT n.fecha, 'no llamar', n.motivo || CASE WHEN n.activo THEN '' ELSE ' (levantado)' END, n.solicitante,
-                 n.registrado_por, NULL, 'no_llamar'
+                 n.registrado_por, NULL, 'no_llamar', NULL
           FROM no_llamar n WHERE n.alcance = 'empresa' AND n.objeto_id = %(e)s
         ) x WHERE fecha IS NOT NULL ORDER BY fecha DESC LIMIT %(l)s
         """, {"e": empresa_id, "l": limite, "ver": ver_contactos, "ids": ids}).fetchall()
@@ -414,10 +419,21 @@ def linea_de_tiempo(conn, empresa_id: int, limite: int = 300, ver_contactos: boo
         "SELECT g.id, p.nombre AS parte, s.nombre AS estudio FROM sav_ingesta g JOIN parte p ON p.id = g.parte_id"
         " JOIN estudio s ON s.id = p.estudio_id WHERE g.id = ANY(%s)", (ingestas,))} if ingestas else {}
     salida, grupos = [], {}
+    ocultas = ("ingesta_id", "clase", "corrida")
     for f in filas:
+        if f["corrida"]:  # Fase 2: lo que trajo una corrida de enriquecimiento o un lote de descubrimiento, agrupado
+            tipo, cid = f["corrida"].split(":")
+            if f["corrida"] not in grupos:
+                titulo = f"{'Enriquecimiento' if tipo == 'enriquecimiento' else 'Descubrimiento'} #{cid}"
+                grupos[f["corrida"]] = {"fecha": f["fecha"], "tipo": tipo, "corrida_id": int(cid), "fuente": titulo.lower(),
+                                        "actor": f["actor"], "titulo": titulo, "eventos": [], "_clases": []}
+                salida.append(grupos[f["corrida"]])
+            grupos[f["corrida"]]["eventos"].append({k: v for k, v in f.items() if k not in ocultas})
+            grupos[f["corrida"]]["_clases"].append(f["clase"])
+            continue
         gid = f["ingesta_id"] if f["ingesta_id"] in nombres else None
         if gid is None:
-            salida.append({k: v for k, v in f.items() if k not in ("ingesta_id", "clase")})
+            salida.append({k: v for k, v in f.items() if k not in ocultas})
             continue
         if gid not in grupos:
             g = nombres[gid]
@@ -425,11 +441,27 @@ def linea_de_tiempo(conn, empresa_id: int, limite: int = 300, ver_contactos: boo
                            "actor": f["actor"], "titulo": f"Ingesta .sav #{gid} ({g['estudio']}, {g['parte']})",
                            "eventos": [], "_clases": []}
             salida.append(grupos[gid])
-        grupos[gid]["eventos"].append({k: v for k, v in f.items() if k not in ("ingesta_id", "clase")})
+        grupos[gid]["eventos"].append({k: v for k, v in f.items() if k not in ocultas})
         grupos[gid]["_clases"].append(f["clase"])
     for g in grupos.values():
-        g["descripcion"] = g["titulo"] + ": " + _resumen(g.pop("_clases"))
+        clases = g.pop("_clases")
+        g["descripcion"] = g["titulo"] + ": " + (_resumen_enr(clases) if g["tipo"] != "ingesta" else _resumen(clases))
     return salida
+
+
+def _resumen_enr(clases: list[str]) -> str:
+    """«Enriquecimiento #N: 1 teléfono (Google Places), web, dirección»."""
+    partes = []
+    for clase, origen in (("enr_tel_places", "Google Places"), ("enr_tel_web", "Sitio web")):
+        k = clases.count(clase)
+        if k:
+            partes.append(f"{k} {'teléfono' if k == 1 else 'teléfonos'} ({origen})")
+    for clase, texto in (("enr_web", "web"), ("enr_direccion", "dirección"), ("enr_atributo.email_institucional", "email")):
+        if clase in clases:
+            partes.append(texto)
+    if "enr_razon_social" in clases:
+        partes.append("alta con los datos de Google Places")
+    return ", ".join(partes) or "sin cambios"
 
 
 def _resumen(clases: list[str]) -> str:

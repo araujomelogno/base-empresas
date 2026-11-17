@@ -10,6 +10,7 @@ import * as provisorias from './vistas/provisorias.js';
 import * as sorteo from './vistas/sorteo.js';
 import * as campo from './vistas/campo.js';
 import * as admin from './vistas/admin.js';
+import * as fase2 from './vistas/fase2.js';
 
 const CFG = window.APP_CONFIG || {};
 const S = { me: null, auth: null, fb: null, ultimoError: null };
@@ -19,11 +20,13 @@ const ROL_NOMBRE = { admin: 'Administrador/a', steward: 'Data steward', jefe: 'J
 const MENU = [
   ['General', [['inicio', '🏠', 'Inicio'], ['empresas', '🏢', 'Empresas']]],
   ['Base de datos', [['cargas', '📥', 'Cargas', ['steward']], ['intermediarios', '☎️', 'Intermediarios', ['steward']],
-    ['revision', '🔀', 'Revisión de fusiones', ['steward']], ['provisorias', '🗂️', 'Base provisoria', ['steward']]]],
+    ['revision', '🔀', 'Revisión de fusiones', ['steward']], ['provisorias', '🗂️', 'Base provisoria', ['steward']],
+    ['duplicados', '👯', 'Posibles duplicados', ['steward']], ['descubrimiento', '🔭', 'Buscar empresas nuevas', ['steward']],
+    ['enriquecimiento', '✨', 'Enriquecimiento', ['steward']]]],
   ['Estudios', [['estudios', '📋', 'Estudios y muestras', ['jefe', 'coordinador']], ['templates', '🧩', 'Templates de sorteo', ['jefe']]]],
   ['Campo', [['sav', '📊', 'Ingesta .sav', ['coordinador']], ['conciliacion', '🧩', 'Conciliación', ['coordinador']],
     ['actividad', '📈', 'Actividad', ['coordinador', 'jefe']]]],
-  ['Administración', [['config', '⚙️', 'Configuración', ['admin']], ['atributos', '🏷️', 'Atributos', ['admin', 'steward']],
+  ['Administración', [['calidad', '✅', 'Calidad de la base', ['steward', 'jefe']], ['config', '⚙️', 'Configuración', ['admin']], ['atributos', '🏷️', 'Atributos', ['admin', 'steward']],
     ['origenes', '📞', 'Orígenes de teléfono', ['admin', 'steward']], ['naturalezas', '⚖️', 'Naturalezas jurídicas', ['admin', 'steward']],
     ['no-llamar', '🚫', 'No llamar', ['admin', 'steward']], ['usuarios', '👥', 'Usuarios', ['admin']],
     ['auditoria', '🔎', 'Auditoría', ['admin', 'steward']]]],
@@ -38,6 +41,9 @@ const RUTAS = [
   [/^sav$/, campo.sav], [/^sav\/(\d+)$/, campo.savDetalle], [/^conciliacion$/, campo.conciliacion], [/^actividad$/, campo.actividad], [/^actividad\/empresas$/, campo.empresasLlamadas],
   [/^config$/, admin.config], [/^atributos$/, admin.atributos], [/^origenes$/, admin.origenes], [/^naturalezas$/, admin.naturalezas], [/^no-llamar$/, admin.noLlamar],
   [/^usuarios$/, admin.usuarios], [/^auditoria$/, admin.auditoria],
+  [/^calidad$/, fase2.calidad], [/^calidad\/([a-z_]+)$/, fase2.calidadLista], [/^enriquecimiento$/, fase2.corridas],
+  [/^enriquecimiento\/(\d+)$/, fase2.corrida], [/^duplicados$/, fase2.duplicados], [/^descubrimiento$/, fase2.descubrimiento],
+  [/^descubrimiento\/(\d+)$/, fase2.descubrimientoLote],
 ];
 
 export const ctx = {

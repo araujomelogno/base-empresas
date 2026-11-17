@@ -51,3 +51,12 @@ SECRETOS = os.environ.get("SECRETOS", "secretmanager" if AUTH_MODE == "firebase"
 CDR_SECRETO = os.environ.get("CDR_SECRETO", "empresas-cdr-mysql-password")
 # Cloud Run job que lee el CDR. Vacío: "Correr ahora" ejecuta el job en el mismo proceso (desarrollo, tests).
 CDR_JOB = os.environ.get("CDR_JOB", "")
+# Claves de API del enriquecimiento (SPEC_fase2_enriquecimiento, B1): se cargan desde Configuración → Enriquecimiento
+# y nunca se muestran. Un secreto por proveedor.
+SECRETOS_PROVEEDORES = {
+    "google_places": os.environ.get("PLACES_SECRETO", "empresas-places-key"),
+    "brave": os.environ.get("BRAVE_SECRETO", "empresas-brave-key"),
+    "claude": os.environ.get("ANTHROPIC_SECRETO", "empresas-anthropic-key"),
+}
+# simulado: los proveedores responden con datos de ejemplo, sin llamadas pagas (demo local). real: APIs de verdad.
+PROVEEDORES_MODO = os.environ.get("PROVEEDORES_MODO", "real")
