@@ -147,7 +147,7 @@ soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx
 
 ## Naturalezas jurídicas (editar y borrar)
 
-La captura `25-naturalezas.png` la saca `capturas.js` (como siempre, con la demo recién cargada). `manual_naturalezas.py` actualiza el párrafo de la guía 17 y la figura 42 del Word; después se regenera el PDF:
+La captura `25-naturalezas.png` la saca `capturas.js` (como siempre, con la demo recién cargada). `manual_naturalezas.py` actualiza el párrafo de la guía 17 del Word (la figura 42 se cambió una vez, en el PR anterior); después se regenera el PDF:
 
 ```bash
 python docs/build/manual_naturalezas.py docs/Manual_de_usuario_Base_de_Empresas.docx docs/manual/img

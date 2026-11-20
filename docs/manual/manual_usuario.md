@@ -605,7 +605,7 @@ El catálogo de naturalezas tiene la marca **excluida de contacto**. Las empresa
 
 El administrador tiene, en cada fila:
 
-- **Editar:** cambia el **nombre** y la marca de exclusión. El **código** no se cambia: lo guardan la historia de las empresas, la configuración y los criterios de las muestras.
+- **Editar:** cambia el **nombre** y la marca de exclusión. El **código** de una naturaleza en uso no se cambia: lo guardan la historia de las empresas, la configuración y los criterios de las muestras. Si ninguna empresa la usa ni la usó, también se puede corregir el código (sirve para arreglar una naturaleza que quedó **sin código**, que la lista marca en rojo).
 - **Borrar:** aparece solo en las naturalezas que **ninguna empresa tiene ni tuvo** (las demás dicen «en uso»). Si la naturaleza estaba excluida, al borrarla se crea una versión nueva de la configuración.
 
 **+ Naturaleza** no deja crear un código que ya existe: para cambiarlo, usá Editar. Todo queda en Auditoría.

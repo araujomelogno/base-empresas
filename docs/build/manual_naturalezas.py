@@ -1,4 +1,5 @@
-"""Actualiza el manual de Word: naturalezas jurídicas (editar el nombre y la exclusión, borrar las que no se usan).
+"""Actualiza el manual de Word: naturalezas jurídicas (editar el nombre y la exclusión, corregir el código y borrar las
+que no se usan).
 
 Uso: python docs/build/manual_naturalezas.py docs/Manual_de_usuario_Base_de_Empresas.docx docs/manual/img
 """
@@ -12,7 +13,7 @@ from PIL import Image
 
 RUTA, IMG = sys.argv[1], sys.argv[2]
 d = docx.Document(RUTA)
-ids = itertools.count(9950)
+ids = itertools.count(9960)
 
 
 def par(prefijo, estilo=None):
@@ -182,18 +183,18 @@ def caption_texto(prefijo, t):
 
 
 
-# ── Guía 17: naturalezas jurídicas (editar y borrar) ──
+# ── Guía 17: el código se corrige si la naturaleza no se usa ──
 p = par("Naturalezas jurídicas. El catálogo tiene la marca")
 nuevo = texto([("Naturalezas jurídicas.", True), (" El catálogo tiene la marca ", False), ("excluida de contacto", True),
                (": las empresas de una naturaleza excluida se guardan y se siguen actualizando, pero nunca entran a un marco "
                 "muestral ni a un CSV. Cambiar la marca crea una versión nueva de la configuración. Editar cambia el nombre y "
-                "la marca; el código no se cambia, porque lo guardan la historia de las empresas, la configuración y los "
-                "criterios de las muestras. Borrar aparece solo en las naturalezas que ninguna empresa tiene ni tuvo (las demás "
-                "dicen «en uso»); si estaba excluida, se crea una versión nueva de la configuración. Todo queda en Auditoría.",
-                False)], p)
+                "la marca. El código de una naturaleza en uso no se cambia, porque lo guardan la historia de las empresas, la "
+                "configuración y los criterios de las muestras; si ninguna empresa la usa ni la usó, también se puede corregir "
+                "el código (sirve para arreglar una naturaleza que quedó sin código, que la lista marca en rojo). Borrar "
+                "aparece solo en las naturalezas que ninguna empresa tiene ni tuvo (las demás dicen «en uso»); si estaba "
+                "excluida, se crea una versión nueva de la configuración. Todo queda en Auditoría.", False)], p)
 p._p.addprevious(nuevo)
 p._p.getparent().remove(p._p)
-cambiar_imagen("Figura 42.", "25-naturalezas", 0.8)
 
 d.save(RUTA)
 print("ok")

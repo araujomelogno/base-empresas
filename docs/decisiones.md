@@ -56,7 +56,7 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 | D46 | Enriquecimiento bajo demanda con estimación aprobada, tope por corrida y tope mensual duro; cascada de lo más barato a lo más caro | Vigente (17/11/2026) |
 | D47 | Duplicados difusos entre empresas con RUT y grupo económico (relacionadas sin fusionar, una por grupo en el sorteo) | Vigente (17/11/2026) |
 | D48 | Tablero de calidad por dimensión DMBOK con histórico diario | Vigente (17/11/2026) |
-| D49 | Naturalezas jurídicas: se edita el nombre y la exclusión, el código no; se borra solo si ninguna empresa la usa ni la usó | Vigente (20/11/2026) |
+| D49 | Naturalezas jurídicas: se edita el nombre y la exclusión; el código y el borrado, solo si ninguna empresa la usa ni la usó; rutas por id | Vigente (20/11/2026) |
 
 ## D01 — Cloud SQL Postgres como núcleo
 
@@ -577,10 +577,11 @@ La configuración inicial usa 6 meses de enfriamiento desde el último contacto 
 
 **Decisión.**
 
-1. **Se edita el nombre y la exclusión; el código no.** El código es el identificador que guardan la historia de cada empresa (`empresa_campo_historia`, campo `naturaleza`), la configuración (`naturalezas_excluidas`, también en las versiones anteriores) y los criterios de las muestras y los templates. Cambiarlo rompería esas referencias. El nombre no puede quedar vacío ni repetir el de otra naturaleza.
+1. **Se edita el nombre y la exclusión; el código, solo si la naturaleza no se usa.** El código es el identificador que guardan la historia de cada empresa (`empresa_campo_historia`, campo `naturaleza`), la configuración (`naturalezas_excluidas`, también en las versiones anteriores) y los criterios de las muestras y los templates. Cambiarlo rompería esas referencias. El nombre no puede quedar vacío ni repetir el de otra naturaleza.
 2. **Se borra solo si ninguna empresa la tiene ni la tuvo**: ninguna empresa (activa o dada de baja) con esa naturaleza y ningún dato de la historia con ese código. Si estaba excluida, primero se saca de las excluidas con una versión nueva de la configuración.
 3. **Auditoría:** `naturaleza.crear`, `naturaleza.editar` (con antes y después) y `naturaleza.borrar`. Solo el administrador.
-4. **Compatibilidad:** `POST /api/naturalezas` sigue creando o actualizando (lo usan la demo y `fase0/cargar_excluidos.py`); la pantalla edita con `PUT /api/naturalezas/{codigo}` y no deja crear un código que ya existe.
+4. **Compatibilidad:** `POST /api/naturalezas` sigue creando o actualizando (lo usan la demo y `fase0/cargar_excluidos.py`); la pantalla no deja crear un código que ya existe.
+5. **Rutas por id, no por código (corrección del 20/11/2026).** Editar y borrar van a `PUT` / `DELETE /api/naturalezas/{id}`. El alta anterior no validaba el código y en producción quedó una naturaleza con el código vacío: con el código en la URL, el borrado iba a `/api/naturalezas/`, la API respondía una redirección 307 a la dirección directa de Cloud Run y el navegador la cortaba («Failed to fetch»). Una naturaleza **sin uso** puede corregir su código (si estaba excluida, el código nuevo reemplaza al viejo en la configuración), y la migración `0014_naturaleza_codigo.sql` agrega un CHECK `NOT VALID` que impide códigos vacíos de acá en adelante sin rechazar las filas viejas, que se corrigen o se borran desde la pantalla.
 
 **Descartado.** Cambiar el código reescribiendo la historia (la historia es append-only); borrar una naturaleza en uso dejando a sus empresas sin naturaleza.
 
