@@ -361,21 +361,51 @@ export async function naturalezas(ctx) {
     card('Catálogo', tabla([
       { t: 'Código', f: n => `<span class="mono td-strong">${esc(n.codigo)}</span>` }, { t: 'Nombre', k: 'nombre' },
       { t: 'Empresas', cls: 'num', f: n => num(n.empresas) },
-      { t: 'Contacto', f: n => editable ? `<label class="check"><input type="checkbox" data-excl="${esc(n.codigo)}" data-nombre="${esc(n.nombre)}" ${n.excluida ? 'checked' : ''} /> excluida</label>`
+      { t: 'Contacto', f: n => editable ? `<label class="check"><input type="checkbox" data-excl="${esc(n.codigo)}" ${n.excluida ? 'checked' : ''} /> excluida</label>`
         : (n.excluida ? est('error', 'excluida') : est('ok', 'habilitada')) },
+      ...(editable ? [{ t: '', f: n => `<div class="td-actions"><button class="btn btn-outline btn-sm" data-n-editar="${esc(n.codigo)}">Editar</button>
+        ${n.borrable ? `<button class="btn btn-outline btn-sm btn-del" data-n-borrar="${esc(n.codigo)}">Borrar</button>`
+          : `<span class="small muted" title="${esc(n.empresas_todas ? `La tienen ${n.empresas_todas} empresas` : 'Figura en la historia de empresas')}">en uso</span>`}</div>` }] : []),
     ], lista), '', true) +
-    `<p class="small muted mt">Cambiar una exclusión crea una versión nueva de la configuración. La carga inicial sale de la hoja "excluidos" del Excel de referencia (ver fase0/cargar_excluidos.py).</p>`;
+    `<p class="small muted mt">Cambiar una exclusión crea una versión nueva de la configuración. El código no se cambia: lo guardan la historia de las empresas,
+      la configuración y los criterios de las muestras. Solo se borra una naturaleza que ninguna empresa usa ni usó.
+      La carga inicial sale de la hoja "excluidos" del Excel de referencia (ver fase0/cargar_excluidos.py).</p>`;
+  const de = (c) => lista.find(n => n.codigo === c);
+  const url = (c) => `/naturalezas/${encodeURIComponent(c)}`;
   $$('[data-excl]').forEach(i => i.onchange = async () => {
     try {
-      await api.post('/naturalezas', { codigo: i.dataset.excl, nombre: i.dataset.nombre, excluida: i.checked });
+      await api.put(url(i.dataset.excl), { excluida: i.checked });
       toast(`${i.dataset.excl}: ${i.checked ? 'excluida' : 'habilitada'}`, 'ok');
     } catch (e) { toast(e.message, 'err'); i.checked = !i.checked; }
   });
+  $$('[data-n-editar]').forEach(b => b.onclick = async () => {
+    const n = de(b.dataset.nEditar);
+    const r = await modal({ titulo: `Editar ${n.codigo}`, cuerpo: `
+      <div class="form-row"><div class="form-group"><label>Código</label><input type="text" value="${esc(n.codigo)}" disabled />
+        <div class="field-hint">No se cambia: lo usan la historia, la configuración y las muestras.</div></div>
+      <div class="form-group"><label>Nombre</label><input type="text" id="ne-n" value="${esc(n.nombre)}" /></div></div>
+      <label class="check"><input type="checkbox" id="ne-e" ${n.excluida ? 'checked' : ''} /> Excluida de contacto</label>
+      <div class="small muted mt">${num(n.empresas)} empresas activas tienen esta naturaleza.</div>`,
+    acciones: [{ t: 'Cancelar' }, { t: 'Guardar', cls: 'btn-orange', fn: (m) => api.put(url(n.codigo),
+      { nombre: $('#ne-n', m).value, excluida: $('#ne-e', m).checked }) }] });
+    if (r) { toast('Naturaleza guardada', 'ok'); naturalezas(ctx); }
+  });
+  $$('[data-n-borrar]').forEach(b => b.onclick = async () => {
+    const n = de(b.dataset.nBorrar);
+    if (!await confirmar('Borrar naturaleza', `Se borra <strong>${esc(n.codigo)}</strong> (${esc(n.nombre)}) del catálogo. Ninguna empresa la tiene.${
+      n.excluida ? ' Como estaba excluida, se crea una versión nueva de la configuración.' : ''}`, 'Borrar', 'btn-danger')) return;
+    try { await api.del(url(n.codigo)); toast(`${n.codigo} borrada`, 'ok'); naturalezas(ctx); } catch (e) { toast(e.message, 'err'); }
+  });
   if ($('#n-nueva')) $('#n-nueva').onclick = async () => {
     const r = await modal({ titulo: 'Nueva naturaleza jurídica', cuerpo: `
-      <div class="form-row"><div class="form-group"><label>Código</label><input type="text" id="nn-c" /></div><div class="form-group"><label>Nombre</label><input type="text" id="nn-n" /></div></div>
+      <div class="form-row"><div class="form-group"><label>Código</label><input type="text" id="nn-c" placeholder="SRL" /></div><div class="form-group"><label>Nombre</label><input type="text" id="nn-n" /></div></div>
       <label class="check"><input type="checkbox" id="nn-e" /> Excluida de contacto</label>`,
-    acciones: [{ t: 'Cancelar' }, { t: 'Guardar', cls: 'btn-orange', fn: (b) => api.post('/naturalezas', { codigo: $('#nn-c', b).value, nombre: $('#nn-n', b).value, excluida: $('#nn-e', b).checked }) }] });
+    acciones: [{ t: 'Cancelar' }, { t: 'Guardar', cls: 'btn-orange', fn: (m) => {
+      const codigo = $('#nn-c', m).value.trim().toUpperCase();
+      if (!codigo || !$('#nn-n', m).value.trim()) { toast('Completá el código y el nombre', 'err'); return false; }
+      if (de(codigo)) { toast(`Ya existe la naturaleza ${codigo}: editala desde la lista`, 'err'); return false; }
+      return api.post('/naturalezas', { codigo, nombre: $('#nn-n', m).value, excluida: $('#nn-e', m).checked });
+    } }] });
     if (r) naturalezas(ctx);
   };
 }

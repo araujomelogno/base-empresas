@@ -603,6 +603,13 @@ En **Administración → Orígenes de teléfono** está el catálogo de dónde s
 
 El catálogo de naturalezas tiene la marca **excluida de contacto**. Las empresas de una naturaleza excluida se guardan y se siguen actualizando, pero nunca entran a un marco muestral ni a un CSV. Cambiar la marca crea una versión nueva de la configuración.
 
+El administrador tiene, en cada fila:
+
+- **Editar:** cambia el **nombre** y la marca de exclusión. El **código** no se cambia: lo guardan la historia de las empresas, la configuración y los criterios de las muestras.
+- **Borrar:** aparece solo en las naturalezas que **ninguna empresa tiene ni tuvo** (las demás dicen «en uso»). Si la naturaleza estaba excluida, al borrarla se crea una versión nueva de la configuración.
+
+**+ Naturaleza** no deja crear un código que ya existe: para cambiarlo, usá Editar. Todo queda en Auditoría.
+
 ![Naturalezas jurídicas](img/25-naturalezas.png)
 
 ### No llamar
