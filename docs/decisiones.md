@@ -56,6 +56,7 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 | D46 | Enriquecimiento bajo demanda con estimación aprobada, tope por corrida y tope mensual duro; cascada de lo más barato a lo más caro | Vigente (17/11/2026) |
 | D47 | Duplicados difusos entre empresas con RUT y grupo económico (relacionadas sin fusionar, una por grupo en el sorteo) | Vigente (17/11/2026) |
 | D48 | Tablero de calidad por dimensión DMBOK con histórico diario | Vigente (17/11/2026) |
+| D49 | Naturalezas jurídicas: se edita el nombre y la exclusión, el código no; se borra solo si ninguna empresa la usa ni la usó | Vigente (20/11/2026) |
 
 ## D01 — Cloud SQL Postgres como núcleo
 
@@ -569,6 +570,19 @@ La configuración inicial usa 6 meses de enfriamiento desde el último contacto 
 **Decisión.** Pantalla «Calidad de la base» (administrador, data steward y jefes) con una tarjeta por dimensión DMBOK del PRD —validez, unicidad, completitud, exactitud, actualidad, consistencia y base provisoria (informativa)—, cada indicador con su valor, meta, estado (cumple, cerca a 5 puntos, no cumple) y evolución. La exactitud se evalúa contra la medición de hace un trimestre («sube cada trimestre»). Cada indicador abre la lista de lo que lo incumple, con enlace a cada ficha; las alertas de consistencia (naturaleza que no coincide con la razón social, por ejemplo «SRL» con «… S.A.») se marcan como revisadas y vuelven si cambia la naturaleza o la razón social. Una tarjeta de enriquecimiento muestra el gasto del mes contra el tope, por proveedor, y el **costo por teléfono verificado** (gasto de enriquecimiento sobre los teléfonos de origen Google Places o Sitio web que pasaron a verificados), en el mes y acumulado, contra la meta de US$0,10. Un Cloud Scheduler diario guarda la foto de cada indicador en `calidad_medicion` (se puede correr dos veces: reemplaza la del día).
 
 **Descartado.** Calcular la evolución sin histórico (no se puede reconstruir); un reporte por correo (P1).
+
+## D49 — Editar y borrar naturalezas jurídicas
+
+**Contexto.** La pantalla de Naturalezas jurídicas solo permitía crear naturalezas y marcarlas como excluidas: no había forma de corregir un nombre ni de sacar una naturaleza que sobraba.
+
+**Decisión.**
+
+1. **Se edita el nombre y la exclusión; el código no.** El código es el identificador que guardan la historia de cada empresa (`empresa_campo_historia`, campo `naturaleza`), la configuración (`naturalezas_excluidas`, también en las versiones anteriores) y los criterios de las muestras y los templates. Cambiarlo rompería esas referencias. El nombre no puede quedar vacío ni repetir el de otra naturaleza.
+2. **Se borra solo si ninguna empresa la tiene ni la tuvo**: ninguna empresa (activa o dada de baja) con esa naturaleza y ningún dato de la historia con ese código. Si estaba excluida, primero se saca de las excluidas con una versión nueva de la configuración.
+3. **Auditoría:** `naturaleza.crear`, `naturaleza.editar` (con antes y después) y `naturaleza.borrar`. Solo el administrador.
+4. **Compatibilidad:** `POST /api/naturalezas` sigue creando o actualizando (lo usan la demo y `fase0/cargar_excluidos.py`); la pantalla edita con `PUT /api/naturalezas/{codigo}` y no deja crear un código que ya existe.
+
+**Descartado.** Cambiar el código reescribiendo la historia (la historia es append-only); borrar una naturaleza en uso dejando a sus empresas sin naturaleza.
 
 ## Preguntas abiertas que heredan del PRD
 
