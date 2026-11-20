@@ -23,6 +23,7 @@ Registro maestro de empresas por RUT del que salen muestras aleatorias y auditab
 | Despliegue de templates de sorteo, empresas sin teléfono, filtros y estratos y formatos del CSV | [`docs/despliegue_templates_sorteo.md`](docs/despliegue_templates_sorteo.md) |
 | Despliegue de la Fase 2: calidad de la base, enriquecimiento, posibles duplicados y descubrimiento | [`docs/despliegue_fase2_enriquecimiento.md`](docs/despliegue_fase2_enriquecimiento.md) |
 | Despliegue de editar y borrar naturalezas jurídicas | [`docs/despliegue_naturalezas.md`](docs/despliegue_naturalezas.md) |
+| Despliegue del arreglo «Failed to fetch» al borrar naturalezas sin código | [`docs/despliegue_naturalezas_sin_codigo.md`](docs/despliegue_naturalezas_sin_codigo.md) |
 
 ## Estructura
 

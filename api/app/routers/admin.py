@@ -142,34 +142,39 @@ class Naturaleza(BaseModel):
 class EdicionNaturaleza(BaseModel):
     nombre: str | None = None
     excluida: bool | None = None
+    codigo: str | None = None
 
 
-def _nombre_naturaleza(conn, nombre: str | None, codigo: str) -> str:
+def _nombre_naturaleza(conn, nombre: str | None, nid: int | None) -> str:
     n = (nombre or "").strip()
     if not n:
         raise HTTPException(422, "El nombre está vacío")
-    otra = conn.execute("SELECT codigo FROM naturaleza_juridica WHERE lower(nombre) = lower(%s) AND codigo <> %s",
-                        (n, codigo)).fetchone()
+    otra = conn.execute("SELECT codigo FROM naturaleza_juridica WHERE lower(nombre) = lower(%s) AND id IS DISTINCT FROM %s",
+                        (n, nid)).fetchone()
     if otra:
-        raise HTTPException(409, f"Ya hay una naturaleza con ese nombre ({otra['codigo']})")
+        raise HTTPException(409, f"Ya hay una naturaleza con ese nombre ({otra['codigo'] or 'sin código'})")
     return n
 
 
-def _excluir(conn, codigo: str, excluida: bool, actor: str) -> int | None:
-    """Excluir o habilitar crea una versión nueva de la configuración (la fuente de verdad versionada)."""
+def _excluir(conn, codigo: str, excluida: bool, actor: str, quitar: str | None = None) -> int | None:
+    """Excluir o habilitar crea una versión nueva de la configuración (la fuente de verdad versionada).
+    quitar: un código viejo que sale de las excluidas (al corregir el código de una naturaleza sin uso)."""
     _, params = config.vigente(conn)
     excl = set(params["naturalezas_excluidas"])
-    nuevo = (excl | {codigo}) if excluida else (excl - {codigo})
+    nuevo = ((excl - {quitar}) | {codigo}) if excluida else (excl - {codigo, quitar})
     if nuevo == excl:
         return None
     return config.guardar(conn, {**params, "naturalezas_excluidas": sorted(nuevo)}, actor,
-                          f"{'Excluye' if excluida else 'Habilita'} naturaleza {codigo}")
+                          f"{'Excluye' if excluida else 'Habilita'} naturaleza {codigo or '(sin código)'}")
 
 
-def _naturaleza_o_404(conn, codigo: str) -> dict:
-    n = conn.execute("SELECT * FROM naturaleza_juridica WHERE codigo = %s FOR UPDATE", (codigo.strip().upper(),)).fetchone()
+def _naturaleza_o_404(conn, nid: int) -> dict:
+    """Por id y no por código: una naturaleza vieja puede tener el código vacío (antes no se validaba), y con el
+    código en la URL («/naturalezas/») la API respondía una redirección que el navegador cortaba."""
+    n = conn.execute("SELECT n.*, u.* FROM naturaleza_juridica n CROSS JOIN LATERAL (" + _USO_NATURALEZA + ") u"
+                     " WHERE n.id = %s FOR UPDATE OF n", (nid,)).fetchone()
     if n is None:
-        raise HTTPException(404, f"No existe la naturaleza {codigo}")
+        raise HTTPException(404, "No existe esa naturaleza")
     return n
 
 
@@ -190,40 +195,51 @@ def guardar_naturaleza(body: Naturaleza, conn=Depends(get_conn), u: Usuario = De
     return {"codigo": codigo, "config_version": version}
 
 
-@router.put("/naturalezas/{codigo}")
-def editar_naturaleza(codigo: str, body: EdicionNaturaleza, conn=Depends(get_conn), u: Usuario = Depends(requiere("admin"))):
-    n = _naturaleza_o_404(conn, codigo)
+@router.put("/naturalezas/{nid}")
+def editar_naturaleza(nid: int, body: EdicionNaturaleza, conn=Depends(get_conn), u: Usuario = Depends(requiere("admin"))):
+    n = _naturaleza_o_404(conn, nid)
     cambios = {}
+    codigo, viejo = n["codigo"], None
+    if body.codigo is not None and body.codigo.strip().upper() != n["codigo"]:
+        # El código se corrige solo si nadie lo usa (ninguna empresa ni dato de la historia lo tiene)
+        if n["empresas_todas"] or n["historia"]:
+            raise HTTPException(409, f"El código de {n['codigo']} no se cambia: lo usan empresas o su historia")
+        codigo = body.codigo.strip().upper()
+        if not codigo:
+            raise HTTPException(422, "El código está vacío")
+        if conn.execute("SELECT 1 FROM naturaleza_juridica WHERE codigo = %s AND id <> %s", (codigo, nid)).fetchone():
+            raise HTTPException(409, f"Ya existe la naturaleza {codigo}")
+        conn.execute("UPDATE naturaleza_juridica SET codigo = %s WHERE id = %s", (codigo, nid))
+        cambios["codigo"] = {"antes": n["codigo"], "despues": codigo}
+        viejo = n["codigo"]
     if body.nombre is not None:
-        nombre = _nombre_naturaleza(conn, body.nombre, n["codigo"])
+        nombre = _nombre_naturaleza(conn, body.nombre, nid)
         if nombre != n["nombre"]:
-            conn.execute("UPDATE naturaleza_juridica SET nombre = %s WHERE id = %s", (nombre, n["id"]))
+            conn.execute("UPDATE naturaleza_juridica SET nombre = %s WHERE id = %s", (nombre, nid))
             cambios["nombre"] = {"antes": n["nombre"], "despues": nombre}
-    version = None
-    if body.excluida is not None:
-        version = _excluir(conn, n["codigo"], body.excluida, u.email)
-        if version:
-            cambios["excluida"] = {"antes": n["excluida"], "despues": body.excluida}
+    excluida = n["excluida"] if body.excluida is None else body.excluida
+    version = _excluir(conn, codigo, excluida, u.email, quitar=viejo) if (body.excluida is not None or viejo is not None) else None
+    if version and excluida != n["excluida"]:
+        cambios["excluida"] = {"antes": n["excluida"], "despues": excluida}
     if cambios:
-        auditoria.registrar(conn, u.email, "naturaleza.editar", "naturaleza_juridica", n["codigo"], cambios)
-    return {"codigo": n["codigo"], "config_version": version, "cambios": list(cambios)}
+        auditoria.registrar(conn, u.email, "naturaleza.editar", "naturaleza_juridica", codigo or f"id:{nid}", cambios)
+    return {"id": nid, "codigo": codigo, "config_version": version, "cambios": list(cambios)}
 
 
-@router.delete("/naturalezas/{codigo}")
-def borrar_naturaleza(codigo: str, conn=Depends(get_conn), u: Usuario = Depends(requiere("admin"))):
-    n = _naturaleza_o_404(conn, codigo)
-    uso = conn.execute("SELECT u.* FROM naturaleza_juridica n CROSS JOIN LATERAL (" + _USO_NATURALEZA + ") u WHERE n.id = %s",
-                       (n["id"],)).fetchone()
-    if uso["empresas_todas"]:
-        raise HTTPException(409, f"{n['codigo']} la tienen {uso['empresas_todas']} empresas: no se puede borrar."
+@router.delete("/naturalezas/{nid}")
+def borrar_naturaleza(nid: int, conn=Depends(get_conn), u: Usuario = Depends(requiere("admin"))):
+    n = _naturaleza_o_404(conn, nid)
+    nombre = n["codigo"] or n["nombre"]
+    if n["empresas_todas"]:
+        raise HTTPException(409, f"{nombre} la tienen {n['empresas_todas']} empresas: no se puede borrar."
                                  " Si no se usa más, cambiale el nombre o dejala como está")
-    if uso["historia"]:
-        raise HTTPException(409, f"{n['codigo']} figura en la historia de {uso['historia']} datos de empresas: no se puede borrar")
+    if n["historia"]:
+        raise HTTPException(409, f"{nombre} figura en la historia de {n['historia']} datos de empresas: no se puede borrar")
     version = _excluir(conn, n["codigo"], False, u.email) if n["excluida"] else None
-    conn.execute("DELETE FROM naturaleza_juridica WHERE id = %s", (n["id"],))
-    auditoria.registrar(conn, u.email, "naturaleza.borrar", "naturaleza_juridica", n["codigo"],
+    conn.execute("DELETE FROM naturaleza_juridica WHERE id = %s", (nid,))
+    auditoria.registrar(conn, u.email, "naturaleza.borrar", "naturaleza_juridica", n["codigo"] or f"id:{nid}",
                         {"nombre": n["nombre"], "excluida": n["excluida"]})
-    return {"borrada": n["codigo"], "config_version": version}
+    return {"borrada": n["codigo"], "id": nid, "config_version": version}
 
 
 # ── No llamar ──
