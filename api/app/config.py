@@ -182,6 +182,26 @@ def enriquecimiento(parametros: dict) -> dict:
     return ConfigEnriquecimiento.model_validate(parametros.get("enriquecimiento") or {}).model_dump()
 
 
+class ConfigCargas(BaseModel):
+    """Cargas por lotes (D50): cada lote es una transacción y un paso de la tarea."""
+    tamano_lote: int = Field(5000, ge=500, le=20000)
+    pausa_segundos: float = Field(1.0, ge=0, le=60)       # respiro para la base entre lote y lote
+    minutos_trabada: int = Field(35, ge=10, le=240)       # sin avanzar más que esto (y que el plazo de Cloud Tasks)
+
+
+def cargas(parametros: dict) -> dict:
+    """Bloque cargas de una versión de configuración, con los valores por defecto. En los tests, CARGAS_TAMANO_LOTE y
+    CARGAS_PAUSA fuerzan lotes chicos y sin pausa (para que toda carga tenga varios lotes)."""
+    from . import settings
+
+    c = ConfigCargas.model_validate(parametros.get("cargas") or {}).model_dump()
+    if settings.CARGAS_TAMANO_LOTE:
+        c["tamano_lote"] = settings.CARGAS_TAMANO_LOTE
+    if settings.CARGAS_PAUSA is not None:
+        c["pausa_segundos"] = settings.CARGAS_PAUSA
+    return c
+
+
 def cdr(parametros: dict) -> dict:
     """Bloque cdr de una versión de configuración, con los valores por defecto (las versiones
     anteriores a este cambio no lo tienen)."""
@@ -209,6 +229,7 @@ class Parametros(BaseModel):
     # SPEC_fase2_enriquecimiento: enriquecimiento (B1) y dominios que no cuentan como «mismo sitio» en los duplicados (B4)
     enriquecimiento: ConfigEnriquecimiento = Field(default_factory=ConfigEnriquecimiento)
     dominios_genericos: list[str] = Field(default_factory=lambda: list(DOMINIOS_GENERICOS))
+    cargas: ConfigCargas = Field(default_factory=ConfigCargas)
 
     @field_validator("reglas_disponibilidad")
     @classmethod

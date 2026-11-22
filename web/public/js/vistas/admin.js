@@ -8,6 +8,17 @@ const CAMPOS_CSV = ['id_item', 'tel_e164', 'tel_nacional', 'tel_sin_mas', 'rut',
   'departamento', 'localidad', 'estrato', 'link', 'parte', 'muestra', 'origen_telefono'];
 const DIAS = ['', 'L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
+// D50: cargas grandes por lotes
+function tarjetaCargas(k, dis) {
+  return card('Cargas grandes (por lotes)', `<div class="form-row">
+    <div class="form-group"><label>Filas por lote</label><input type="number" id="c-lote" min="500" max="20000" step="500" value="${k.tamano_lote ?? 5000}" ${dis} />
+      <div class="field-hint">Entre 500 y 20.000. Cada lote es una transacción: más chico, más lotes pero cada uno más corto y seguro.</div></div>
+    <div class="form-group"><label>Pausa entre lotes (segundos)</label><input type="number" id="c-pausa" min="0" max="60" step="0.5" value="${k.pausa_segundos ?? 1}" ${dis} />
+      <div class="field-hint">Deja respirar a la base para que la web siga respondiendo durante una carga grande.</div></div>
+    <div class="form-group"><label>Minutos sin avanzar para darla por cortada</label><input type="number" id="c-trabada" min="10" max="240" value="${k.minutos_trabada ?? 35}" ${dis} />
+      <div class="field-hint">Una tarea que no avanza en ese tiempo queda «interrumpida» y se puede reanudar.</div></div></div>`);
+}
+
 export async function config(ctx) {
   const c = await api.get('/config');
   const p = c.parametros;
@@ -38,6 +49,7 @@ export async function config(ctx) {
       <div class="form-group"><label>Franjas horarias</label><div id="c-franjas"></div>${editable ? `<button class="btn btn-outline btn-sm" id="c-franja-mas">+ Franja</button>` : ''}</div>`)}</div>` +
     card('Formato del CSV para uContact', `<div class="form-row"><div class="form-group"><label>Separador</label><input type="text" id="c-sep" value="${esc(p.csv_ucontact.separador)}" maxlength="1" ${dis} /></div><div></div></div>
       <div id="c-cols"></div>${editable ? `<button class="btn btn-outline btn-sm" id="c-col-mas">+ Columna</button>` : ''}`) +
+    tarjetaCargas(p.cargas || {}, dis) +
     tarjetaCdr(p.cdr, c.cdr_password, editable) +
     (enr ? tarjetaEnriquecimiento(p.enriquecimiento, p.dominios_genericos, enr.proveedores, editable) : '') +
     `<div class="grid-2">${editable ? card('Guardar', `<div class="form-group"><label>Comentario del cambio</label><input type="text" id="c-coment" placeholder="p. ej. enfriamiento a 12 meses (dirección, 30/10)" /></div>
@@ -88,6 +100,7 @@ export async function config(ctx) {
       prefijos_salida: $('#c-prefijos').value.split(',').map(s => s.trim()).filter(Boolean),
       franjas, csv_ucontact: { separador: $('#c-sep').value || ';', columnas: cols },
       cdr: leerCdr(),
+      cargas: { tamano_lote: +$('#c-lote').value, pausa_segundos: +$('#c-pausa').value, minutos_trabada: +$('#c-trabada').value },
       ...leerEnriquecimiento(p),
     };
     const r = await api.put('/config', { parametros: nuevo, comentario: $('#c-coment').value || null });

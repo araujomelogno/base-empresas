@@ -153,20 +153,26 @@ export async function pedirTexto(titulo, label, { obligatorio = true, placeholde
 const PENDIENTE_AVISO_MS = 90000;
 
 export async function seguirTarea(tareaId, el, { texto = 'Procesando' } = {}) {
-  const inicio = Date.now();
+  // Las tareas por lotes (D50) vuelven a «pendiente» entre un lote y el siguiente: el aviso de «no arrancó» se basa en
+  // cuánto hace que no cambia nada, no en cuánto hace que empezó. Las cargas grandes se consultan cada 5 s.
+  let ultimoCambio = Date.now(), firma = '';
   for (;;) {
     const t = await api.get(`/tareas/${tareaId}`);
-    const trabada = t.estado === 'pendiente' && Date.now() - inicio > PENDIENTE_AVISO_MS;
+    const f = `${t.estado}|${t.progreso}|${t.mensaje || ''}`;
+    if (f !== firma) { firma = f; ultimoCambio = Date.now(); }
+    const enCola = (t.mensaje || '').startsWith('Esperando');
+    const trabada = t.estado === 'pendiente' && !enCola && Date.now() - ultimoCambio > PENDIENTE_AVISO_MS;
     const total = t.total || 0;
     const p = total ? Math.min(100, Math.round(100 * t.progreso / total)) : (t.estado === 'ok' ? 100 : 5);
+    const estado = t.mensaje && !['ok', 'error', 'cancelada'].includes(t.estado) ? esc(t.mensaje) : est(t.estado);
     if (el) el.innerHTML = `<div class="progress"><span style="width:${p}%"></span></div>
-      <div class="progress-label"><span>${esc(texto)}… ${est(t.estado)}</span><span class="mono">${total ? `${num(t.progreso)} / ${num(total)}` : ''}</span></div>` +
+      <div class="progress-label"><span>${esc(texto)}… ${estado}</span><span class="mono">${total ? `${num(t.progreso)} / ${num(total)}` : ''}</span></div>` +
       (trabada ? `<div class="alert alert-warn mt">La tarea #${esc(String(tareaId))} todavía no arrancó. Si sigue así, avisale a un
         administrador: Cloud Tasks no está pudiendo ejecutarla (ver «Problemas frecuentes» en la guía de despliegue).</div>` : '');
     if (t.estado === 'ok') return t;
     if (t.estado === 'error') throw new Error(t.error || 'La tarea falló');
     if (t.estado === 'cancelada') throw new Error(t.error || 'La tarea se canceló');
-    await new Promise(r => setTimeout(r, 900));
+    await new Promise(r => setTimeout(r, total >= 20000 ? 5000 : 900));
   }
 }
 

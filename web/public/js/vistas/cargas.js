@@ -26,7 +26,12 @@ export const ESTADOS_CARGA = {
   descartada: ['Se revisó y no se aplicó.', 'Nada; queda como registro.'],
   deshecha: ['Se aplicó y después se anuló; la historia queda tachada.', 'Nada.'],
   error: ['Falló el análisis o la aplicación; abajo está el motivo.', 'Corregir el archivo o el mapeo y hacer una carga nueva.'],
+  interrumpida: ['Se cortó a mitad de camino (un error, una cancelación o un reinicio del servidor). Lo que hicieron los lotes terminados quedó; el lote en curso se revirtió.',
+    'Reanudar (sigue desde el lote que falló), Deshacer (quita lo aplicado) o Borrar.'],
+  deshaciendo: ['Se está deshaciendo, por pasos.', 'Esperar; la barra muestra el avance.'],
+  borrando: ['Se está borrando, por pasos.', 'Esperar. Si se cortó, volver a tocar «Borrar carga» lo retoma.'],
 };
+const OPERACION_TXT = { preview: 'Calculando el preview', confirmar: 'Aplicando la carga', deshacer: 'Deshaciendo la carga', borrar: 'Borrando la carga' };
 const estCarga = (e) => `<span title="${esc(ESTADOS_CARGA[e] ? ESTADOS_CARGA[e].join(' ') : '')}">${est(e)}</span>`;
 
 export async function lista(ctx) {
@@ -350,21 +355,35 @@ function traduccion(ctx, a, st, v, crear) {
   $('#c-traduccion').scrollIntoView({ behavior: 'smooth' });
 }
 
-const PASO_DE = { analizando: 3, preview: 3, en_proceso: 4, confirmada: 5, deshecha: 5, descartada: 3, error: 3 };
+const PASO_DE = { analizando: 3, preview: 3, en_proceso: 4, interrumpida: 4, confirmada: 5, deshaciendo: 5, deshecha: 5, borrando: 5, descartada: 3, error: 3 };
 
 export async function detalle(ctx, id) {
   const [c, origenes, atributos] = await Promise.all([api.get('/cargas/' + id), api.get('/origenes-telefono'), api.get('/atributos')]);
   const k = c.conteos || {};
   const nombreO = Object.fromEntries(origenes.map(o => [o.codigo, o.nombre]));
   const nombreA = Object.fromEntries(atributos.map(a => [a.clave, a.nombre]));
-  const enCurso = ['analizando', 'en_proceso'].includes(c.estado);
+  const enCurso = ['analizando', 'en_proceso', 'deshaciendo', 'borrando'].includes(c.estado)
+    && c.tarea && ['pendiente', 'corriendo'].includes(c.tarea.estado);
   const [significa, sigue] = ESTADOS_CARGA[c.estado] || ['', ''];
+  const L = c.lotes_detalle || {};
+  const interrumpida = c.estado === 'interrumpida';
+  // Una interrumpida que nunca aplicó nada (se cortó el preview) se descarta; si aplicó lotes, se deshace
+  const aplicoAlgo = interrumpida && ['confirmar', 'deshacer'].includes(c.operacion);
   const acciones = [
+    interrumpida && ctx.puede('steward') ? `<button class="btn btn-green" id="c-reanudar">Reanudar</button>` : '',
     c.estado === 'preview' && ctx.puede('steward') ? `<button class="btn btn-green" id="c-confirmar">Confirmar carga</button>` : '',
-    ['preview', 'error'].includes(c.estado) && ctx.puede('steward') ? `<button class="btn btn-outline" id="c-descartar">Descartar</button>` : '',
-    c.estado === 'confirmada' && ctx.puede('steward') ? `<button class="btn btn-outline btn-del" id="c-deshacer">Deshacer carga</button>` : '',
-    ctx.puede() ? `<button class="btn btn-danger" id="c-borrar">Borrar carga</button>` : '',
+    (['preview', 'error'].includes(c.estado) || (interrumpida && !aplicoAlgo)) && ctx.puede('steward') ? `<button class="btn btn-outline" id="c-descartar">Descartar</button>` : '',
+    (c.estado === 'confirmada' || aplicoAlgo) && ctx.puede('steward') ? `<button class="btn btn-outline btn-del" id="c-deshacer">Deshacer carga</button>` : '',
+    ctx.puede() ? `<button class="btn btn-danger" id="c-borrar">${c.estado === 'borrando' && !enCurso ? 'Retomar el borrado' : 'Borrar carga'}</button>` : '',
   ].join('');
+  // Avance por lotes (D50)
+  const avanceLotes = L.total > 1 ? `<div class="card mb"><div class="card-body small"><strong>Lotes:</strong>
+      ${c.operacion === 'preview' || c.estado === 'analizando' ? `${num(L.preview_hechos)} de ${num(L.total)} con el preview calculado`
+        : `${num(L.aplicados)} de ${num(L.total)} lotes aplicados (${num(L.filas_aplicadas)} de ${num(c.n_filas || 0)} filas)`}
+      ${L.max_segundos ? ` · el más lento tardó ${num(Math.round(L.max_segundos))} s` : ''}
+      ${c.estado === 'preview' && L.preview_segundos > 60 ? ` · el preview tardó unos ${num(Math.round(L.preview_segundos / 60))} minutos; la confirmación suele tardar algo parecido` : ''}
+      <div class="muted">Cada lote es una transacción: si algo se corta, lo de los lotes terminados queda y se puede reanudar.</div></div></div>` : '';
+  const enCola = c.cola && c.tarea && c.tarea.estado === 'pendiente';
   const fpt = k.filas_por_telefonos;
   const porOrigen = Object.entries(k.telefonos_por_origen || {});
   const porAtributo = Object.entries(k.atributos || {});
@@ -372,10 +391,14 @@ export async function detalle(ctx, id) {
     pasos(PASO_DE[c.estado] || 3) +
     `<div class="card mb"><div class="card-body"><dl class="estado-explica"><dt>Estado</dt><dd>${est(c.estado)}</dd>
       <dt>Qué significa</dt><dd>${esc(significa)}</dd><dt>Qué sigue</dt><dd>${esc(sigue)}</dd></dl></div></div>` +
-    (c.error ? `<div class="alert alert-error">${esc(c.error)}</div>` : '') +
-    (enCurso && c.tarea && c.tarea.trabada ? `<div class="alert alert-warn"><span>La tarea #${c.tarea.id} figura corriendo desde el
-      ${fechaHora(c.tarea.creado)}: está <strong>trabada</strong> (la instancia que la corría probablemente se reinició).
-      ${ctx.puede() ? 'Podés usar «Borrar carga» y volver a cargar el archivo.' : 'Un administrador puede borrar la carga.'}</span></div>` : '') +
+    (interrumpida ? `<div class="alert alert-warn"><span><strong>Carga interrumpida</strong>${c.operacion === 'confirmar'
+      ? `: se aplicaron ${num(L.aplicados)} de ${num(L.total)} lotes (${num(L.filas_aplicadas)} filas)` : ''}.
+      ${L.error_lote ? `El lote que falló: ${esc(L.error_lote)}.` : ''} «Reanudar» sigue desde ahí y no repite lo ya aplicado.</span></div>` : '') +
+    (c.error && !interrumpida ? `<div class="alert alert-error">${esc(c.error)}</div>` : '') +
+    (c.error && interrumpida && !L.error_lote ? `<div class="alert alert-error">${esc(c.error)}</div>` : '') +
+    (enCola ? `<div class="alert alert-info"><span>${esc(c.tarea.mensaje || 'Esperando a que termine otra carga')}: se procesa una carga
+      grande a la vez y esta arranca sola cuando termine la otra.</span></div>` : '') +
+    avanceLotes +
     (enCurso ? card('Procesando', `<div id="c-prog"></div>`) : '') +
     (c.estado === 'preview' ? `<div class="alert alert-info"><span>Esto es un preview: la base todavía no cambió. Los conteos son exactamente los que se aplican al confirmar.</span></div>` : '') +
     (k.altas_provisoria || k.actualizaciones_provisoria || c.destino === 'provisoria' ? `<div class="card mb"><div class="card-body small">
@@ -431,7 +454,7 @@ export async function detalle(ctx, id) {
   let borrando = false;   // al borrar se cancela la tarea que se está siguiendo: no recargar una carga que ya no existe
   const recargar = () => detalle(ctx, id);
   if (enCurso && c.tarea) {
-    seguirTarea(c.tarea.id, $('#c-prog'), { texto: c.estado === 'analizando' ? 'Calculando el preview' : 'Aplicando la carga' })
+    seguirTarea(c.tarea.id, $('#c-prog'), { texto: OPERACION_TXT[c.operacion] || (c.estado === 'analizando' ? 'Calculando el preview' : 'Aplicando la carga') })
       .then(() => borrando || recargar()).catch(e => { if (borrando) return; toast(e.message, 'err'); recargar(); });
   }
   // F6.2: «Coincidencias a decidir» (preview): fusionar, es otra empresa o decidir después (va a Revisión de fusiones)
@@ -470,7 +493,15 @@ export async function detalle(ctx, id) {
   }
   if ($('#c-confirmar')) $('#c-confirmar').onclick = async () => {
     if (!await confirmar('Confirmar carga', `Se aplican ${num(k.altas || 0)} altas y ${num(k.actualizaciones || 0)} actualizaciones. La carga se puede deshacer mientras ninguna de sus empresas entre a una muestra.`, 'Confirmar', 'btn-green')) return;
-    await api.post(`/cargas/${id}/confirmar`);
+    const r = await api.post(`/cargas/${id}/confirmar`);
+    if (r && r.en_cola) toast(`Quedó en cola: arranca cuando termine la carga #${r.esperando}`, 'ok');
+    recargar();
+  };
+  if ($('#c-reanudar')) $('#c-reanudar').onclick = async () => {
+    try {
+      const r = await api.post(`/cargas/${id}/reanudar`);
+      toast(r.en_cola ? `Quedó en cola: arranca cuando termine la carga #${r.esperando}` : 'Reanudando desde el lote que faltaba', 'ok');
+    } catch (e) { toast(e.message, 'err'); }
     recargar();
   };
   if ($('#c-descartar')) $('#c-descartar').onclick = async () => {
@@ -480,12 +511,21 @@ export async function detalle(ctx, id) {
   if ($('#c-deshacer')) $('#c-deshacer').onclick = async () => {
     if (!await confirmar('Deshacer carga', 'Se anulan los valores y atributos que trajo, se borran sus vínculos de teléfono y sucursales (y el origen que sumó a teléfonos que ya existían), y las empresas que solo venían de esta carga quedan anuladas. La historia se conserva.', 'Deshacer', 'btn-danger')) return;
     const r = await api.del('/cargas/' + id);
-    toast(`Carga deshecha: ${r.empresas_anuladas} empresas anuladas, ${r.empresas_recalculadas} recalculadas`, 'ok'); recargar();
+    if (r.estado === 'descartada') { toast('Carga descartada (no había aplicado nada)', 'ok'); return recargar(); }
+    if (r.en_cola) { toast(`Quedó en cola: arranca cuando termine la carga #${r.esperando}`, 'ok'); return recargar(); }
+    // Deshacer corre por pasos (D50): se sigue la tarea y al final se muestra el resumen
+    main().innerHTML = pageHeader('Carga', '#' + c.id, 'Deshaciendo…') + card('Deshaciendo la carga', '<div id="c-prog"></div>');
+    try {
+      const t = await seguirTarea(r.tarea_id, $('#c-prog'), { texto: 'Deshaciendo la carga' });
+      const x = t.resultado || {};
+      toast(`Carga deshecha: ${num(x.empresas_anuladas || 0)} empresas anuladas, ${num(x.empresas_recalculadas || 0)} recalculadas`, 'ok');
+    } catch (e) { toast(e.message, 'err'); }
+    recargar();
   };
   if ($('#c-borrar')) $('#c-borrar').onclick = async () => {
     const n = await api.get(`/cargas/${id}/borrado`);
     const cancelar = n.tareas_a_cancelar.length ? `<li>Se cancela${n.tareas_a_cancelar.length > 1 ? 'n' : ''} ${n.tareas_a_cancelar.map(t =>
-      `la tarea #${t.id} (${t.tipo === 'carga.confirmar' ? 'aplicando la carga' : 'calculando el preview'}, ${etiqueta(t.estado)})`).join(' y ')}: no se aplica nada.</li>` : '';
+      `la tarea #${t.id} (${{ 'carga.confirmar': 'aplicando la carga', 'carga.deshacer': 'deshaciendo la carga', 'carga.borrar': 'un borrado anterior' }[t.tipo] || 'calculando el preview'}, ${etiqueta(t.estado)})`).join(' y ')}: el lote en curso se revierte; lo que aplicaron los lotes anteriores se borra igual.</li>` : '';
     const ok = await confirmarEscrito({ titulo: `Borrar carga #${c.id}`, palabra: 'BORRAR', cuerpo: `<p>Se elimina la carga y su archivo.</p>
       <ul class="modal-conteos">${cancelar}
         <li><strong>${num(n.solo_de_esta_carga)}</strong> empresas que solo venían de esta carga se borran del todo (historia, teléfonos, sucursales,
@@ -494,7 +534,8 @@ export async function detalle(ctx, id) {
       <p><strong>No se puede deshacer.</strong> Solo queda el registro en Auditoría.</p>` });
     if (!ok) return;
     borrando = true;
-    const { tarea_id } = await api.del(`/cargas/${id}/definitivo`);
+    const { tarea_id, en_cola, esperando } = await api.del(`/cargas/${id}/definitivo`);
+    if (en_cola) { toast(`El borrado quedó en cola: arranca cuando termine la carga #${esperando}`, 'ok'); borrando = false; return recargar(); }
     main().innerHTML = pageHeader('Carga', '#' + c.id, 'Borrando…') + card('Borrando la carga', '<div id="c-prog"></div>');
     try {
       const t = await seguirTarea(tarea_id, $('#c-prog'), { texto: 'Borrando la carga' });

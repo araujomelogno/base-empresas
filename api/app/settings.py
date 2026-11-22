@@ -60,3 +60,6 @@ SECRETOS_PROVEEDORES = {
 }
 # simulado: los proveedores responden con datos de ejemplo, sin llamadas pagas (demo local). real: APIs de verdad.
 PROVEEDORES_MODO = os.environ.get("PROVEEDORES_MODO", "real")
+# Cargas por lotes (D50): solo para tests y pruebas locales; en producción manda la configuración (Configuración → Cargas)
+CARGAS_TAMANO_LOTE = int(os.environ["CARGAS_TAMANO_LOTE"]) if os.environ.get("CARGAS_TAMANO_LOTE") else None
+CARGAS_PAUSA = float(os.environ["CARGAS_PAUSA"]) if os.environ.get("CARGAS_PAUSA") else None

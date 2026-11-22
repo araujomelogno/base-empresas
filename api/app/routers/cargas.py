@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from pydantic import BaseModel
 
-from .. import borrado, cargas, storage, tareas
+from .. import lotes, borrado, cargas, storage, tareas
 from ..auth import Usuario, requiere, usuario_actual
 from ..db import conexion, get_conn
 
@@ -56,9 +56,18 @@ def valores(body: Valores, conn=Depends(get_conn), u: Usuario = Depends(requiere
     return cargas.valores(conn, body.archivo_id, body.mapeo)
 
 
+def _despachar(r: dict) -> dict:
+    """Una carga pesada que quedó en cola no se despacha: arranca sola cuando termina la que está corriendo (D50)."""
+    if not r.get("en_cola") and r.get("tarea_id"):
+        tareas.despachar(r["tarea_id"])
+    return r
+
+
 @router.get("/cargas")
-def listar(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
-    return cargas.listar(conn)
+def listar(u: Usuario = Depends(usuario_actual)):
+    lotes.revisar_trabadas()
+    with conexion() as conn:
+        return cargas.listar(conn)
 
 
 @router.get("/cargas/plantillas")
@@ -67,16 +76,25 @@ def plantillas(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
 
 
 @router.get("/cargas/{carga_id}")
-def obtener(carga_id: int, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
-    return cargas.obtener(conn, carga_id)
+def obtener(carga_id: int, u: Usuario = Depends(usuario_actual)):
+    lotes.revisar_trabadas()
+    with conexion() as conn:
+        return cargas.obtener(conn, carga_id)
 
 
 @router.post("/cargas/{carga_id}/confirmar")
 def confirmar(carga_id: int, u: Usuario = Depends(requiere("steward"))):
     with conexion() as conn:
-        tid = cargas.confirmar(conn, carga_id, u.email)
-    tareas.despachar(tid)
-    return {"tarea_id": tid}
+        r = cargas.confirmar(conn, carga_id, u.email)
+    return _despachar(r)
+
+
+@router.post("/cargas/{carga_id}/reanudar")
+def reanudar(carga_id: int, u: Usuario = Depends(requiere("steward"))):
+    """L4: sigue una carga interrumpida (preview, confirmación o deshacer) desde el primer lote que no se hizo."""
+    with conexion() as conn:
+        r = lotes.reanudar(conn, carga_id, u.email)
+    return _despachar(r)
 
 
 @router.put("/cargas/{carga_id}/decisiones")
@@ -85,8 +103,16 @@ def decisiones(carga_id: int, body: Decisiones, conn=Depends(get_conn), u: Usuar
 
 
 @router.delete("/cargas/{carga_id}")
-def deshacer(carga_id: int, conn=Depends(get_conn), u: Usuario = Depends(requiere("steward"))):
-    return cargas.deshacer(conn, carga_id, u.email)
+def deshacer(carga_id: int, u: Usuario = Depends(requiere("steward"))):
+    """Descarta una carga que nunca se aplicó, o deshace por pasos (D50) una confirmada o interrumpida."""
+    with conexion() as conn:
+        r = cargas.deshacer(conn, carga_id, u.email)
+    if r.get("estado") == "descartada":
+        return r
+    _despachar(r)
+    with conexion() as conn:  # si ya terminó (o corre en línea, en los tests), el resumen de lo que hizo
+        c = conn.execute("SELECT estado, resumen_op FROM carga WHERE id = %s", (carga_id,)).fetchone()
+    return {**(c["resumen_op"] or {}), **r, "estado": c["estado"]}
 
 
 @router.get("/cargas/{carga_id}/borrado")
@@ -99,9 +125,8 @@ def conteos_borrado(carga_id: int, conn=Depends(get_conn), u: Usuario = Depends(
 def borrar(carga_id: int, u: Usuario = Depends(requiere("admin"))):
     """Borrado definitivo (solo administrador): corre como tarea porque puede tocar miles de empresas."""
     with conexion() as conn:
-        tid = borrado.pedir_borrado_carga(conn, carga_id, u.email)
-    tareas.despachar(tid)
-    return {"tarea_id": tid}
+        r = borrado.pedir_borrado_carga(conn, carga_id, u.email)
+    return _despachar(r)
 
 
 @router.get("/revision")

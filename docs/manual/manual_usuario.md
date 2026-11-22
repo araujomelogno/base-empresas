@@ -171,14 +171,37 @@ Las bases (estudios anteriores, padrones, directorios) entran por **Cargas → N
 | Descartada | Se revisó y no se aplicó | Nada |
 | Deshecha | Se aplicó y después se anuló; la historia queda tachada | Nada |
 | Error | Falló el análisis o la aplicación | Corregir y hacer una carga nueva |
+| Interrumpida | Se cortó a mitad de camino; lo de los lotes terminados quedó | Reanudar, Deshacer o Borrar |
+| Deshaciendo | Se está deshaciendo, por pasos | Esperar |
+| Borrando | Se está borrando, por pasos | Esperar; si se cortó, volver a tocar Borrar carga |
 
-> **Deshacer una carga.** Desde el detalle de una carga confirmada, **Deshacer carga** anula todo lo que trajo (valores, atributos, vínculos y el origen que sumó a teléfonos que ya existían), mientras ninguna de sus empresas haya entrado a una muestra. La historia no se borra: queda tachada.
+> **Deshacer una carga.** Desde el detalle de una carga confirmada (o interrumpida), **Deshacer carga** anula todo lo que trajo (valores, atributos, vínculos y el origen que sumó a teléfonos que ya existían), mientras ninguna de sus empresas haya entrado a una muestra. La historia no se borra: queda tachada. Deshacer corre por pasos, con una barra de avance; en una carga grande puede tardar varios minutos.
 >
 > **Borrar una carga (administrador).** Si la carga no se puede deshacer (porque sus empresas ya están en una muestra) o se quiere eliminar del todo, **Borrar carga** la elimina con su archivo: las empresas que solo venían de esa carga se borran por completo, incluido su lugar en las muestras y su actividad de campo, y las demás se recalculan sin lo que aportó. Se confirma escribiendo BORRAR y no se puede deshacer. De la misma forma, **Borrar empresa** en la ficha elimina una empresa (se confirma escribiendo su RUT). Ambos quedan en Auditoría.
 >
-> **Borrar una carga trabada.** Una carga puede quedar «analizando» o «en proceso» para siempre si su tarea no arrancó o si se cortó a mitad de camino; el detalle avisa cuando la tarea está **trabada** (figura corriendo hace más de 30 minutos). **Borrar carga** funciona en cualquier estado: el modal dice qué tarea se cancela, la tarea se detiene **sin aplicar nada** y queda «cancelada», y después se borra la carga.
+> **Borrar una carga en cualquier estado.** **Borrar carga** funciona en cualquier estado, también con la carga corriendo: el modal dice qué tarea se cancela; el lote en curso se revierte y lo que aplicaron los lotes anteriores se borra igual. El borrado también corre por pasos (la carga queda «borrando»); si se corta, volver a tocar **Borrar carga** lo retoma desde donde quedó.
 
 En una carga a la **base definitiva**, las filas con RUT inválido o sin RUT se rechazan (el motivo queda en el detalle de la carga), salvo que marques **Enviar las filas sin RUT válido a la base provisoria**. Deshacer o borrar una carga quita también los contactos que trajo.
+
+### Cargas grandes
+
+Una carga se procesa **por lotes** de 5.000 filas (se cambia en Configuración → Cargas grandes). Cada lote es independiente: si algo se corta, lo que hicieron los lotes terminados queda y no hay que empezar de nuevo. Así se pueden cargar bases de cientos de miles de empresas.
+
+- **El avance.** Mientras se calcula el preview o se aplica la carga, la barra dice en qué lote va: «Lote 12 de 38 · 60.000 de 190.000 filas». El detalle muestra también «N de M lotes aplicados (X filas)» y cuánto tardó el lote más lento. En una carga de más de 20.000 filas, la pantalla se actualiza cada 5 segundos.
+- **El mismo RUT, en el mismo lote.** Las filas con el mismo RUT van siempre juntas, aunque estén lejos en el archivo: cuentan una sola alta. Las filas sin RUT van al final; si son muchas, el preview avisa que sus conteos son **aproximados** (dos filas sin RUT del mismo archivo podrían coincidir entre sí).
+- **Cuánto va a tardar.** Después del preview, el detalle dice cuánto tardó: la confirmación suele tardar algo parecido.
+- **Se puede seguir trabajando.** Mientras corre una carga grande, el resto de la aplicación se sigue usando: entre lote y lote la base tiene un respiro.
+- **Una carga grande a la vez.** Si confirmás, deshacés o borrás una carga mientras otra está corriendo, la segunda queda **en cola** con el aviso «Esperando a que termine la carga #N» y arranca sola cuando termina la primera.
+
+**Si una carga queda «interrumpida».** Pasa si un lote falla, si se cancela, o si la tarea no avanza durante 35 minutos (por ejemplo, porque se reinició el servidor). El detalle dice cuántos lotes se aplicaron y el error del lote que falló. Tres opciones:
+
+| Acción | Qué hace |
+| --- | --- |
+| **Reanudar** | Sigue desde el primer lote que no se aplicó. No repite lo ya aplicado: el resultado es el mismo que si no se hubiera cortado |
+| **Deshacer carga** | Quita lo que aplicaron los lotes terminados; la base queda como antes de la carga |
+| **Borrar carga** | Elimina la carga, su archivo y lo que aplicó (administrador) |
+
+Si se interrumpió mientras se calculaba el preview, todavía no se aplicó nada: **Reanudar** sigue calculándolo y **Descartar** la descarta.
 
 ### Base provisoria
 
@@ -538,6 +561,7 @@ Todos los parámetros de negocio están en **Configuración** y se cambian sin p
 | Prefijos de salida | Dígitos que la central agrega para tomar línea y que hay que quitar |
 | Franjas horarias | Nombre, días y horario de cada franja del tablero |
 | Formato del CSV | Separador y columnas, para que coincida con la importación de uContact |
+| Cargas grandes | Filas por lote (5.000; entre 500 y 20.000), pausa entre lotes (1 s) y minutos sin avanzar para dar una carga por interrumpida (35). Ver «Cargas grandes» |
 
 En el historial, tocá una versión para ver todos sus parámetros.
 
@@ -667,6 +691,10 @@ Registro inalterable de cargas, fusiones, exclusiones, sorteos, exportaciones, i
 **En Inicio aparece un aviso del CDR.** El job de la noche falló o no corrió. Un administrador ve el motivo en **Actividad** (corridas del job) o en Configuración → **Probar conexión**, lo corrige y toca **Correr ahora**. No se pierden llamadas: la corrida siguiente sigue desde donde quedó.
 
 **Subí el .sav y quedaron filas sin asociar.** Revisá el motivo en los conteos. Lo más común es que la encuesta no tenga la URL variable `EC_ID_ITEM`; en ese caso el sistema intenta por RUT y teléfono usado. Lo que no se resuelve va a Conciliación.
+
+**Una carga grande quedó «interrumpida».** Abrí su detalle: dice cuántos lotes se aplicaron y por qué se cortó. **Reanudar** sigue desde ahí sin repetir nada. Si preferís sacarla, **Deshacer carga** quita lo aplicado. Ver «Cargas grandes».
+
+**Una carga dice «Esperando a que termine la carga #N».** Se procesa una carga grande a la vez: arranca sola cuando termina la otra.
 
 **Me equivoqué al cargar una base.** Si ninguna de sus empresas entró a una muestra, deshacé la carga desde su detalle. Si ya entraron, corregí los datos en la ficha o hacé una carga nueva con más confianza.
 

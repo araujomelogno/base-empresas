@@ -340,11 +340,12 @@ def _sugerencia(valor: str, opciones: list[tuple[str, str]]) -> str | None:
     return None
 
 
-def valores(conn, archivo_id: int, mapeo: dict) -> dict:
+def valores(conn, archivo_id: int, mapeo: dict, leido: tuple | None = None) -> dict:
     """Valores distintos de las columnas de origen y de atributos de lista que no coinciden
-    exactamente con el catálogo, con cuántas filas tiene cada uno y una traducción sugerida."""
+    exactamente con el catálogo, con cuántas filas tiene cada uno y una traducción sugerida.
+    leido: (columnas, filas) si el archivo ya se leyó (crear no lo vuelve a parsear)."""
     mapeo, _ = limpiar_mapeo(mapeo)
-    _, columnas, filas = _leer(conn, archivo_id)
+    columnas, filas = leido if leido else _leer(conn, archivo_id)[1:]
     for c in columnas_de_mapeo(mapeo):
         if c not in columnas:
             raise HTTPException(422, f"La columna '{c}' no está en el archivo")
@@ -397,9 +398,11 @@ def valores(conn, archivo_id: int, mapeo: dict) -> dict:
     return salida
 
 
-def procesar(conn, carga: dict, filas: list[dict], cfg: dict, actor: str, real: bool,
-             tarea_id: int | None = None) -> tuple[dict, list]:
-    """Aplica las filas. Devuelve (conteos, rechazos). Si real=False lo corre el preview."""
+def procesar(conn, carga: dict, filas: list[tuple[int, dict]], cfg: dict, actor: str, real: bool,
+             tarea_id: int | None = None, hechos: int = 0, total: int | None = None) -> tuple[dict, list, set]:
+    """Aplica las filas de un lote: [(número de fila del archivo, fila)]. Devuelve (conteos, rechazos, teléfonos
+    tocados). Si real=False lo corre el preview. La detección de intermediarios la hace quien llama, por lote (D50).
+    hechos y total: filas ya procesadas de la carga y total, para la barra de progreso."""
     mapeo, cid, confianza = carga["mapeo"], carga["id"], carga["confianza"]
     prefijos = cfg.get("prefijos_salida") or []
     traductor = Traductor(conn, mapeo)
@@ -418,11 +421,10 @@ def procesar(conn, carga: dict, filas: list[dict], cfg: dict, actor: str, real: 
     reglas = carga.get("reglas") or provisorias.REGLAS_DEFECTO
     decisiones = carga.get("decisiones") or {}
     coincidencias = []
-    total = len(filas)
-    for i, fila in enumerate(filas):
-        nfila = i + 2
-        if tarea_id and i % 200 == 0:
-            tareas.progreso(tarea_id, i, total)
+    total = total or len(filas)
+    for i, (nfila, fila) in enumerate(filas):
+        if tarea_id and i % 500 == 0:
+            tareas.progreso(tarea_id, hechos + i, total)
         crudo_rut = texto(fila.get(mapeo["rut"])) if mapeo.get("rut") else None
         r, motivo = rutmod.validar(crudo_rut) if crudo_rut else (None, "sin RUT")
         if r is None and not sin_rut_a_provisoria:
@@ -537,14 +539,7 @@ def procesar(conn, carga: dict, filas: list[dict], cfg: dict, actor: str, real: 
         else:
             c["sin_cambios"] += 1
 
-    umbral = cfg["umbral_intermediario"]
-    ids = sorted(telefonos_tocados)
-    if real:
-        c["nuevos_sospechosos"] = len(intermediarios.detectar(conn, umbral, ids, actor)) if ids else 0
-        tareas.progreso(tarea_id, total, total)
-    else:
-        c["nuevos_sospechosos"] = intermediarios.contar_nuevos(conn, umbral, ids) if ids else 0
-    c["filas"] = total
+    c["filas"] = len(filas)
     motivos = Counter(m for _, m, _ in rechazos)
     conteos = dict(c)
     conteos["rechazos_por_motivo"] = dict(motivos)
@@ -556,7 +551,7 @@ def procesar(conn, carga: dict, filas: list[dict], cfg: dict, actor: str, real: 
                                 "sin_dato": n.get("sin_dato", 0)} for k, n in por_atributo.items()}
     conteos["coincidencias_a_decidir"] = coincidencias
     conteos["destino"] = destino
-    return conteos, rechazos
+    return conteos, rechazos, telefonos_tocados
 
 
 def aplicar_contacto(conn, emp, fila, mapeo, traductor, prefijos, cid, actor, c, por_atributo, telefonos_tocados) -> bool:
@@ -691,7 +686,7 @@ def crear(conn, archivo_id: int, fuente: str, tipo_fuente: str, licencia: str, r
     archivo, columnas, filas = _leer(conn, archivo_id)
     mapeo, _ = limpiar_mapeo(mapeo)
     _validar_mapeo(conn, mapeo, columnas, destino)
-    pend = valores(conn, archivo_id, mapeo)
+    pend = valores(conn, archivo_id, mapeo, (columnas, filas))
     if pend["pendientes"]:
         ejemplos = [x["valor"] for x in pend["origen"] if not x["traducido"]] + [
             x["valor"] for a in pend["atributos"] for x in a["valores"] if not x["traducido"]]
@@ -715,33 +710,23 @@ def crear(conn, archivo_id: int, fuente: str, tipo_fuente: str, licencia: str, r
     auditoria.registrar(conn, actor, "carga.crear", "carga", carga["id"],
                         {"archivo": archivo["nombre"], "fuente": fuente, "destino": destino, "reglas": reglas,
                          "opciones": opciones})
+    # L1: el archivo se parsea una sola vez; sus filas quedan en carga_fila, ya repartidas en lotes por RUT
+    from . import lotes
+
+    tamano = config.cargas(cfg)["tamano_lote"]
+    n_lotes = lotes.guardar_filas(conn, carga["id"], filas, mapeo, tamano)
     tarea_id = tareas.crear(conn, "carga.preview", {"carga_id": carga["id"]}, actor)
-    return {"carga_id": carga["id"], "tarea_id": tarea_id, "n_filas": len(filas)}
+    conn.execute("UPDATE carga SET operacion = 'preview', tarea_id = %s, lotes = %s, n_filas = %s WHERE id = %s",
+                 (tarea_id, n_lotes, len(filas), carga["id"]))
+    return {"carga_id": carga["id"], "tarea_id": tarea_id, "n_filas": len(filas), "lotes": n_lotes}
 
 
-@tareas.handler("carga.preview")
-def _tarea_preview(conn, payload, tarea_id):
-    """Corre la carga en un savepoint que se descarta: los conteos son los reales."""
-    carga = conn.execute("SELECT * FROM carga WHERE id = %s", (payload["carga_id"],)).fetchone()
-    _, _, filas = _leer(conn, carga["archivo_id"])
-    _, cfg = config.vigente(conn)
-    resultado = {}
-    try:
-        with conn.transaction():
-            resultado["conteos"], resultado["rechazos"] = procesar(conn, carga, filas, cfg, carga["responsable"],
-                                                                   real=False, tarea_id=tarea_id)
-            raise _Preview()
-    except _Preview:
-        pass
-    tareas.progreso(tarea_id, len(filas), len(filas))
-    _guardar_rechazos(conn, carga["id"], resultado["rechazos"])
-    conn.execute("UPDATE carga SET conteos = %s, estado = 'preview' WHERE id = %s",
-                 (Jsonb(resultado["conteos"]), carga["id"]))
-    return {"carga_id": carga["id"], "conteos": resultado["conteos"]}
-
-
-def _guardar_rechazos(conn, carga_id, rechazos):
-    conn.execute("DELETE FROM carga_rechazo WHERE carga_id = %s", (carga_id,))
+def guardar_rechazos(conn, carga_id, rechazos, filas: list[int] | None = None):
+    """Los rechazos de un lote reemplazan a los que ese lote tenía (filas); sin filas, a todos los de la carga."""
+    if filas is None:
+        conn.execute("DELETE FROM carga_rechazo WHERE carga_id = %s", (carga_id,))
+    else:
+        conn.execute("DELETE FROM carga_rechazo WHERE carga_id = %s AND fila = ANY(%s)", (carga_id, filas))
     with conn.cursor() as cur:
         cur.executemany("INSERT INTO carga_rechazo (carga_id, fila, motivo, datos) VALUES (%s,%s,%s,%s)",
                         [(carga_id, n, m, Jsonb(f)) for n, m, f in rechazos])
@@ -769,27 +754,17 @@ def guardar_decisiones(conn, carga_id: int, decisiones: dict, actor: str) -> dic
     return {"decisiones": nuevas}
 
 
-def confirmar(conn, carga_id: int, actor: str) -> int:
+def confirmar(conn, carga_id: int, actor: str) -> dict:
+    """Arranca la confirmación por lotes (D50). Devuelve {tarea_id, en_cola, esperando}: si otra carga pesada está
+    corriendo, esta queda en cola y arranca sola cuando aquella termina."""
+    from . import lotes
+
     carga = conn.execute("SELECT * FROM carga WHERE id = %s FOR UPDATE", (carga_id,)).fetchone()
     if carga is None:
         raise HTTPException(404, "Carga inexistente")
     if carga["estado"] != "preview":
         raise HTTPException(409, f"La carga está en estado {carga['estado']}")
-    conn.execute("UPDATE carga SET estado = 'en_proceso' WHERE id = %s", (carga_id,))
-    return tareas.crear(conn, "carga.confirmar", {"carga_id": carga_id}, actor)
-
-
-@tareas.handler("carga.confirmar")
-def _tarea_confirmar(conn, payload, tarea_id):
-    carga = conn.execute("SELECT * FROM carga WHERE id = %s", (payload["carga_id"],)).fetchone()
-    _, columnas, filas = _leer(conn, carga["archivo_id"])
-    _, cfg = config.vigente(conn)
-    conteos, rechazos = procesar(conn, carga, filas, cfg, carga["responsable"], real=True, tarea_id=tarea_id)
-    _guardar_rechazos(conn, carga["id"], rechazos)
-    conn.execute("UPDATE carga SET estado = 'confirmada', conteos = %s, confirmada = now() WHERE id = %s",
-                 (Jsonb(conteos), carga["id"]))
-    auditoria.registrar(conn, carga["responsable"], "carga.confirmar", "carga", carga["id"], {"conteos": conteos})
-    return {"carga_id": carga["id"], "conteos": conteos}
+    return lotes.iniciar_pesada(conn, carga, "confirmar", "en_proceso", "carga.confirmar", actor)
 
 
 def empresas_de_carga(conn, carga_id: int) -> list[int]:
@@ -801,6 +776,10 @@ def empresas_de_carga(conn, carga_id: int) -> list[int]:
 
 
 def deshacer(conn, carga_id: int, actor: str) -> dict:
+    """Descarta una carga que nunca se aplicó, o arranca el deshacer por pasos (D50) de una confirmada o de una
+    interrumpida a mitad de la confirmación (o del deshacer). Devuelve {estado, tarea_id, en_cola}."""
+    from . import lotes
+
     carga = conn.execute("SELECT * FROM carga WHERE id = %s FOR UPDATE", (carga_id,)).fetchone()
     if carga is None:
         raise HTTPException(404, "Carga inexistente")
@@ -808,56 +787,31 @@ def deshacer(conn, carga_id: int, actor: str) -> dict:
         raise HTTPException(409, "La carga ya fue deshecha")
     if carga["estado"] == "descartada":
         raise HTTPException(409, "La carga ya fue descartada")
-    if carga["estado"] in ("analizando", "preview", "error"):
+    nunca_aplicada = carga["estado"] in ("analizando", "preview", "error") or (
+        carga["estado"] == "interrumpida" and carga["operacion"] == "preview")
+    if nunca_aplicada:
         # Nunca se aplicó: se descarta (distinto de deshacer una carga confirmada)
-        conn.execute("UPDATE carga SET estado = 'descartada', descartada = now() WHERE id = %s", (carga_id,))
+        tareas.cancelar("tipo = 'carga.preview' AND (payload->>'carga_id')::int = %s", (carga_id,), "Carga descartada")
+        conn.execute("UPDATE carga SET estado = 'descartada', descartada = now(), operacion = NULL WHERE id = %s", (carga_id,))
+        conn.execute("DELETE FROM carga_fila WHERE carga_id = %s", (carga_id,))
         auditoria.registrar(conn, actor, "carga.descartar", "carga", carga_id)
         return {"estado": "descartada", "empresas_anuladas": 0, "empresas_recalculadas": 0}
-    if carga["estado"] != "confirmada":
+    if carga["estado"] == "deshaciendo":
+        raise HTTPException(409, "La carga ya se está deshaciendo")
+    if not (carga["estado"] == "confirmada" or (carga["estado"] == "interrumpida"
+                                                and carga["operacion"] in ("confirmar", "deshacer"))):
         raise HTTPException(409, f"No se puede deshacer una carga en estado {carga['estado']}")
-    ids = empresas_de_carga(conn, carga_id)
-    en_muestra = conn.execute(
-        "SELECT count(DISTINCT empresa_id) AS n FROM muestra_item WHERE empresa_id = ANY(%s)", (ids,)).fetchone()["n"]
-    if en_muestra:
-        raise HTTPException(409, f"No se puede deshacer: {en_muestra} empresas de esta carga ya entraron a una muestra."
-                                 " Un administrador puede usar «Borrar carga», que la elimina junto con su paso por las muestras.")
-    conn.execute("UPDATE carga SET estado = 'deshecha', deshecha = now() WHERE id = %s", (carga_id,))
-    # Las provisorias que esta carga pasó a la definitiva (agregó el RUT) vuelven a la provisoria
-    for p in conn.execute("SELECT * FROM carga_promocion WHERE carga_id = %s ORDER BY id DESC", (carga_id,)).fetchall():
-        conn.execute("UPDATE empresa SET rut = %s, base = %s WHERE id = %s", (p["rut_anterior"], p["base_anterior"], p["empresa_id"]))
-    # El origen que esta carga sumó a vínculos que ya existían
-    conn.execute("DELETE FROM telefono_vinculo_origen WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))
-    vincs = conn.execute("DELETE FROM telefono_vinculo WHERE fuente_tipo = 'carga' AND fuente_id = %s"
-                         " RETURNING id, telefono_id", (carga_id,)).fetchall()
-    # Los contactos que trajo la carga se borran (con su historia); los que solo completó vuelven a recalcularse
-    contactos.borrar(conn, [r["id"] for r in conn.execute(
-        "SELECT id FROM contacto WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))])
-    conn.execute("DELETE FROM contacto_telefono WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))
-    conn.execute("DELETE FROM contacto_atributo WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))
-    conn.execute("UPDATE telefono_vinculo SET sucursal_id = NULL WHERE sucursal_id IN "
-                 "(SELECT id FROM sucursal WHERE fuente_tipo = 'carga' AND fuente_id = %s)", (carga_id,))
-    conn.execute("DELETE FROM sucursal WHERE fuente_tipo = 'carga' AND fuente_id = %s", (carga_id,))
-    conn.execute("UPDATE revision_fusion SET estado = 'descartada', resuelto_por = %s, resuelto = now()"
-                 " WHERE carga_id = %s AND estado = 'pendiente'", (actor, carga_id))
-    anuladas = 0
-    for eid in ids:
-        empresas.recalcular(conn, eid)
-        quedan = conn.execute(
-            "SELECT (SELECT count(*) FROM empresa_campo_historia h LEFT JOIN carga c ON h.fuente_tipo='carga' AND c.id=h.fuente_id"
-            "        WHERE h.empresa_id = %s AND (c.id IS NULL OR c.estado <> 'deshecha'))"
-            " + (SELECT count(*) FROM telefono_vinculo WHERE empresa_id = %s)"
-            " + (SELECT count(*) FROM contacto WHERE empresa_id = %s) AS n",
-            (eid, eid, eid)).fetchone()["n"]
-        if quedan == 0:
-            conn.execute("UPDATE empresa SET baja = 'anulada' WHERE id = %s", (eid,))
-            anuladas += 1
-    intermediarios.reevaluar(conn, [v["telefono_id"] for v in vincs]
-                             + [r["telefono_id"] for r in conn.execute(
-                                 "SELECT DISTINCT telefono_id FROM telefono_vinculo WHERE empresa_id = ANY(%s)", (ids,))],
-                             actor)
-    resumen = {"estado": "deshecha", "empresas_anuladas": anuladas, "empresas_recalculadas": len(ids), "vinculos_borrados": len(vincs)}
-    auditoria.registrar(conn, actor, "carga.deshacer", "carga", carga_id, resumen)
-    return resumen
+    if carga["operacion"] != "deshacer":  # al retomar un deshacer interrumpido, el chequeo ya se hizo
+        en_muestra = conn.execute(
+            "SELECT count(DISTINCT i.empresa_id) AS n FROM muestra_item i WHERE i.empresa_id IN ("
+            "  SELECT empresa_id FROM empresa_campo_historia WHERE fuente_tipo = 'carga' AND fuente_id = %s"
+            "  UNION SELECT empresa_id FROM telefono_vinculo WHERE fuente_tipo = 'carga' AND fuente_id = %s"
+            "  UNION SELECT id FROM empresa WHERE carga_alta_id = %s)", (carga_id, carga_id, carga_id)).fetchone()["n"]
+        if en_muestra:
+            raise HTTPException(409, f"No se puede deshacer: {en_muestra} empresas de esta carga ya entraron a una muestra."
+                                     " Un administrador puede usar «Borrar carga», que la elimina junto con su paso por las muestras.")
+    r = lotes.iniciar_pesada(conn, carga, "deshacer", "deshaciendo", "carga.deshacer", actor)
+    return {"estado": "deshaciendo", **r}
 
 
 def obtener(conn, carga_id: int) -> dict:
@@ -870,20 +824,28 @@ def obtener(conn, carga_id: int) -> dict:
         "SELECT fila, motivo, datos FROM carga_rechazo WHERE carga_id = %s ORDER BY fila LIMIT 200", (carga_id,)).fetchall()
     carga["revision_pendiente"] = conn.execute(
         "SELECT count(*) AS n FROM revision_fusion WHERE carga_id = %s AND estado = 'pendiente'", (carga_id,)).fetchone()["n"]
-    # La última tarea de la carga (preview o confirmación). «trabada»: figura corriendo hace más de
-    # 30 minutos (más que el plazo de Cloud Tasks): la instancia que la corría probablemente murió.
+    # La tarea de la operación en curso (o la última) y el avance por lotes (D50)
     carga["tarea"] = conn.execute(
-        "SELECT id, tipo, estado, progreso, total, error, creado,"
-        " (estado = 'corriendo' AND creado < now() - make_interval(mins => %s)) AS trabada"
-        " FROM tarea WHERE tipo IN ('carga.preview', 'carga.confirmar')"
-        " AND (payload->>'carga_id')::int = %s ORDER BY id DESC LIMIT 1", (tareas.TRABADA_MINUTOS, carga_id)).fetchone()
+        "SELECT id, tipo, estado, progreso, total, error, mensaje, creado, actualizado FROM tarea WHERE id = %s",
+        (carga["tarea_id"],)).fetchone() if carga["tarea_id"] else None
+    carga["lotes_detalle"] = conn.execute(
+        "SELECT count(*) AS total, count(*) FILTER (WHERE preview_hecho) AS preview_hechos,"
+        " count(*) FILTER (WHERE estado = 'aplicado') AS aplicados,"
+        " coalesce(sum(filas) FILTER (WHERE estado = 'aplicado'), 0) AS filas_aplicadas,"
+        " max(segundos) AS max_segundos, sum(preview_segundos) AS preview_segundos, (SELECT error FROM carga_lote WHERE carga_id = %s AND estado = 'error'"
+        "  ORDER BY numero LIMIT 1) AS error_lote FROM carga_lote WHERE carga_id = %s", (carga_id, carga_id)).fetchone()
+    if carga["cola"]:
+        from . import lotes
+
+        carga["esperando"] = lotes.ocupada(conn, carga_id)
     return carga
 
 
 def listar(conn) -> list[dict]:
     return conn.execute(
         "SELECT c.id, c.fuente, c.tipo_fuente, c.licencia, c.responsable, c.regla_fusion, c.destino, c.reglas, c.estado, c.conteos, c.fecha,"
-        " c.confirmada, c.deshecha, c.descartada, a.nombre AS archivo_nombre FROM carga c JOIN archivo a ON a.id = c.archivo_id"
+        " c.confirmada, c.deshecha, c.descartada, c.operacion, c.lotes, c.n_filas, c.cola, a.nombre AS archivo_nombre"
+        " FROM carga c JOIN archivo a ON a.id = c.archivo_id"
         " ORDER BY c.id DESC LIMIT 200").fetchall()
 
 

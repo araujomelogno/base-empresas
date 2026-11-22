@@ -152,3 +152,21 @@ La captura `25-naturalezas.png` la saca `capturas.js` (como siempre, con la demo
 ```bash
 python docs/build/manual_naturalezas.py docs/Manual_de_usuario_Base_de_Empresas.docx docs/manual/img
 ```
+
+## Cargas por lotes (guía 30)
+
+`capturas_lotes.js` saca `62-carga-por-lotes`, `63-carga-interrumpida` y `64-config-cargas`. Necesita la demo recién cargada, dos cargas nuevas (por ejemplo, dos CSV de 30 filas con RUTs que no estén en la demo) y, para ilustrar, la primera en «interrumpida» (4 de 10 lotes) y la segunda «en proceso» (lote 13 de 38), ajustadas a mano en `carga`, `carga_lote` y `tarea` de la base de la demo. Los números de carga se pasan con `CARGA_INTERRUMPIDA` y `CARGA_EN_CURSO`:
+
+```bash
+CARGA_INTERRUMPIDA=4 CARGA_EN_CURSO=5 BASE=http://localhost:8080 node docs/build/capturas_lotes.js docs/manual/img
+```
+
+`manual_lotes.py` agrega al Word la guía 30, los estados nuevos de la guía 3, el parámetro de la guía 15 y dos filas de Solución de problemas; después se regenera el PDF:
+
+```bash
+python docs/build/manual_lotes.py docs/Manual_de_usuario_Base_de_Empresas.docx docs/manual/img
+```
+
+```bash
+soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
+```

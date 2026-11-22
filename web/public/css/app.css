@@ -258,8 +258,8 @@ tr.fila-resaltada td { background: #fff4e5 !important; box-shadow: inset 0 0 0 9
 .est-pendiente, .est-sin_verificar, .est-borrador, .est-analizando, .est-analizada { background: var(--gray-light); color: var(--gray); }
 .est-completa, .est-verificado, .est-activa, .est-confirmada, .est-ok, .est-disponible, .est-resuelta, .est-liberado { background: var(--green-light); color: var(--green); }
 .est-rechazo, .est-no_corresponde, .est-inexistente, .est-error, .est-deshecha, .est-cerrada, .est-no_disponible, .est-confirmado { background: var(--red-light); color: var(--red); }
-.est-intermediario, .est-sospechoso, .est-preview, .est-fuera_de_marco, .est-no_contactable, .est-descartada { background: var(--amber-light); color: var(--amber); }
-.est-en_curso, .est-en_proceso, .est-corriendo, .est-desconocida { background: var(--orange-light); color: var(--orange-dark); }
+.est-intermediario, .est-sospechoso, .est-interrumpida, .est-preview, .est-fuera_de_marco, .est-no_contactable, .est-descartada { background: var(--amber-light); color: var(--amber); }
+.est-en_curso, .est-en_proceso, .est-corriendo, .est-desconocida, .est-deshaciendo, .est-borrando { background: var(--orange-light); color: var(--orange-dark); }
 .est-titular, .est-fijo { background: var(--blue-light); color: var(--blue); }
 .est-reemplazo, .est-celular { background: #F1ECF8; color: #6B4FA0; }
 
