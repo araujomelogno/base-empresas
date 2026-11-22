@@ -58,6 +58,7 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 | D48 | Tablero de calidad por dimensión DMBOK con histórico diario | Vigente (17/11/2026) |
 | D49 | Naturalezas jurídicas: se edita el nombre y la exclusión; el código y el borrado, solo si ninguna empresa la usa ni la usó; rutas por id | Vigente (20/11/2026) |
 | D50 | Cargas por lotes: preview, confirmación, deshacer y borrado por lotes de 5.000 filas, cada uno una transacción; estado «interrumpida», reanudar, una carga pesada a la vez | Vigente (22/11/2026) |
+| D51 | Crear la carga sin esperas: el archivo se parsea una vez al analizarlo (archivo_fila), los archivos grandes se leen en segundo plano, «Siguiente» responde enseguida y una clave evita cargas duplicadas | Vigente (22/11/2026) |
 
 ## D01 — Cloud SQL Postgres como núcleo
 
@@ -612,6 +613,21 @@ La configuración inicial usa 6 meses de enfriamiento desde el último contacto 
 **Compatibilidad.** Las reglas de negocio de la carga (mapeo, fusión, supervivencia, orígenes, atributos, contactos, base provisoria) no cambian: los tests de cargas corren con lotes de 2 filas para forzar varios lotes. Una carga chica es un solo lote.
 
 **Descartado.** B, correr la carga como Cloud Run job en una sola transacción: satura la base durante horas. C, agrandar la base como única solución: cuesta más y no garantiza bajar de 30 minutos. Lotes en paralelo de una misma carga (P2). Reescribir `procesar` para precargar todo el lote en pocas consultas: se deja para cuando las mediciones en producción lo pidan, porque cambia el código que decide cada fila y el tiempo medido por lote ya está lejos del límite. Ajustar `CARGAS_TAMANO_LOTE` y `CARGAS_PAUSA` por variable de entorno queda para los tests.
+
+## D51 — Crear la carga sin esperas mudas
+
+**Contexto.** Con un archivo de 193.556 filas, «Siguiente» en el paso 2 de la carga no mostraba nada. El archivo se parseaba tres veces: al analizarlo, al revisar los valores a traducir (`POST /cargas/valores`) y al crear la carga (`POST /cargas`, que además copiaba todas las filas). Las dos últimas, dentro de pedidos sincrónicos, sin aviso en la pantalla, y Firebase Hosting corta a los 60 s: el navegador recibía un error mientras la API seguía y creaba la carga igual, y un segundo «Siguiente» creaba otra. Ver `specs/SPEC_crear_carga_asincrona.md`.
+
+**Decisión.**
+
+1. **El archivo se parsea una sola vez, al analizarlo.** Sus filas quedan en `archivo_fila` (`archivo_id`, `fila`, `datos`) y sus columnas y su cantidad de filas, en `archivo`. Todo lo que sigue sale de ahí. Si un archivo no tiene sus filas guardadas (uno subido antes de este cambio, o uno cuyas filas ya se liberaron), se leen y se guardan una vez, la primera vez que hacen falta. El log dice «archivo N parseado».
+2. **Un archivo grande se lee en segundo plano.** Si pesa más de 10 MB o tiene más de 20.000 filas (estimadas sin parsearlo: los saltos de línea de un CSV, o la dimensión de la hoja de un Excel, o sus filas contadas en el XML), «Analizar» guarda el archivo, crea la tarea `archivo.leer` y responde enseguida. La pantalla muestra «Leyendo el archivo… N filas» y el resultado de la tarea es el mismo análisis de siempre. Los archivos chicos siguen igual que antes.
+3. **Los valores a traducir se cuentan con una consulta** sobre `archivo_fila` (un `GROUP BY` del valor de cada columna), con la misma limpieza de siempre: con 200.000 filas tarda 0,1 s. Mientras tanto, «Siguiente» queda deshabilitado con «Revisando los valores…».
+4. **Crear la carga responde enseguida.** Valida el mapeo con las columnas del análisis, verifica la traducción con la misma consulta, crea la carga y la plantilla y encola el preview: 0,1 s con 200.000 filas. El **primer paso del preview** reparte las filas en lotes por RUT (D50) con «Preparando los lotes…» (3 s con 200.000 filas); `carga_fila` guarda solo el lote de cada fila, y los datos se leen de `archivo_fila`. La pantalla muestra «Creando la carga…», «Preparando los lotes…» y «Calculando el preview… Lote N de M».
+5. **Sin cargas duplicadas.** La web genera una clave al abrir el paso del mapeo y la manda al crear: la misma clave de la misma persona devuelve la carga ya creada (`carga.clave`, única por responsable). Además, si la misma persona está creando una carga de ese archivo (en «analizando», en los últimos 10 minutos), «Siguiente» ofrece **Ir a la carga #N** en lugar de crear otra.
+6. **Las filas intermedias se liberan.** Al confirmar, descartar, deshacer o borrar la carga (si ninguna otra carga en curso usa el archivo), y en el job diario de calidad, que libera las de los archivos de hace más de 24 horas que ninguna carga en curso necesita. No hace falta otro Cloud Scheduler.
+
+**Descartado.** Subir el archivo directo al bucket con una URL firmada (P2, para archivos de más de 30 MB). Guardar las filas en un CSV normalizado en el bucket: la tabla permite contar valores y leer lotes con una consulta.
 
 ## Preguntas abiertas que heredan del PRD
 

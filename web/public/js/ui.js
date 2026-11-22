@@ -164,9 +164,13 @@ export async function seguirTarea(tareaId, el, { texto = 'Procesando' } = {}) {
     const trabada = t.estado === 'pendiente' && !enCola && Date.now() - ultimoCambio > PENDIENTE_AVISO_MS;
     const total = t.total || 0;
     const p = total ? Math.min(100, Math.round(100 * t.progreso / total)) : (t.estado === 'ok' ? 100 : 5);
-    const estado = t.mensaje && !['ok', 'error', 'cancelada'].includes(t.estado) ? esc(t.mensaje) : est(t.estado);
+    // El mensaje de la tarea («Creando la carga…», «Preparando los lotes…», «Leyendo el archivo… 45.000 filas») se
+    // muestra solo; el avance por lotes va después del texto de la operación («Calculando el preview… Lote 3 de 38»).
+    const enCurso = t.mensaje && !['ok', 'error', 'cancelada'].includes(t.estado);
+    const etiquetaTxt = !enCurso ? `${esc(texto)}… ${est(t.estado)}`
+      : /^Lote \d/.test(t.mensaje) ? `${esc(texto)}… ${esc(t.mensaje)}` : esc(t.mensaje);
     if (el) el.innerHTML = `<div class="progress"><span style="width:${p}%"></span></div>
-      <div class="progress-label"><span>${esc(texto)}… ${estado}</span><span class="mono">${total ? `${num(t.progreso)} / ${num(total)}` : ''}</span></div>` +
+      <div class="progress-label"><span>${etiquetaTxt}</span><span class="mono">${total ? `${num(t.progreso)} / ${num(total)}` : ''}</span></div>` +
       (trabada ? `<div class="alert alert-warn mt">La tarea #${esc(String(tareaId))} todavía no arrancó. Si sigue así, avisale a un
         administrador: Cloud Tasks no está pudiendo ejecutarla (ver «Problemas frecuentes» en la guía de despliegue).</div>` : '');
     if (t.estado === 'ok') return t;
@@ -174,6 +178,15 @@ export async function seguirTarea(tareaId, el, { texto = 'Procesando' } = {}) {
     if (t.estado === 'cancelada') throw new Error(t.error || 'La tarea se canceló');
     await new Promise(r => setTimeout(r, total >= 20000 ? 5000 : 900));
   }
+}
+
+// Un botón «ocupado»: deshabilitado, con un spinner y un texto («Revisando los valores…»). Devuelve cómo volverlo atrás.
+export function ocupado(btn, texto) {
+  if (!btn) return () => {};
+  const antes = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner spinner-sm"></span>${esc(texto)}`;
+  return () => { btn.disabled = false; btn.innerHTML = antes; };
 }
 
 // ── Barras horizontales de una sola serie, con valor y tooltip ──

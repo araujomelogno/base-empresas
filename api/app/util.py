@@ -23,6 +23,18 @@ def _default(o):
     raise TypeError(f"No serializable: {type(o)}")
 
 
+def celda_json(v):
+    """Valor de celda guardable en JSON sin cambiar cómo lo lee la carga (las fechas, como las escribe str())."""
+    import datetime as _dt
+    from decimal import Decimal as _Decimal
+
+    if isinstance(v, (_dt.datetime, _dt.date, _dt.time, _Decimal)):
+        return str(v)
+    if isinstance(v, float) and v != v:
+        return None
+    return v
+
+
 def json_dumps(o) -> str:
     return json.dumps(o, default=_default, ensure_ascii=False)
 

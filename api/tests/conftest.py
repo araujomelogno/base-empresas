@@ -137,6 +137,8 @@ def cargar(api, filas, rol="steward", regla="rut", fuente="Base de prueba", tipo
     r = api.subir("/cargas/analizar", nombre, contenido or csv_bytes(filas), rol=rol, tipo_fuente=tipo_fuente)
     assert r.status_code == 200, r.text
     a = r.json()
+    if "tarea_id" in a and "mapeo" not in a:  # D51: un archivo grande se analiza en segundo plano
+        a = api.get(f"/tareas/{a['tarea_id']}").json()["resultado"]
     m = dict(a["mapeo"])
     if m.get("telefonos"):
         m.setdefault("origen_defecto", origen_defecto)

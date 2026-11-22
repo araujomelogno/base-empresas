@@ -9,12 +9,13 @@ from fastapi import HTTPException
 from .util import texto
 
 
-def leer_tabla(datos: bytes, tipo: str) -> tuple[list[str], list[dict], dict]:
-    """Devuelve (columnas, filas, metadatos). Los metadatos solo vienen para .sav."""
+def leer_tabla(datos: bytes, tipo: str, avance=None) -> tuple[list[str], list[dict], dict]:
+    """Devuelve (columnas, filas, metadatos). Los metadatos solo vienen para .sav.
+    avance(n): se llama cada 5.000 filas leídas de un Excel (para mostrar «Leyendo el archivo… N filas»)."""
     if tipo == "csv":
         return (*_csv(datos), {})
     if tipo == "xlsx":
-        return (*_xlsx(datos), {})
+        return (*_xlsx(datos, avance), {})
     if tipo == "sav":
         return leer_sav(datos)
     raise HTTPException(415, f"Tipo no soportado: {tipo}")
@@ -45,7 +46,37 @@ def _csv(datos: bytes):
     return columnas, [dict(zip(columnas, _rellenar(f, len(columnas)))) for f in filas[1:] if any(c.strip() for c in f)]
 
 
-def _xlsx(datos: bytes):
+def estimar_filas(datos: bytes, tipo: str) -> int:
+    """Cuántas filas tiene el archivo, sin parsearlo: los saltos de línea de un CSV, o la dimensión que declara la
+    primera hoja de un Excel (si no la declara, por el tamaño). Sirve para decidir si se lee en segundo plano."""
+    if tipo == "csv":
+        return max(0, datos.count(b"\n") - 1)
+    if tipo == "xlsx":
+        import re
+        import zipfile
+
+        try:
+            with zipfile.ZipFile(io.BytesIO(datos)) as z:
+                hojas = sorted(n for n in z.namelist() if n.startswith("xl/worksheets/") and n.endswith(".xml"))
+                if hojas:
+                    with z.open(hojas[0]) as h:
+                        inicio = h.read(4096)
+                        m = re.search(rb'<dimension ref="[A-Z]+\d+:[A-Z]+(\d+)"', inicio)
+                        if m:
+                            return max(0, int(m.group(1)) - 1)
+                        # Sin dimensión (algunos programas no la escriben): se cuentan las filas del XML sin parsearlo
+                        n, resto = inicio.count(b"<row"), inicio[-8:]
+                        while bloque := h.read(1 << 20):
+                            n += (resto + bloque).count(b"<row") - resto.count(b"<row")
+                            resto = bloque[-8:]
+                        return max(0, n - 1)
+        except (zipfile.BadZipFile, KeyError, ValueError):
+            pass
+        return len(datos) // 50
+    return 0
+
+
+def _xlsx(datos: bytes, avance=None):
     from openpyxl import load_workbook
 
     try:
@@ -64,6 +95,8 @@ def _xlsx(datos: bytes):
         if f is None or all(c is None or str(c).strip() == "" for c in f):
             continue
         salida.append(dict(zip(columnas, _rellenar(list(f), len(columnas)))))
+        if avance and len(salida) % 5000 == 0:
+            avance(len(salida))
     wb.close()
     return columnas, salida
 

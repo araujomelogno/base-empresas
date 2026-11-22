@@ -1,7 +1,7 @@
 """Cargas grandes por lotes (SPEC_cargas_grandes_por_lotes; D50).
 
-Una carga deja de ser «todo o nada». El archivo se parsea una vez y sus filas quedan en carga_fila, repartidas en
-lotes: todas las filas con el mismo RUT caen en el mismo lote, y las que no traen un RUT válido van al final. El
+Una carga deja de ser «todo o nada». El archivo se parsea una vez, al analizarlo (archivo_fila, D51), y el primer paso
+del preview reparte sus filas en lotes (carga_fila): todas las filas con el mismo RUT caen en el mismo lote, y las que no traen un RUT válido van al final. El
 preview, la confirmación y el deshacer corren como tareas por pasos (tareas.Continuar): cada lote o tanda es una
 transacción corta y una ejecución de la tarea, muy lejos del límite de 30 minutos de Cloud Run y Cloud Tasks.
 
@@ -23,7 +23,7 @@ from psycopg.types.json import Jsonb
 
 from . import auditoria, cargas, config, contactos, empresas, intermediarios, rut as rutmod, tareas
 from .db import conexion
-from .util import json_dumps, texto
+from .util import celda_json, json_dumps, texto
 
 log = logging.getLogger(__name__)
 PESADAS = ("en_proceso", "deshaciendo", "borrando")
@@ -36,13 +36,7 @@ ALARMA_SEGUNDOS = 600      # un lote que tarda más que esto deja una alarma en 
 # L1 · Filas guardadas una vez, repartidas en lotes por RUT
 # ─────────────────────────────────────────────────────────────
 
-def _celda(v):
-    """Valor de celda guardable en JSON sin cambiar cómo lo lee la carga (las fechas, como las escribe str())."""
-    if isinstance(v, (dt.datetime, dt.date, dt.time, Decimal)):
-        return str(v)
-    if isinstance(v, float) and v != v:
-        return None
-    return v
+_celda = celda_json
 
 
 def armar_lotes(filas: list[dict], mapeo: dict, tamano: int) -> list[int]:
@@ -76,32 +70,44 @@ def armar_lotes(filas: list[dict], mapeo: dict, tamano: int) -> list[int]:
     return lote_de
 
 
-def guardar_filas(conn, carga_id: int, filas: list[dict], mapeo: dict, tamano: int) -> int:
-    """Copia las filas a carga_fila (COPY) y crea los lotes. Devuelve cuántos lotes hay."""
-    lote_de = armar_lotes(filas, mapeo, tamano)
+def preparar_lotes(conn, carga: dict, tarea_id: int | None = None) -> dict:
+    """Reparte las filas del archivo (archivo_fila, guardadas al analizarlo) en lotes por RUT: carga_fila guarda solo el
+    lote de cada fila. Lo hace el primer paso del preview (D51), con «Preparando los lotes…» en la pantalla."""
+    archivo = cargas.asegurar_filas(conn, carga["archivo_id"])
+    n = archivo["n_filas"] or 0
+    tareas.mensaje(tarea_id, f"Preparando los lotes… {n:,} filas".replace(",", "."))
+    col = (carga["mapeo"] or {}).get("rut")
+    filas = conn.execute("SELECT fila, datos -> %s AS rut FROM archivo_fila WHERE archivo_id = %s ORDER BY fila",
+                         (col or "", archivo["id"])).fetchall()
+    _, params = config.vigente(conn)
+    lote_de = armar_lotes([{col: f["rut"]} if col else {} for f in filas], carga["mapeo"] or {},
+                          config.cargas(params)["tamano_lote"])
+    conn.execute("DELETE FROM carga_fila WHERE carga_id = %s", (carga["id"],))
+    conn.execute("DELETE FROM carga_lote WHERE carga_id = %s", (carga["id"],))
     with conn.cursor() as cur:
-        with cur.copy("COPY carga_fila (carga_id, fila, lote, datos) FROM STDIN") as cp:
-            for i, f in enumerate(filas):
-                cp.write_row((carga_id, i + 2, lote_de[i], json_dumps({k: _celda(v) for k, v in f.items()})))
+        with cur.copy("COPY carga_fila (carga_id, fila, lote) FROM STDIN") as cp:
+            for f, lote in zip(filas, lote_de):
+                cp.write_row((carga["id"], f["fila"], lote))
     conn.execute(
         "INSERT INTO carga_lote (carga_id, numero, filas, fila_desde, fila_hasta)"
         " SELECT carga_id, lote, count(*), min(fila), max(fila) FROM carga_fila WHERE carga_id = %s GROUP BY carga_id, lote",
-        (carga_id,))
-    return max(lote_de, default=0)
-
-
-def _preparar_filas(conn, carga: dict) -> dict:
-    """Cargas creadas antes de D50 (o una tarea vieja en cola): lee el archivo y arma los lotes una vez."""
-    _, _, filas = cargas._leer(conn, carga["archivo_id"])
-    _, params = config.vigente(conn)
-    n = guardar_filas(conn, carga["id"], filas, carga["mapeo"], config.cargas(params)["tamano_lote"])
-    conn.execute("UPDATE carga SET lotes = %s, n_filas = %s WHERE id = %s", (n, len(filas), carga["id"]))
-    return {**carga, "lotes": n, "n_filas": len(filas)}
+        (carga["id"],))
+    n_lotes = max(lote_de, default=0)
+    conn.execute("UPDATE carga SET lotes = %s, n_filas = %s WHERE id = %s", (n_lotes, len(filas), carga["id"]))
+    return {**carga, "lotes": n_lotes, "n_filas": len(filas)}
 
 
 def filas_lote(conn, carga_id: int, lote: int) -> list[tuple[int, dict]]:
-    return [(r["fila"], r["datos"]) for r in conn.execute(
-        "SELECT fila, datos FROM carga_fila WHERE carga_id = %s AND lote = %s ORDER BY fila", (carga_id, lote))]
+    """Las filas de un lote. Los datos están en archivo_fila (cargas desde D51) o en carga_fila (cargas anteriores)."""
+    sql = ("SELECT cf.fila, coalesce(cf.datos, af.datos) AS datos FROM carga_fila cf"
+           " LEFT JOIN archivo_fila af ON af.archivo_id = (SELECT archivo_id FROM carga WHERE id = cf.carga_id)"
+           "  AND af.fila = cf.fila WHERE cf.carga_id = %s AND cf.lote = %s ORDER BY cf.fila")
+    filas = conn.execute(sql, (carga_id, lote)).fetchall()
+    if any(f["datos"] is None for f in filas):  # las filas del archivo se liberaron: se vuelven a leer una vez
+        aid = conn.execute("SELECT archivo_id FROM carga WHERE id = %s", (carga_id,)).fetchone()["archivo_id"]
+        cargas.asegurar_filas(conn, aid)
+        filas = conn.execute(sql, (carga_id, lote)).fetchall()
+    return [(f["fila"], f["datos"]) for f in filas]
 
 
 # ─────────────────────────────────────────────────────────────
@@ -299,7 +305,7 @@ def refrescar_estadisticas(conn, numero: int):
         conn.execute("ANALYZE " + ", ".join(_TABLAS_CARGA))
 
 
-def _carga_de_tarea(conn, payload, tarea_id, estados) -> dict | None:
+def _carga_de_tarea(conn, payload, tarea_id, estados, preparar: bool = True) -> dict | None:
     # Sin bloquear la fila durante todo el lote: se bloquea al final (_sigue_vigente), para no hacer esperar a la web
     carga = conn.execute("SELECT * FROM carga WHERE id = %s", (payload["carga_id"],)).fetchone()
     if carga is None or carga["estado"] not in estados:
@@ -309,8 +315,8 @@ def _carga_de_tarea(conn, payload, tarea_id, estados) -> dict | None:
         carga["tarea_id"] = tarea_id
     if carga["tarea_id"] != tarea_id:
         return None  # una tarea vieja (la carga ya pasó a otra operación)
-    if not carga["lotes"]:
-        carga = _preparar_filas(conn, carga)
+    if not carga["lotes"] and preparar:
+        carga = preparar_lotes(conn, carga, tarea_id)
     return carga
 
 
@@ -321,9 +327,14 @@ def _mensaje(conn, carga, numero, hechas, columna_hecho) -> str:
 
 @tareas.handler("carga.preview")
 def _tarea_preview(conn, payload, tarea_id):
-    carga = _carga_de_tarea(conn, payload, tarea_id, ("analizando",))
+    carga = _carga_de_tarea(conn, payload, tarea_id, ("analizando",), preparar=False)
     if carga is None:
         return {"omitida": True}
+    if not carga["lotes"]:  # primer paso (D51): repartir las filas del archivo en lotes, con su propio aviso
+        carga = preparar_lotes(conn, carga, tarea_id)
+        _sigue_vigente(conn, carga["id"], tarea_id, "analizando")
+        tareas.progreso(tarea_id, 0, carga["n_filas"])
+        return tareas.Continuar(f"Lotes listos: {carga['lotes']} · calculando el preview")
     cid = carga["id"]
     _, cfg = config.vigente(conn)
     lote = conn.execute("SELECT * FROM carga_lote WHERE carga_id = %s AND NOT preview_hecho ORDER BY numero LIMIT 1",
@@ -410,6 +421,7 @@ def _tarea_confirmar(conn, payload, tarea_id):
     conn.execute("UPDATE carga SET estado = 'confirmada', conteos = %s, confirmada = now() WHERE id = %s",
                  (Jsonb(conteos), cid))
     conn.execute("DELETE FROM carga_fila WHERE carga_id = %s", (cid,))
+    cargas.liberar_archivo(conn, carga["archivo_id"])
     auditoria.registrar(conn, carga["responsable"], "carga.confirmar", "carga", cid, {"conteos": conteos})
     _liberar_al_terminar(conn)
     return {"carga_id": cid, "conteos": conteos}
@@ -450,7 +462,7 @@ def _quitar_tanda(conn, cid: int) -> int:
 
 @tareas.handler("carga.deshacer")
 def _tarea_deshacer(conn, payload, tarea_id):
-    carga = _carga_de_tarea(conn, payload, tarea_id, ("deshaciendo",))
+    carga = _carga_de_tarea(conn, payload, tarea_id, ("deshaciendo",), preparar=False)
     if carga is None:
         return {"omitida": True}
     cid, actor = carga["id"], tareas_actor(conn, tarea_id)
@@ -524,6 +536,7 @@ def _tarea_deshacer(conn, payload, tarea_id):
     conn.execute("UPDATE carga SET estado = 'deshecha', deshecha = now(), paso = NULL, resumen_op = %s WHERE id = %s",
                  (Jsonb(resumen), cid))
     conn.execute("DELETE FROM carga_fila WHERE carga_id = %s", (cid,))
+    cargas.liberar_archivo(conn, carga["archivo_id"])
     conn.execute("DELETE FROM carga_trabajo WHERE carga_id = %s", (cid,))
     auditoria.registrar(conn, actor, "carga.deshacer", "carga", cid, resumen)
     tareas.progreso(tarea_id, resumen["empresas_recalculadas"] + 2, resumen["empresas_recalculadas"] + 2)
