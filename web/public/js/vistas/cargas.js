@@ -1,7 +1,7 @@
 // Cargas de bases, intermediarios y revisión de fusiones (R1.2, R1.3)
 import * as api from '../api.js';
 import { $, $$, esc, main, toast, num, fecha, fechaHora, rutFmt, est, etiqueta, pageHeader, stats, tabla, card, modal,
-  pedirTexto, confirmar, confirmarEscrito, seguirTarea, archivoDrop, activarDrop, tabs } from '../ui.js';
+  pedirTexto, confirmar, confirmarEscrito, seguirTarea, archivoDrop, activarDrop, tabs, ocupado } from '../ui.js';
 import { actualizarContadores } from '../app.js';
 
 const CRIT_TXT = { rut: 'RUT', razon_social: 'razón social', telefono: 'teléfono', dominio_web: 'dominio web', direccion: 'dirección', email: 'email' };
@@ -62,15 +62,21 @@ export async function nueva(ctx) {
       <div><div class="form-group"><label>Tipo de fuente</label><input type="text" id="c-tipo" list="c-tipos" placeholder="p. ej. padrón DGI, estudio clima 2025" />
         <datalist id="c-tipos">${plantillas.map(p => `<option value="${esc(p.tipo_fuente)}">`).join('')}</datalist>
         <div class="field-hint">El mapeo de columnas y las traducciones de valores se guardan como plantilla por tipo de fuente y se reusan en la próxima carga.</div></div>
-        <button class="btn btn-orange" id="c-analizar" disabled>Analizar archivo</button></div></div>`) + `<div id="c-paso2"></div>`;
+        <button class="btn btn-orange" id="c-analizar" disabled>Analizar archivo</button><div id="c-leyendo" class="mt"></div></div></div>`) + `<div id="c-paso2"></div>`;
   let archivo = null;
   activarDrop('c-arch', (f) => { archivo = f; $('#c-analizar').disabled = false; });
   $('#c-analizar').onclick = async () => {
-    $('#c-analizar').disabled = true;
+    const listo = ocupado($('#c-analizar'), 'Analizando…');
     try {
-      const a = await api.upload('/cargas/analizar', archivo, { tipo_fuente: $('#c-tipo').value.trim() });
+      let a = await api.upload('/cargas/analizar', archivo, { tipo_fuente: $('#c-tipo').value.trim() });
+      if (a.tarea_id && !a.mapeo) {  // D51: un archivo grande se lee en segundo plano, con su avance
+        a = (await seguirTarea(a.tarea_id, $('#c-leyendo'), { texto: 'Leyendo el archivo' })).resultado;
+        $('#c-leyendo').innerHTML = '';
+      }
+      listo();
+      $('#c-analizar').disabled = true;
       mapeo(ctx, a, $('#c-tipo').value.trim(), cfg.parametros);
-    } catch (e) { toast(e.message, 'err'); $('#c-analizar').disabled = false; }
+    } catch (e) { toast(e.message, 'err'); listo(); }
   };
 }
 
@@ -118,7 +124,11 @@ function columnasUsadas(m) {
   return u;
 }
 
+// A4 (D51): una clave por paso de mapeo; si «Siguiente» llega dos veces, la API devuelve la carga ya creada
+const nuevaClave = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 function mapeo(ctx, a, tipoFuente, params) {
+  let clave = nuevaClave();
   const st = estadoInicial(a);
   const atributos = Object.fromEntries(a.atributos.filter(x => (x.ambito || 'empresa') === 'empresa').map(x => [x.clave, x]));
   const atrContacto = Object.fromEntries(a.atributos.filter(x => x.ambito === 'contacto').map(x => [x.clave, x]));
@@ -259,17 +269,21 @@ function mapeo(ctx, a, tipoFuente, params) {
 
   const crear = async () => {
     const m = mapeoDe(st);
-    $('#c-siguiente').disabled = true;
+    const listo = ocupado($('#c-siguiente'), 'Creando la carga…');
+    // El avance aparece enseguida: «Creando la carga…», «Preparando los lotes…», «Calculando el preview… Lote N de M»
+    $('#c-prog').innerHTML = `<div class="progress"><span style="width:2%"></span></div>
+      <div class="progress-label"><span>Creando la carga…</span><span></span></div>`;
     try {
       const r = await api.post('/cargas', {
         archivo_id: a.archivo_id, fuente: $('#c-fuente').value.trim() || a.nombre, tipo_fuente: tipoFuente || 'sin tipo',
         licencia: $('#c-licencia').value.trim(), destino: $('#c-destino').value, reglas,
         opciones: { con_rut_a_definitiva: $('#c-con-rut').checked, sin_rut_a_provisoria: $('#c-sin-rut').checked },
-        confianza: +$('#c-conf').value, mapeo: m, guardar_plantilla: $('#c-plantilla').checked,
+        confianza: +$('#c-conf').value, mapeo: m, guardar_plantilla: $('#c-plantilla').checked, clave,
       });
+      if (r.existente) { toast(`La carga #${r.carga_id} ya se había creado: seguís desde ahí`, 'ok'); return ctx.ir('cargas/' + r.carga_id); }
       await seguirTarea(r.tarea_id, $('#c-prog'), { texto: 'Calculando el preview' });
       ctx.ir('cargas/' + r.carga_id);
-    } catch (e) { toast(e.message, 'err'); $('#c-siguiente').disabled = false; }
+    } catch (e) { toast(e.message, 'err'); $('#c-prog').innerHTML = ''; listo(); }
   };
 
   $('#c-siguiente').onclick = async () => {
@@ -279,11 +293,23 @@ function mapeo(ctx, a, tipoFuente, params) {
     if (!m.contacto_nombre && (['contacto_cargo', 'contacto_area', 'contacto_email', 'contacto_telefono'].some(k => m[k]) || m.contacto_atributos))
       return toast('Para cargar contactos, indicá la columna con el nombre del contacto', 'err');
     if (!$('#c-licencia').value.trim()) return toast('Indicá la licencia de uso de la fuente', 'err');
+    const listo = ocupado($('#c-siguiente'), 'Revisando los valores…');
     try {
+      // A4: si ya se está creando una carga de este archivo (por ejemplo, un «Siguiente» anterior), se ofrece ir a ella
+      const { carga: enCurso } = await api.get('/cargas/en-curso', { archivo_id: a.archivo_id });
+      if (enCurso) {
+        const que = await modal({ titulo: `Ya se está creando la carga #${enCurso.id}`, cuerpo: `<p>Con este archivo ya se
+          está creando la carga #${enCurso.id}. Para no cargarlo dos veces, seguí desde ahí.</p>`,
+          acciones: [{ t: 'Crear otra igual', valor: 'otra' }, { t: `Ir a la carga #${enCurso.id}`, cls: 'btn-orange', valor: 'ir' }] });
+        if (que === 'ir') return ctx.ir('cargas/' + enCurso.id);
+        if (que !== 'otra') return listo();
+        clave = nuevaClave();
+      }
       const v = await api.post('/cargas/valores', { archivo_id: a.archivo_id, mapeo: m });
+      listo();
       if (!v.origen.length && !v.atributos.length) { $('#c-traduccion').innerHTML = ''; return crear(); }
       traduccion(ctx, a, st, v, crear);
-    } catch (e) { toast(e.message, 'err'); }
+    } catch (e) { toast(e.message, 'err'); listo(); }
   };
 }
 

@@ -63,3 +63,6 @@ PROVEEDORES_MODO = os.environ.get("PROVEEDORES_MODO", "real")
 # Cargas por lotes (D50): solo para tests y pruebas locales; en producción manda la configuración (Configuración → Cargas)
 CARGAS_TAMANO_LOTE = int(os.environ["CARGAS_TAMANO_LOTE"]) if os.environ.get("CARGAS_TAMANO_LOTE") else None
 CARGAS_PAUSA = float(os.environ["CARGAS_PAUSA"]) if os.environ.get("CARGAS_PAUSA") else None
+# D51: un archivo de más de 10 MB o de más de 20.000 filas (estimadas sin parsearlo) se lee en segundo plano
+ARCHIVO_BYTES_SINCRONICO = int(os.environ.get("ARCHIVO_BYTES_SINCRONICO", 10 * 1024 * 1024))
+ARCHIVO_FILAS_SINCRONICO = int(os.environ.get("ARCHIVO_FILAS_SINCRONICO", 20000))

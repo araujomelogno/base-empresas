@@ -191,6 +191,9 @@ Una carga se procesa **por lotes** de 5.000 filas (se cambia en Configuración �
 - **El mismo RUT, en el mismo lote.** Las filas con el mismo RUT van siempre juntas, aunque estén lejos en el archivo: cuentan una sola alta. Las filas sin RUT van al final; si son muchas, el preview avisa que sus conteos son **aproximados** (dos filas sin RUT del mismo archivo podrían coincidir entre sí).
 - **Cuánto va a tardar.** Después del preview, el detalle dice cuánto tardó: la confirmación suele tardar algo parecido.
 - **Se puede seguir trabajando.** Mientras corre una carga grande, el resto de la aplicación se sigue usando: entre lote y lote la base tiene un respiro.
+- **Un archivo grande se lee en segundo plano.** Si el archivo tiene más de 20.000 filas (o pesa más de 10 MB), al tocar **Analizar archivo** aparece «Leyendo el archivo… N filas»; cuando termina, sigue el mapeo como siempre. El archivo se lee una sola vez: revisar los valores y crear la carga ya no lo vuelven a leer.
+- **«Siguiente» siempre muestra qué hace.** Mientras revisa los valores a traducir dice «Revisando los valores…», y al crear la carga la barra muestra enseguida «Creando la carga…», después «Preparando los lotes…» y después «Calculando el preview… Lote N de M».
+- **Sin cargas repetidas.** Tocar «Siguiente» dos veces crea una sola carga. Si ya se está creando una carga de ese archivo, la pantalla ofrece **Ir a la carga #N** en lugar de crear otra.
 - **Una carga grande a la vez.** Si confirmás, deshacés o borrás una carga mientras otra está corriendo, la segunda queda **en cola** con el aviso «Esperando a que termine la carga #N» y arranca sola cuando termina la primera.
 
 **Si una carga queda «interrumpida».** Pasa si un lote falla, si se cancela, o si la tarea no avanza durante 35 minutos (por ejemplo, porque se reinició el servidor). El detalle dice cuántos lotes se aplicaron y el error del lote que falló. Tres opciones:
@@ -693,6 +696,8 @@ Registro inalterable de cargas, fusiones, exclusiones, sorteos, exportaciones, i
 **Subí el .sav y quedaron filas sin asociar.** Revisá el motivo en los conteos. Lo más común es que la encuesta no tenga la URL variable `EC_ID_ITEM`; en ese caso el sistema intenta por RUT y teléfono usado. Lo que no se resuelve va a Conciliación.
 
 **Una carga grande quedó «interrumpida».** Abrí su detalle: dice cuántos lotes se aplicaron y por qué se cortó. **Reanudar** sigue desde ahí sin repetir nada. Si preferís sacarla, **Deshacer carga** quita lo aplicado. Ver «Cargas grandes».
+
+**Toqué «Siguiente» y quedaron dos cargas del mismo archivo.** Pasaba antes de noviembre de 2026, cuando «Siguiente» no mostraba nada y se cortaba al minuto. Abrí **Cargas**, seguí con una y borrá la otra con **Borrar carga**. Ahora la pantalla avisa «Ir a la carga #N» en lugar de crear otra.
 
 **Una carga dice «Esperando a que termine la carga #N».** Se procesa una carga grande a la vez: arranca sola cuando termina la otra.
 

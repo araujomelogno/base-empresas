@@ -170,3 +170,15 @@ python docs/build/manual_lotes.py docs/Manual_de_usuario_Base_de_Empresas.docx d
 ```bash
 soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
 ```
+
+## Crear la carga sin esperas (guía 30, D51)
+
+`65-carga-leyendo.png` (un archivo grande leyéndose en segundo plano) y `66-ir-a-la-carga.png` (el aviso de una carga del mismo archivo que se está creando) se sacaron con la API en `TASKS_MODE=background`, un .xlsx de 190.000 filas y un corte simulado del primer pedido de crear la carga (Playwright `route.abort` después de que el pedido llegó a la API). `manual_carga_asincrona.py` agrega esas figuras y sus párrafos a la guía 30 (corre las figuras 44s y 44t a 44u y 44v) y una fila de Solución de problemas; se aplica después de `manual_lotes.py` y después se regenera el PDF:
+
+```bash
+python docs/build/manual_carga_asincrona.py docs/Manual_de_usuario_Base_de_Empresas.docx docs/manual/img
+```
+
+```bash
+soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
+```

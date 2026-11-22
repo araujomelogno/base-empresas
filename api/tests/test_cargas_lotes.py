@@ -30,19 +30,21 @@ CLAVES = ("altas", "actualizaciones", "sin_cambios", "rechazos", "telefonos_nuev
 def test_el_archivo_se_parsea_una_vez_y_se_libera(api, sql, monkeypatch):
     from app import lectores
 
-    a = api.subir("/cargas/analizar", "b.csv", csv_bytes([fila(i) for i in range(7)]), rol="steward").json()
     llamadas = []
     original = lectores.leer_tabla
     monkeypatch.setattr(lectores, "leer_tabla", lambda *x, **k: llamadas.append(1) or original(*x, **k))
+    a = api.subir("/cargas/analizar", "b.csv", csv_bytes([fila(i) for i in range(7)]), rol="steward").json()
     r = api.post("/cargas", rol="steward", json={"archivo_id": a["archivo_id"], "fuente": "x", "tipo_fuente": "x",
                                                  "licencia": "interna", "mapeo": {**a["mapeo"], "origen_defecto": "sin_dato"}})
     cid = r.json()["carga_id"]
-    assert r.json()["lotes"] == 4                               # 7 filas en lotes de 2
+    assert carga(api, cid)["lotes"] == 4                        # 7 filas en lotes de 2, armados por el preview
     assert cuenta(sql, "carga_fila", f"carga_id = {cid}") == 7  # se conserva mientras está en preview
+    assert cuenta(sql, "archivo_fila", f"archivo_id = {a['archivo_id']}") == 7
     api.post(f"/cargas/{cid}/confirmar", rol="steward")
-    assert len(llamadas) == 1                                   # crear + preview + confirmación: una sola lectura
+    assert len(llamadas) == 1                                   # analizar + crear + preview + confirmación: una lectura
     assert carga(api, cid)["estado"] == "confirmada"
     assert cuenta(sql, "carga_fila", f"carga_id = {cid}") == 0  # al confirmar se libera
+    assert cuenta(sql, "archivo_fila", f"archivo_id = {a['archivo_id']}") == 0
 
 
 # ─── L2 / L3 · Preview y confirmación por lotes ───
@@ -52,9 +54,10 @@ def test_mismo_rut_lejos_cuenta_una_alta_y_el_preview_coincide(api, sql):
     c = cargar(api, filas, confirmar=False)
     preview = c["conteos"]
     assert preview["altas"] == 9 and preview["rut_repetido_en_archivo"] == 1
-    lotes = sql.execute("SELECT lote FROM carga_fila WHERE carga_id = %s AND datos->>'RUT' = %s ORDER BY fila",
-                        (c["id"], rut_valido(0))).fetchall()
-    assert len({l["lote"] for l in lotes}) == 1                 # la fila 2 y la fila 11 van en el mismo lote
+    lotes = sql.execute("SELECT cf.lote FROM carga_fila cf JOIN archivo_fila af ON af.fila = cf.fila"
+                        " AND af.archivo_id = (SELECT archivo_id FROM carga WHERE id = cf.carga_id)"
+                        " WHERE cf.carga_id = %s AND af.datos->>'RUT' = %s ORDER BY cf.fila", (c["id"], rut_valido(0))).fetchall()
+    assert len(lotes) == 2 and len({l["lote"] for l in lotes}) == 1   # la fila 2 y la fila 11 van en el mismo lote
     api.post(f"/cargas/{c['id']}/confirmar", rol="steward")
     final = carga(api, c["id"])
     assert final["estado"] == "confirmada" and final["conteos"]["lotes"] == c["lotes"]

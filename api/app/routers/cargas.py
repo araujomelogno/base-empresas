@@ -12,10 +12,18 @@ router = APIRouter()
 @router.post("/cargas/analizar")
 def analizar(archivo: UploadFile = File(...), tipo_fuente: str | None = Form(None),
              u: Usuario = Depends(requiere("steward"))):
+    """Guarda el archivo y lo lee una sola vez (D51): sus filas quedan para la traducción, la validación y los lotes.
+    Un archivo grande se lee en segundo plano: responde enseguida con {archivo_id, tarea_id} y el análisis es el
+    resultado de la tarea «archivo.leer»."""
     datos = archivo.file.read()
     with conexion() as conn:
         a = storage.guardar(conn, archivo.filename or "archivo", datos, u.email)
-        return cargas.analizar(conn, a, tipo_fuente)
+        if not cargas.es_grande(datos, a["tipo"]):
+            return cargas.analizar(conn, a, tipo_fuente)
+        tid = tareas.crear(conn, "archivo.leer", {"archivo_id": a["id"], "tipo_fuente": tipo_fuente}, u.email)
+        conn.execute("UPDATE tarea SET mensaje = 'Leyendo el archivo…' WHERE id = %s", (tid,))
+    tareas.despachar(tid)
+    return {"archivo_id": a["id"], "nombre": a["nombre"], "tarea_id": tid}
 
 
 class NuevaCarga(BaseModel):
@@ -30,6 +38,7 @@ class NuevaCarga(BaseModel):
     confianza: int | None = None
     mapeo: dict
     guardar_plantilla: bool = True
+    clave: str | None = None             # A4 (D51): la web la genera al abrir el mapeo; dos pedidos, una carga
 
 
 class Decisiones(BaseModel):
@@ -40,9 +49,17 @@ class Decisiones(BaseModel):
 def crear(body: NuevaCarga, u: Usuario = Depends(requiere("steward"))):
     with conexion() as conn:
         r = cargas.crear(conn, body.archivo_id, body.fuente, body.tipo_fuente, body.licencia, body.regla_fusion,
-                         body.confianza, body.mapeo, body.guardar_plantilla, u.email, body.destino, body.reglas, body.opciones)
-    tareas.despachar(r["tarea_id"])
+                         body.confianza, body.mapeo, body.guardar_plantilla, u.email, body.destino, body.reglas, body.opciones,
+                         (body.clave or "").strip()[:100] or None)
+    if not r.get("existente"):  # la carga que ya existía sigue con su tarea
+        tareas.despachar(r["tarea_id"])
     return r
+
+
+@router.get("/cargas/en-curso")
+def en_curso(archivo_id: int, conn=Depends(get_conn), u: Usuario = Depends(requiere("steward"))):
+    """A4: la carga de este archivo que la misma persona está creando, para ofrecer «Ir a la carga #N»."""
+    return {"carga": cargas.en_curso(conn, archivo_id, u.email)}
 
 
 class Valores(BaseModel):

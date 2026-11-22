@@ -36,11 +36,15 @@ def medir_ahora(conn=Depends(get_conn), u: Usuario = Depends(requiere("admin")))
 @router.post("/jobs/calidad")
 def job_calidad(conn=Depends(get_conn), _: str = Depends(requiere_job)):
     """Cloud Scheduler diario: foto de los indicadores (evolución del tablero). De paso revisa las cargas por lotes
-    trabadas (D50): las que no avanzan hace más del plazo quedan «interrumpidas» aunque nadie abra la pantalla."""
+    trabadas (D50): las que no avanzan hace más del plazo quedan «interrumpidas» aunque nadie abra la pantalla; y
+    libera las filas de los archivos que ya no se necesitan (D51)."""
     from .. import lotes
 
+    from .. import cargas
+
     trabadas = lotes.revisar_trabadas()
-    return {**calidad.medir(conn), "cargas_interrumpidas": trabadas}
+    # D51: las filas de los archivos que se analizaron y no se usaron (o cuya carga terminó) se liberan a las 24 h
+    return {**calidad.medir(conn), "cargas_interrumpidas": trabadas, "archivos_liberados": cargas.limpiar_archivos(conn)}
 
 
 @router.post("/jobs/duplicados")

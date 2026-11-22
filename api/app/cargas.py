@@ -6,16 +6,20 @@ confirmar (corre en diferido) → deshacer (mientras ninguna empresa haya entrad
 El preview corre exactamente el mismo código que la confirmación dentro de un savepoint
 que se descarta, así los conteos del preview son los que después se aplican.
 """
+import logging
 import re
+import time
 from collections import Counter
 
 import psycopg
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
-from . import auditoria, catalogos, config, contactos, empresas, intermediarios, lectores, provisorias, rut as rutmod, storage, tareas
+from . import auditoria, catalogos, config, contactos, empresas, intermediarios, lectores, provisorias, rut as rutmod, settings, storage, tareas
 from . import telefonos as telmod
-from .util import dominio, razon_normalizada, sin_tildes, texto
+from .util import celda_json, dominio, json_dumps, razon_normalizada, sin_tildes, texto
+
+log = logging.getLogger(__name__)
 
 CAMPOS_NUCLEO = (
     "rut", "razon_social", "fantasia", "naturaleza", "ciiu", "tamano", "departamento", "localidad",
@@ -202,16 +206,109 @@ def _validar_mapeo(conn, mapeo: dict, columnas: list[str], destino: str = "defin
                 raise HTTPException(422, f"La traducción de «{valor}» no es una opción de {defs[clave]['nombre']}")
 
 
-def _leer(conn, archivo_id: int):
+# ─────────────────────────────────────────────────────────────
+# A1 (D51) · El archivo se parsea una sola vez: sus filas quedan en archivo_fila
+# ─────────────────────────────────────────────────────────────
+
+def es_grande(datos: bytes, tipo: str) -> bool:
+    """Un archivo grande se lee en segundo plano (tarea «archivo.leer»), para no depender del corte de 60 s."""
+    return len(datos) > settings.ARCHIVO_BYTES_SINCRONICO or \
+        lectores.estimar_filas(datos, tipo) > settings.ARCHIVO_FILAS_SINCRONICO
+
+
+def _guardar_filas_archivo(conn, archivo: dict, tarea_id: int | None) -> dict:
+    datos = storage.leer(archivo)
+    estimado = lectores.estimar_filas(datos, archivo["tipo"])
+
+    def avance(n):
+        tareas.mensaje(tarea_id, f"Leyendo el archivo… {n:,} filas".replace(",", "."))
+        tareas.progreso(tarea_id, n, max(estimado, n))
+
+    t0 = time.monotonic()
+    tareas.mensaje(tarea_id, "Leyendo el archivo…")
+    columnas, filas, _ = lectores.leer_tabla(datos, archivo["tipo"], avance if tarea_id else None)
+    log.info("archivo %s parseado: %s filas en %.1f s", archivo["id"], len(filas), time.monotonic() - t0)
+    n = len(filas)
+    with conn.cursor() as cur:
+        with cur.copy("COPY archivo_fila (archivo_id, fila, datos) FROM STDIN") as cp:
+            for i, f in enumerate(filas):
+                cp.write_row((archivo["id"], i + 2, json_dumps({k: celda_json(v) for k, v in f.items()})))
+                if tarea_id and (i + 1) % 20000 == 0:
+                    tareas.mensaje(tarea_id, f"Guardando las filas… {i + 1:,} de {n:,}".replace(",", "."))
+                    tareas.progreso(tarea_id, i + 1, n)
+    return conn.execute("UPDATE archivo SET columnas = %s, n_filas = %s, filas_guardadas = now() WHERE id = %s RETURNING *",
+                        (Jsonb(columnas), n, archivo["id"])).fetchone()
+
+
+def asegurar_filas(conn, archivo_id: int, tarea_id: int | None = None) -> dict:
+    """El archivo con sus columnas y su cantidad de filas, con las filas en archivo_fila. Si no están (un archivo
+    subido antes de D51, o uno cuyas filas ya se liberaron), lo lee y las guarda una vez."""
     archivo = conn.execute("SELECT * FROM archivo WHERE id = %s", (archivo_id,)).fetchone()
     if archivo is None:
         raise HTTPException(404, "Archivo inexistente")
-    columnas, filas, meta = lectores.leer_tabla(storage.leer(archivo), archivo["tipo"])
-    return archivo, columnas, filas
+    if archivo["filas_guardadas"] is None:
+        archivo = conn.execute("SELECT * FROM archivo WHERE id = %s FOR NO KEY UPDATE", (archivo_id,)).fetchone()
+        if archivo["filas_guardadas"] is None:
+            archivo = _guardar_filas_archivo(conn, archivo, tarea_id)
+    return archivo
 
 
-def analizar(conn, archivo: dict, tipo_fuente: str | None) -> dict:
-    columnas, filas, _ = lectores.leer_tabla(storage.leer(archivo), archivo["tipo"])
+# Estados de una carga que todavía necesitan las filas del archivo
+ESTADOS_CON_FILAS = ("analizando", "preview", "en_proceso", "interrumpida")
+
+
+def liberar_archivo(conn, archivo_id: int):
+    """Borra las filas del archivo cuando ninguna carga las necesita (confirmada, descartada, deshecha o borrada)."""
+    if conn.execute("SELECT 1 FROM carga WHERE archivo_id = %s AND estado = ANY(%s) LIMIT 1",
+                    (archivo_id, list(ESTADOS_CON_FILAS))).fetchone():
+        return
+    conn.execute("DELETE FROM archivo_fila WHERE archivo_id = %s", (archivo_id,))
+    conn.execute("UPDATE archivo SET filas_guardadas = NULL WHERE id = %s AND filas_guardadas IS NOT NULL", (archivo_id,))
+
+
+def limpiar_archivos(conn, horas: int = 24) -> int:
+    """Job diario: libera las filas de los archivos de hace más de 24 h que ninguna carga en curso necesita (los que
+    se analizaron y nunca se cargaron, o cuya carga ya terminó). Devuelve cuántos archivos liberó."""
+    ids = [r["id"] for r in conn.execute(
+        "SELECT a.id FROM archivo a WHERE a.filas_guardadas IS NOT NULL AND a.filas_guardadas < now() - make_interval(hours => %s)"
+        " AND NOT EXISTS (SELECT 1 FROM carga c WHERE c.archivo_id = a.id AND c.estado = ANY(%s))",
+        (horas, list(ESTADOS_CON_FILAS)))]
+    for i in ids:
+        conn.execute("DELETE FROM archivo_fila WHERE archivo_id = %s", (i,))
+    if ids:
+        conn.execute("UPDATE archivo SET filas_guardadas = NULL WHERE id = ANY(%s)", (ids,))
+    return len(ids)
+
+
+def _contar_valores(conn, archivo_id: int, columnas) -> dict[str, Counter]:
+    """Cuántas filas tiene cada valor (limpio, como lo lee la carga) de cada columna, con una consulta sobre las filas
+    guardadas: no se vuelve a leer el archivo (A2)."""
+    salida = {c: Counter() for c in columnas}
+    if not salida:
+        return salida
+    for r in conn.execute(
+            "SELECT c.col, f.datos -> c.col AS v, count(*) AS n FROM archivo_fila f CROSS JOIN unnest(%s::text[]) AS c(col)"
+            " WHERE f.archivo_id = %s GROUP BY 1, 2", (sorted(salida), archivo_id)):
+        v = texto(r["v"])
+        if v:
+            salida[r["col"]][v] += r["n"]
+    return salida
+
+
+@tareas.handler("archivo.leer")
+def _tarea_leer_archivo(conn, payload, tarea_id):
+    """A1: un archivo grande se lee en segundo plano; el resultado es el mismo análisis que devuelve «Analizar»."""
+    archivo = conn.execute("SELECT * FROM archivo WHERE id = %s", (payload["archivo_id"],)).fetchone()
+    if archivo is None:
+        return {"omitida": True}
+    return analizar(conn, archivo, payload.get("tipo_fuente"), tarea_id)
+
+
+def analizar(conn, archivo: dict, tipo_fuente: str | None, tarea_id: int | None = None) -> dict:
+    archivo = asegurar_filas(conn, archivo["id"], tarea_id)
+    columnas = archivo["columnas"]
+    ejemplos = [r["datos"] for r in conn.execute(
+        "SELECT datos FROM archivo_fila WHERE archivo_id = %s ORDER BY fila LIMIT 8", (archivo["id"],))]
     atributos = catalogos.atributos(conn, activos=True)
     plantilla = None
     if tipo_fuente:
@@ -241,7 +338,7 @@ def analizar(conn, archivo: dict, tipo_fuente: str | None) -> dict:
                     mapeo[k] = mapeo_p[k]
     return {
         "archivo_id": archivo["id"], "nombre": archivo["nombre"], "tipo": archivo["tipo"],
-        "columnas": columnas, "n_filas": len(filas), "ejemplos": filas[:8],
+        "columnas": columnas, "n_filas": archivo["n_filas"], "ejemplos": ejemplos,
         "mapeo": mapeo, "origen_mapeo": origen, "avisos": avisos,
         "sugerencias_atributos": sugerir_atributos(conn, columnas, mapeo),
         "destino": (plantilla or {}).get("destino") or "definitiva",
@@ -340,12 +437,12 @@ def _sugerencia(valor: str, opciones: list[tuple[str, str]]) -> str | None:
     return None
 
 
-def valores(conn, archivo_id: int, mapeo: dict, leido: tuple | None = None) -> dict:
+def valores(conn, archivo_id: int, mapeo: dict) -> dict:
     """Valores distintos de las columnas de origen y de atributos de lista que no coinciden
     exactamente con el catálogo, con cuántas filas tiene cada uno y una traducción sugerida.
-    leido: (columnas, filas) si el archivo ya se leyó (crear no lo vuelve a parsear)."""
+    Se cuentan con una consulta sobre las filas guardadas al analizar (A2): el archivo no se vuelve a leer."""
     mapeo, _ = limpiar_mapeo(mapeo)
-    columnas, filas = leido if leido else _leer(conn, archivo_id)[1:]
+    columnas = asegurar_filas(conn, archivo_id)["columnas"]
     for c in columnas_de_mapeo(mapeo):
         if c not in columnas:
             raise HTTPException(422, f"La columna '{c}' no está en el archivo")
@@ -353,10 +450,13 @@ def valores(conn, archivo_id: int, mapeo: dict, leido: tuple | None = None) -> d
     tr = mapeo.get("traducciones") or {}
     salida = {"origen": [], "atributos": []}
     cols_origen = sorted({o["columna"] for o in (mapeo.get("origenes_telefono") or {}).values() if o.get("columna")})
+    cols_lista = {clave: col for clave, col in {**(mapeo.get("atributos") or {}), **(mapeo.get("contacto_atributos") or {})}.items()
+                  if (t.defs.get(clave) or {}).get("tipo") == "lista"}
+    conteo = _contar_valores(conn, archivo_id, set(cols_origen) | set(cols_lista.values()))
     if cols_origen:
-        cuenta = Counter(texto(f.get(c)) for f in filas for c in cols_origen)
-        cuenta.pop(None, None)
-        cuenta.pop("", None)
+        cuenta = Counter()
+        for c in cols_origen:
+            cuenta.update(conteo[c])
         opciones = [(o["codigo"], o["codigo"]) for o in t.origenes] + [(o["codigo"], o["nombre"]) for o in t.origenes]
         for v, n in cuenta.most_common():
             if v in t.exacto_origen:
@@ -368,9 +468,7 @@ def valores(conn, archivo_id: int, mapeo: dict, leido: tuple | None = None) -> d
         a = t.defs.get(clave)
         if not a or a["tipo"] != "lista":
             continue
-        cuenta = Counter(texto(f.get(col)) for f in filas)
-        cuenta.pop(None, None)
-        cuenta.pop("", None)
+        cuenta = Counter(conteo[col])
         ya = tr.get(catalogos.PREFIJO + clave) or {}
         # F4.1: «SI», «si» y «Sí » son la opción «Sí»: no piden traducción
         faltan = [(v, n) for v, n in cuenta.most_common() if not catalogos.opcion_equivalente(a["opciones"], v)]
@@ -666,7 +764,17 @@ DESTINOS = ("definitiva", "provisoria")
 
 def crear(conn, archivo_id: int, fuente: str, tipo_fuente: str, licencia: str, regla_fusion: str | None,
           confianza: int | None, mapeo: dict, guardar_plantilla: bool, actor: str, destino: str = "definitiva",
-          reglas: list | None = None, opciones: dict | None = None) -> dict:
+          reglas: list | None = None, opciones: dict | None = None, clave: str | None = None) -> dict:
+    """A3 (D51): responde enseguida. No lee el archivo ni copia filas: valida con las columnas del análisis, verifica
+    la traducción con la consulta de valores(), crea la carga y encola el preview, que arma los lotes en su primer
+    paso. clave (A4): la misma clave del mismo usuario devuelve la carga ya creada, no una nueva."""
+    if clave:
+        conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"carga.crear|{actor}|{clave}",))
+        ya = conn.execute("SELECT id, tarea_id, n_filas, lotes FROM carga WHERE responsable = %s AND clave = %s",
+                          (actor, clave)).fetchone()
+        if ya:
+            return {"carga_id": ya["id"], "tarea_id": ya["tarea_id"], "n_filas": ya["n_filas"], "lotes": ya["lotes"],
+                    "existente": True}
     version, cfg = config.vigente(conn)
     if destino not in DESTINOS:
         raise HTTPException(422, "Destino de la carga: definitiva o provisoria")
@@ -683,10 +791,10 @@ def crear(conn, archivo_id: int, fuente: str, tipo_fuente: str, licencia: str, r
                 "sin_rut_a_provisoria": bool((opciones or {}).get("sin_rut_a_provisoria"))}
     if not licencia or not licencia.strip():
         raise HTTPException(422, "Indicá la licencia de uso de la fuente")
-    archivo, columnas, filas = _leer(conn, archivo_id)
+    archivo = asegurar_filas(conn, archivo_id)
     mapeo, _ = limpiar_mapeo(mapeo)
-    _validar_mapeo(conn, mapeo, columnas, destino)
-    pend = valores(conn, archivo_id, mapeo, (columnas, filas))
+    _validar_mapeo(conn, mapeo, archivo["columnas"], destino)
+    pend = valores(conn, archivo_id, mapeo)
     if pend["pendientes"]:
         ejemplos = [x["valor"] for x in pend["origen"] if not x["traducido"]] + [
             x["valor"] for a in pend["atributos"] for x in a["valores"] if not x["traducido"]]
@@ -696,9 +804,9 @@ def crear(conn, archivo_id: int, fuente: str, tipo_fuente: str, licencia: str, r
         confianza = cfg["confianza_fuentes"].get("carga", 50)
     carga = conn.execute(
         "INSERT INTO carga (archivo_id, fuente, tipo_fuente, licencia, responsable, regla_fusion, confianza, mapeo, config_version,"
-        " destino, reglas, opciones) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
+        " destino, reglas, opciones, clave) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
         (archivo_id, fuente, tipo_fuente, licencia, actor, regla_fusion, confianza, Jsonb(mapeo), version,
-         destino, Jsonb(reglas), Jsonb(opciones)),
+         destino, Jsonb(reglas), Jsonb(opciones), clave),
     ).fetchone()
     if guardar_plantilla:  # el destino y las reglas quedan en la plantilla (F6.1, F6.2)
         conn.execute(
@@ -710,15 +818,19 @@ def crear(conn, archivo_id: int, fuente: str, tipo_fuente: str, licencia: str, r
     auditoria.registrar(conn, actor, "carga.crear", "carga", carga["id"],
                         {"archivo": archivo["nombre"], "fuente": fuente, "destino": destino, "reglas": reglas,
                          "opciones": opciones})
-    # L1: el archivo se parsea una sola vez; sus filas quedan en carga_fila, ya repartidas en lotes por RUT
-    from . import lotes
-
-    tamano = config.cargas(cfg)["tamano_lote"]
-    n_lotes = lotes.guardar_filas(conn, carga["id"], filas, mapeo, tamano)
+    # Los lotes los arma el primer paso del preview, sobre las filas guardadas al analizar (D51)
     tarea_id = tareas.crear(conn, "carga.preview", {"carga_id": carga["id"]}, actor)
-    conn.execute("UPDATE carga SET operacion = 'preview', tarea_id = %s, lotes = %s, n_filas = %s WHERE id = %s",
-                 (tarea_id, n_lotes, len(filas), carga["id"]))
-    return {"carga_id": carga["id"], "tarea_id": tarea_id, "n_filas": len(filas), "lotes": n_lotes}
+    conn.execute("UPDATE tarea SET mensaje = 'Creando la carga…' WHERE id = %s", (tarea_id,))
+    conn.execute("UPDATE carga SET operacion = 'preview', tarea_id = %s, n_filas = %s WHERE id = %s",
+                 (tarea_id, archivo["n_filas"], carga["id"]))
+    return {"carga_id": carga["id"], "tarea_id": tarea_id, "n_filas": archivo["n_filas"], "lotes": None}
+
+
+def en_curso(conn, archivo_id: int, actor: str) -> dict | None:
+    """A4: una carga de este archivo que la misma persona está creando (en los últimos 10 minutos)."""
+    return conn.execute(
+        "SELECT id, estado, fecha FROM carga WHERE archivo_id = %s AND responsable = %s AND estado = 'analizando'"
+        " AND fecha > now() - interval '10 minutes' ORDER BY id DESC LIMIT 1", (archivo_id, actor)).fetchone()
 
 
 def guardar_rechazos(conn, carga_id, rechazos, filas: list[int] | None = None):
@@ -794,6 +906,7 @@ def deshacer(conn, carga_id: int, actor: str) -> dict:
         tareas.cancelar("tipo = 'carga.preview' AND (payload->>'carga_id')::int = %s", (carga_id,), "Carga descartada")
         conn.execute("UPDATE carga SET estado = 'descartada', descartada = now(), operacion = NULL WHERE id = %s", (carga_id,))
         conn.execute("DELETE FROM carga_fila WHERE carga_id = %s", (carga_id,))
+        liberar_archivo(conn, carga["archivo_id"])
         auditoria.registrar(conn, actor, "carga.descartar", "carga", carga_id)
         return {"estado": "descartada", "empresas_anuladas": 0, "empresas_recalculadas": 0}
     if carga["estado"] == "deshaciendo":
