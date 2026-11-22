@@ -14,6 +14,8 @@ DSN = os.environ.get("TEST_DATABASE_URL", "postgresql://postgres@localhost/empre
 os.environ.update({
     "DATABASE_URL": DSN, "AUTH_MODE": "dev", "TASKS_MODE": "inline", "JOB_TOKEN": "token-job",
     "TAREA_TOKEN": "token-tarea", "STORAGE_DIR": tempfile.mkdtemp(prefix="empresas-test-"),
+    # D50: lotes de 2 filas y sin pausa, para que toda carga de los tests se procese en varios lotes
+    "CARGAS_TAMANO_LOTE": os.environ.get("CARGAS_TAMANO_LOTE", "2"), "CARGAS_PAUSA": "0",
 })
 RAIZ = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(RAIZ, "api"))

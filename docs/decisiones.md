@@ -57,6 +57,7 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 | D47 | Duplicados difusos entre empresas con RUT y grupo económico (relacionadas sin fusionar, una por grupo en el sorteo) | Vigente (17/11/2026) |
 | D48 | Tablero de calidad por dimensión DMBOK con histórico diario | Vigente (17/11/2026) |
 | D49 | Naturalezas jurídicas: se edita el nombre y la exclusión; el código y el borrado, solo si ninguna empresa la usa ni la usó; rutas por id | Vigente (20/11/2026) |
+| D50 | Cargas por lotes: preview, confirmación, deshacer y borrado por lotes de 5.000 filas, cada uno una transacción; estado «interrumpida», reanudar, una carga pesada a la vez | Vigente (22/11/2026) |
 
 ## D01 — Cloud SQL Postgres como núcleo
 
@@ -584,6 +585,33 @@ La configuración inicial usa 6 meses de enfriamiento desde el último contacto 
 5. **Rutas por id, no por código (corrección del 20/11/2026).** Editar y borrar van a `PUT` / `DELETE /api/naturalezas/{id}`. El alta anterior no validaba el código y en producción quedó una naturaleza con el código vacío: con el código en la URL, el borrado iba a `/api/naturalezas/`, la API respondía una redirección 307 a la dirección directa de Cloud Run y el navegador la cortaba («Failed to fetch»). Una naturaleza **sin uso** puede corregir su código (si estaba excluida, el código nuevo reemplaza al viejo en la configuración), y la migración `0014_naturaleza_codigo.sql` agrega un CHECK `NOT VALID` que impide códigos vacíos de acá en adelante sin rechazar las filas viejas, que se corrigen o se borran desde la pantalla.
 
 **Descartado.** Cambiar el código reescribiendo la historia (la historia es append-only); borrar una naturaleza en uso dejando a sus empresas sin naturaleza.
+
+## D50 — Cargas por lotes
+
+**Contexto.** El 22/11/2026 la confirmación de la carga #7 (190.000 filas) corrió 30 minutos, la cortó el plazo de Cloud Run y Cloud Tasks y Postgres revirtió todo: más de 3 millones de filas escritas y descartadas. La confirmación, el preview y el borrado procesaban toda la carga en una sola transacción y una sola tarea, y «Deshacer» corría dentro del pedido HTTP (Firebase Hosting corta a los 60 s). Además, la base quedó saturada y la web dio `PoolTimeout`. Ver `specs/SPEC_cargas_grandes_por_lotes.md`. (La spec la numera D49; ese número ya lo usaba la decisión de naturalezas jurídicas.)
+
+**Decisión (opción A de la spec).**
+
+1. **El archivo se lee una sola vez.** Al crear la carga, sus filas se copian a `carga_fila` (`COPY`, con el número de fila y el lote) y cada lote lee solo las suyas. `carga_fila` se borra cuando la carga queda confirmada, descartada, deshecha o borrada; mientras está en preview o interrumpida se conserva para poder reanudar. Las cargas creadas antes de este cambio arman sus filas la primera vez que se procesan.
+2. **Lotes por RUT.** Los lotes (5.000 filas por defecto) se arman agrupando por RUT válido: todas las filas con el mismo RUT caen en el mismo lote, aunque estén lejos en el archivo, y un grupo nunca se parte. Las filas sin RUT van al final; si hay más de un lote de filas sin RUT, el preview marca sus conteos como **aproximados** (`aproximado_sin_rut`), porque dos filas sin RUT de lotes distintos podrían coincidir entre sí.
+3. **Preview, confirmación, deshacer y borrado son tareas por pasos.** Cada paso es una transacción y una ejecución de la tarea (`tareas.Continuar`): al hacer commit, la misma tarea vuelve a la cola para el paso siguiente, con una pausa configurable (1 s) para que la web siga respondiendo. El estado de cada lote queda en `carga_lote` (preview hecho, pendiente / en proceso / aplicado / error, conteos, intentos, duración, error). Se loguea una línea por lote (`carga=… lote=… filas=… segundos=…`) y una ALARMA si un lote supera 10 minutos.
+   - **Preview:** cada lote corre en un savepoint que se descarta y guarda sus conteos; el total es la suma. Las coincidencias a decidir se acumulan por número de fila, como antes.
+   - **Confirmación:** cada lote aplica sus filas con la misma `carga_id` como fuente y detecta intermediarios sobre los teléfonos que tocó. El paso final suma los conteos, audita `carga.confirmar`, deja la carga «confirmada» y libera `carga_fila`.
+   - **Idempotencia:** un lote «aplicado» no se vuelve a aplicar (Cloud Tasks puede reintentar). Un lote que falló se revirtió entero y se reintenta entero.
+   - **Deshacer** deja de ser sincrónico: quitar los aportes en tandas de 20.000 filas, recalcular las empresas tocadas de a 2.000, anular las que quedaron sin respaldo y reevaluar intermediarios en tandas. Mientras dura, la carga está «deshaciendo» y ya no cuenta como respaldo de ninguna empresa.
+   - **Borrar** va por los mismos pasos, con el estado «borrando». Si se corta, volver a tocar «Borrar carga» retoma desde el paso en que quedó.
+4. **Estado «interrumpida».** Una carga queda interrumpida si un lote falla, si se cancela su tarea o si la tarea figura corriendo sin avanzar más de 35 minutos (más que el plazo de Cloud Tasks; lo revisan la pantalla de cargas y el job diario). Lo aplicado por los lotes terminados queda; el lote en curso se revirtió. Desde la pantalla: **Reanudar** (sigue desde el primer lote o paso no hecho), **Deshacer** (quita lo aplicado) o **Borrar**. Una carga interrumpida durante el preview, que no aplicó nada, se descarta.
+5. **Una carga pesada a la vez.** Solo una carga puede estar en preview, confirmación, deshacer o borrado por lotes al mismo tiempo (advisory lock al encolar). Otra queda en cola con el aviso «Esperando a que termine la carga #N» y arranca sola cuando termina la anterior.
+6. **Una operación vigente por carga.** `carga.tarea_id` identifica la operación en curso. Al final de cada paso la tarea bloquea la fila de la carga y verifica que sigue siendo la suya: si mientras tanto se pidió borrarla, el paso se revierte y no pisa el borrado.
+7. **Configuración** (Configuración → Cargas grandes, versionada): filas por lote (5.000; entre 500 y 20.000), pausa entre lotes (1 s) y minutos sin avanzar para darla por cortada (35).
+8. **La web** muestra «Lote N de M · X de Y filas», el avance «N de M lotes aplicados (X filas)», y consulta el progreso cada 5 s en las cargas de más de 20.000 filas.
+9. **Estadísticas al día.** Al aplicar los lotes 1, 2, 4, 8… (cada vez que la carga duplica lo aplicado) se corre `ANALYZE` de las tablas que crecen. Sin eso, los planes que Postgres guarda para las consultas por fila y los chequeos de claves foráneas, armados con las tablas casi vacías, recorrían la tabla entera: en la primera carga grande, los primeros lotes tardaban de 2 a 4 veces más. Se probó forzar un plan por consulta (`plan_cache_mode`) y fue más lento.
+
+**Medido** (test de volumen, 50.000 filas en lotes de 5.000, máquina de desarrollo): 10 a 26 s por lote de preview y unos 10 s por lote de confirmación (el primero, 39 s); 5 minutos en total. La meta es menos de 3 minutos por lote en producción.
+
+**Compatibilidad.** Las reglas de negocio de la carga (mapeo, fusión, supervivencia, orígenes, atributos, contactos, base provisoria) no cambian: los tests de cargas corren con lotes de 2 filas para forzar varios lotes. Una carga chica es un solo lote.
+
+**Descartado.** B, correr la carga como Cloud Run job en una sola transacción: satura la base durante horas. C, agrandar la base como única solución: cuesta más y no garantiza bajar de 30 minutos. Lotes en paralelo de una misma carga (P2). Reescribir `procesar` para precargar todo el lote en pocas consultas: se deja para cuando las mediciones en producción lo pidan, porque cambia el código que decide cada fila y el tiempo medido por lote ya está lejos del límite. Ajustar `CARGAS_TAMANO_LOTE` y `CARGAS_PAUSA` por variable de entorno queda para los tests.
 
 ## Preguntas abiertas que heredan del PRD
 

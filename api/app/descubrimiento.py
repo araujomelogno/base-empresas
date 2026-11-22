@@ -190,7 +190,7 @@ def deshacer(conn, cid: int, actor: str) -> dict:
             "SELECT (SELECT count(*) FROM empresa_campo_historia h LEFT JOIN enriquecimiento_corrida c"
             "        ON h.fuente_tipo IN ('enriquecimiento', 'descubrimiento') AND c.id = h.fuente_id"
             "        LEFT JOIN carga g ON h.fuente_tipo = 'carga' AND g.id = h.fuente_id"
-            "        WHERE h.empresa_id = %s AND (c.id IS NULL OR c.deshecha IS NULL) AND (g.id IS NULL OR g.estado <> 'deshecha'))"
+            "        WHERE h.empresa_id = %s AND (c.id IS NULL OR c.deshecha IS NULL) AND (g.id IS NULL OR NOT " + empresas.CARGA_SIN_EFECTO.replace("c.", "g.") + "))"
             " + (SELECT count(*) FROM telefono_vinculo WHERE empresa_id = %s)"
             " + (SELECT count(*) FROM contacto WHERE empresa_id = %s) AS n", (eid, eid, eid)).fetchone()["n"]
         if quedan == 0:

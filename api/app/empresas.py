@@ -18,6 +18,11 @@ CAMPOS = ("razon_social", "fantasia", "naturaleza", "ciiu", "tamano", "departame
 ESTADOS_EMPRESA = ("activa", "cerrada", "desconocida")
 FUENTES_SALA = ("sala", "sav")
 
+# La historia de una carga no cuenta si se deshizo, se está deshaciendo o borrando, o quedó interrumpida a mitad
+# de un deshacer (D50). Se usa con la carga como «c».
+CARGA_SIN_EFECTO = ("(c.estado IN ('deshecha', 'deshaciendo', 'borrando')"
+                    " OR (c.estado = 'interrumpida' AND c.operacion = 'deshacer'))")
+
 _CANDIDATOS_SQL = """
 SELECT h.id, h.campo, h.valor, h.fuente_tipo, h.fuente_id, h.confianza, h.actor, h.fecha, h.detalle
 FROM empresa_campo_historia h
@@ -25,7 +30,7 @@ LEFT JOIN carga c ON h.fuente_tipo = 'carga' AND c.id = h.fuente_id
 LEFT JOIN empresa_fusion f ON h.fuente_tipo = 'fusion' AND f.id = h.fuente_id
 LEFT JOIN enriquecimiento_corrida ec ON h.fuente_tipo IN ('enriquecimiento', 'descubrimiento') AND ec.id = h.fuente_id
 WHERE h.empresa_id = %s
-  AND (c.id IS NULL OR c.estado <> 'deshecha')
+  AND (c.id IS NULL OR NOT """ + CARGA_SIN_EFECTO + """)
   AND (f.id IS NULL OR f.deshecha IS NULL)
   AND (ec.id IS NULL OR ec.deshecha IS NULL)
 """

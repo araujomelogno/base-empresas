@@ -18,6 +18,7 @@ Cualquier carga se puede borrar, aunque esté «analizando» o «en proceso»: s
 import logging
 
 import psycopg
+import psycopg.types.json
 from fastapi import HTTPException
 
 from . import auditoria, contactos as contmod, empresas, intermediarios, storage, tareas
@@ -171,17 +172,23 @@ def _sin_respaldo_previo(conn, carga_id: int, ids: list[int]) -> list[int]:
                           AND NOT (k.fuente_tipo = 'carga' AND k.fuente_id = %s))""", (ids, carga_id, carga_id, carga_id))
 
 
-def pedir_borrado_carga(conn, carga_id: int, actor: str) -> int:
-    """Se puede borrar cualquier carga, en cualquier estado (E3). Sin FOR UPDATE: si una tarea la está
-    procesando, el pedido no la espera; la cancela y la tarea de borrado espera a que la suelte."""
-    carga = conn.execute("SELECT id FROM carga WHERE id = %s", (carga_id,)).fetchone()
+def pedir_borrado_carga(conn, carga_id: int, actor: str) -> dict:
+    """Se puede borrar cualquier carga, en cualquier estado (E3). Sus tareas se cancelan (lo aplicado por lotes
+    queda y se borra igual). El borrado corre por pasos (D50); si se interrumpe, volver a pedirlo lo retoma.
+    Devuelve {tarea_id, en_cola, esperando}: si otra carga pesada está corriendo, espera en cola."""
+    from . import lotes
+
+    carga = conn.execute("SELECT * FROM carga WHERE id = %s", (carga_id,)).fetchone()
     if carga is None:
         raise HTTPException(404, "Carga inexistente")
-    tareas.cancelar("(tipo IN ('carga.preview', 'carga.confirmar') AND (payload->>'carga_id')::int = %s)"
+    tareas.cancelar("(tipo IN ('carga.preview', 'carga.confirmar', 'carga.deshacer') AND (payload->>'carga_id')::int = %s)"
                     " OR (tipo = 'carga.borrar' AND (payload->>'borrar_carga_id')::int = %s)",
                     (carga_id, carga_id), "Cancelada: se pidió borrar la carga")
+    if carga["estado"] != "borrando":
+        conn.execute("UPDATE carga SET resumen_op = jsonb_build_object('estado_previo', estado), paso = NULL WHERE id = %s",
+                     (carga_id,))
     # borrar_carga_id (y no carga_id) para que un error no deje la carga en estado «error»
-    return tareas.crear(conn, "carga.borrar", {"borrar_carga_id": carga_id}, actor)
+    return lotes.iniciar_pesada(conn, carga, "borrar", "borrando", "carga.borrar", actor, {"borrar_carga_id": carga_id})
 
 
 def _sin_respaldo(conn, ids: list[int]) -> list[int]:
@@ -197,79 +204,141 @@ def _sin_respaldo(conn, ids: list[int]) -> list[int]:
           AND NOT EXISTS (SELECT 1 FROM contacto k WHERE k.empresa_id = e.id)""", (ids,))
 
 
+TANDA = 20000         # filas por sentencia al quitar lo que aportó la carga
+TANDA_EMPRESAS = 2000
+
+
 @tareas.handler("carga.borrar")
 def _tarea_borrar_carga(conn, payload, tarea_id):
+    """Borrado por pasos (D50), cada uno en su transacción: 1) se anotan las empresas que tocó la carga; 2) se quita
+    en tandas lo que aportó (orígenes, vínculos, contactos, sucursales, historia); 3) las empresas que quedaron sin
+    respaldo se borran y las demás se recalculan, de a 2.000; 4) teléfonos huérfanos; 5) la carga y su archivo.
+    La carga queda «borrando» mientras tanto; si se corta, volver a pedir el borrado retoma desde el paso en que quedó."""
+    from . import lotes
+    from .cargas import empresas_de_carga
+
     cid = payload["borrar_carga_id"]
     _esperar_locks(conn)
     try:
-        carga = conn.execute("SELECT * FROM carga WHERE id = %s FOR UPDATE", (cid,)).fetchone()
-        if carga is None:
-            return {"ya_borrada": True}
-        return _borrar_carga(conn, carga, tarea_id)
+        carga = conn.execute("SELECT * FROM carga WHERE id = %s FOR NO KEY UPDATE", (cid,)).fetchone()
     except psycopg.errors.LockNotAvailable as e:
         raise _ocupado(f"La carga #{cid}") from e
-
-
-def _borrar_carga(conn, carga, tarea_id):
-    from .cargas import empresas_de_carga
-
-    cid = carga["id"]
+    if carga is None:
+        return {"ya_borrada": True}
+    if carga["tarea_id"] not in (None, tarea_id) or carga["estado"] != "borrando":
+        return {"omitida": True}
     _habilitar(conn)
     x = conn.execute
-    ids = empresas_de_carga(conn, cid)
-    tareas.progreso(tarea_id, 0, len(ids) + 1)
-
-    # 1. Lo que la carga aportó a empresas, teléfonos, contactos y sucursales
-    x("DELETE FROM telefono_vinculo_origen WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,))
-    tels = [r["telefono_id"] for r in x(
-        "DELETE FROM telefono_vinculo WHERE fuente_tipo = 'carga' AND fuente_id = %s RETURNING telefono_id", (cid,))]
-    contmod.borrar(conn, _ids(conn, "SELECT id FROM contacto WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,)))
-    x("DELETE FROM contacto_historia WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,))
-    x("DELETE FROM contacto_telefono WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,))
-    x("DELETE FROM contacto_atributo WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,))
-    x("UPDATE telefono_vinculo SET sucursal_id = NULL WHERE sucursal_id IN "
-      "(SELECT id FROM sucursal WHERE fuente_tipo = 'carga' AND fuente_id = %s)", (cid,))
-    x("UPDATE contacto SET sucursal_id = NULL WHERE sucursal_id IN "
-      "(SELECT id FROM sucursal WHERE fuente_tipo = 'carga' AND fuente_id = %s)", (cid,))
-    x("DELETE FROM sucursal WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,))
-    x("DELETE FROM telefono_vinculo_historia WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,))
-    x("DELETE FROM empresa_campo_historia WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,))
-    x("UPDATE empresa SET carga_alta_id = NULL WHERE carga_alta_id = %s", (cid,))
-
-    # 2. Las empresas que solo existían por esta carga se borran; las demás se recalculan
-    huerfanas = _sin_respaldo(conn, ids)
     actor = tareas_actor(conn, tarea_id)
-    n = borrar_empresas(conn, huerfanas, "carga.borrar", actor)
-    items_borrados = n.pop("_items_borrados")
-    quedan = [r["id"] for r in x("SELECT id FROM empresa WHERE id = ANY(%s) ORDER BY id", (ids,))]
-    for i, eid in enumerate(quedan, 1):
-        empresas.recalcular(conn, eid)
-        if i % 200 == 0:
-            tareas.progreso(tarea_id, len(huerfanas) + i)
-    x("""DELETE FROM telefono t WHERE t.id = ANY(%s)
-          AND NOT EXISTS (SELECT 1 FROM telefono_vinculo v WHERE v.telefono_id = t.id)
-          AND NOT EXISTS (SELECT 1 FROM intento i WHERE i.telefono_id = t.id)
-          AND NOT EXISTS (SELECT 1 FROM item_parte_estado p WHERE p.telefono_id = t.id)
-          AND NOT EXISTS (SELECT 1 FROM no_llamar l WHERE l.alcance = 'telefono' AND l.objeto_id = t.id)""", (tels,))
-    intermediarios.reevaluar(conn, tels, actor)
+    paso = carga["paso"] or "preparar"
+    res = dict(carga["resumen_op"] or {})
+    pausa = 0
 
-    # 3. La carga, sus tareas y su archivo
+    def seguir(nuevo_paso, mensaje):
+        x("UPDATE carga SET paso = %s, resumen_op = %s WHERE id = %s", (nuevo_paso, psycopg.types.json.Jsonb(res), cid))
+        return tareas.Continuar(mensaje, pausa)
+
+    if paso == "preparar":
+        x("DELETE FROM carga_trabajo WHERE carga_id = %s", (cid,))
+        ids = empresas_de_carga(conn, cid)
+        with conn.cursor() as cur:
+            cur.executemany("INSERT INTO carga_trabajo (carga_id, tipo, objeto_id) VALUES (%s, 'empresa', %s)",
+                            [(cid, e) for e in ids])
+        res = {"carga_id": cid, "fuente": carga["fuente"], "estado_previo": res.get("estado_previo") or carga["estado"],
+               "empresas_total": len(ids), "empresas_borradas": 0, "empresas_recalculadas": 0, "items_de_muestra": 0,
+               "intentos": 0, "filas_sav": 0}
+        tareas.progreso(tarea_id, 0, len(ids) + 2)
+        return seguir("quitar", f"Borrando la carga: {len(ids):,} empresas a revisar".replace(",", "."))
+
+    if paso == "quitar":
+        n = 0
+        n += x("DELETE FROM telefono_vinculo_origen WHERE ctid IN (SELECT ctid FROM telefono_vinculo_origen"
+               " WHERE fuente_tipo = 'carga' AND fuente_id = %s LIMIT %s)", (cid, TANDA)).rowcount
+        tels = x("DELETE FROM telefono_vinculo WHERE id IN (SELECT id FROM telefono_vinculo WHERE fuente_tipo = 'carga'"
+                 " AND fuente_id = %s LIMIT %s) RETURNING telefono_id", (cid, TANDA)).fetchall()
+        n += len(tels)
+        if tels:
+            with conn.cursor() as cur:
+                cur.executemany("INSERT INTO carga_trabajo (carga_id, tipo, objeto_id) VALUES (%s, 'telefono', %s)"
+                                " ON CONFLICT DO NOTHING", [(cid, t["telefono_id"]) for t in tels])
+        cont = _ids(conn, "SELECT id FROM contacto WHERE fuente_tipo = 'carga' AND fuente_id = %s LIMIT 2000", (cid,))
+        if cont:
+            contmod.borrar(conn, cont)
+            n += len(cont)
+        for tabla in ("contacto_historia", "contacto_telefono", "contacto_atributo", "telefono_vinculo_historia",
+                      "empresa_campo_historia"):
+            n += x(f"DELETE FROM {tabla} WHERE ctid IN (SELECT ctid FROM {tabla} WHERE fuente_tipo = 'carga'"
+                   f" AND fuente_id = %s LIMIT %s)", (cid, TANDA)).rowcount
+        if n:
+            return seguir("quitar", "Quitando lo que aportó la carga")
+        x("UPDATE telefono_vinculo SET sucursal_id = NULL WHERE sucursal_id IN "
+          "(SELECT id FROM sucursal WHERE fuente_tipo = 'carga' AND fuente_id = %s)", (cid,))
+        x("UPDATE contacto SET sucursal_id = NULL WHERE sucursal_id IN "
+          "(SELECT id FROM sucursal WHERE fuente_tipo = 'carga' AND fuente_id = %s)", (cid,))
+        x("DELETE FROM sucursal WHERE fuente_tipo = 'carga' AND fuente_id = %s", (cid,))
+        x("UPDATE empresa SET carga_alta_id = NULL WHERE carga_alta_id = %s", (cid,))
+        return seguir("empresas", "Revisando las empresas de la carga")
+
+    if paso == "empresas":
+        ids = [r["objeto_id"] for r in x("SELECT objeto_id FROM carga_trabajo WHERE carga_id = %s AND tipo = 'empresa'"
+                                         " ORDER BY objeto_id LIMIT %s", (cid, TANDA_EMPRESAS))]
+        if not ids:
+            return seguir("telefonos", "Borrando teléfonos que quedaron sin empresa")
+        # Las empresas que solo existían por esta carga se borran; las demás se recalculan
+        huerfanas = _sin_respaldo(conn, ids)
+        n = borrar_empresas(conn, huerfanas, "carga.borrar", actor)
+        items = n.pop("_items_borrados")
+        if items:
+            with conn.cursor() as cur:
+                cur.executemany("INSERT INTO carga_trabajo (carga_id, tipo, objeto_id) VALUES (%s, 'item_borrado', %s)"
+                                " ON CONFLICT DO NOTHING", [(cid, i) for i in items])
+        for k in ("items_de_muestra", "intentos", "filas_sav"):
+            res[k] = res.get(k, 0) + n.get(k, 0)
+        res["empresas_borradas"] = res.get("empresas_borradas", 0) + n.get("empresas", 0)
+        quedan = [r["id"] for r in x("SELECT id FROM empresa WHERE id = ANY(%s) ORDER BY id", (ids,))]
+        for eid in quedan:
+            empresas.recalcular(conn, eid)
+        res["empresas_recalculadas"] = res.get("empresas_recalculadas", 0) + len(quedan)
+        x("DELETE FROM carga_trabajo WHERE carga_id = %s AND tipo = 'empresa' AND objeto_id = ANY(%s)", (cid, ids))
+        hechas = res["empresas_borradas"] + res["empresas_recalculadas"]
+        tareas.progreso(tarea_id, hechas, res.get("empresas_total", hechas) + 2)
+        return seguir("empresas", f"Empresas revisadas: {hechas:,} de {res.get('empresas_total', hechas):,}".replace(",", "."))
+
+    if paso == "telefonos":
+        tels = [r["objeto_id"] for r in x("SELECT objeto_id FROM carga_trabajo WHERE carga_id = %s AND tipo = 'telefono'"
+                                          " ORDER BY objeto_id LIMIT 10000", (cid,))]
+        if not tels:
+            return seguir("final", "Terminando")
+        x("""DELETE FROM telefono t WHERE t.id = ANY(%s)
+              AND NOT EXISTS (SELECT 1 FROM telefono_vinculo v WHERE v.telefono_id = t.id)
+              AND NOT EXISTS (SELECT 1 FROM intento i WHERE i.telefono_id = t.id)
+              AND NOT EXISTS (SELECT 1 FROM item_parte_estado p WHERE p.telefono_id = t.id)
+              AND NOT EXISTS (SELECT 1 FROM no_llamar l WHERE l.alcance = 'telefono' AND l.objeto_id = t.id)""", (tels,))
+        intermediarios.reevaluar(conn, tels, actor)
+        x("DELETE FROM carga_trabajo WHERE carga_id = %s AND tipo = 'telefono' AND objeto_id = ANY(%s)", (cid, tels))
+        return seguir("telefonos", "Borrando teléfonos que quedaron sin empresa")
+
+    # final: la carga, sus tareas y su archivo
+    items_borrados = [r["objeto_id"] for r in x(
+        "SELECT objeto_id FROM carga_trabajo WHERE carga_id = %s AND tipo = 'item_borrado'", (cid,))]
     x("DELETE FROM revision_fusion WHERE carga_id = %s", (cid,))
     # Las tareas canceladas quedan como registro; si Cloud Tasks las entrega tarde, no hacen nada
     x("DELETE FROM tarea WHERE (payload->>'carga_id')::int = %s AND estado <> 'cancelada'", (cid,))
-    x("DELETE FROM carga WHERE id = %s", (cid,))  # carga_rechazo cae en cascada
+    x("DELETE FROM carga_trabajo WHERE carga_id = %s", (cid,))
+    x("DELETE FROM carga WHERE id = %s", (cid,))  # carga_rechazo, carga_fila y carga_lote caen en cascada
     arch = x("SELECT * FROM archivo a WHERE a.id = %s"
              " AND NOT EXISTS (SELECT 1 FROM carga c WHERE c.archivo_id = a.id)"
              " AND NOT EXISTS (SELECT 1 FROM sav_ingesta s WHERE s.archivo_id = a.id)",
              (carga["archivo_id"],)).fetchone()
     if arch:
         x("DELETE FROM archivo WHERE id = %s", (arch["id"],))
-    resumen = {"carga_id": cid, "fuente": carga["fuente"], "estado_previo": carga["estado"],
-               "empresas_borradas": n.get("empresas", 0), "empresas_recalculadas": len(quedan),
-               "items_de_muestra": n.get("items_de_muestra", 0), "intentos": n.get("intentos", 0),
-               "filas_sav": n.get("filas_sav", 0)}
+    resumen = {k: res.get(k, 0) for k in ("empresas_borradas", "empresas_recalculadas", "items_de_muestra", "intentos",
+                                          "filas_sav")}
+    resumen.update({"carga_id": cid, "fuente": carga["fuente"], "estado_previo": res.get("estado_previo", carga["estado"])})
     _vincular_auditoria(conn, items_borrados, auditoria.registrar(conn, actor, "carga.borrar", "carga", cid, resumen))
-    tareas.progreso(tarea_id, len(ids) + 1, len(ids) + 1)
+    total = res.get("empresas_total", 0) + 2
+    tareas.progreso(tarea_id, total, total)
+    lotes._liberar_al_terminar(conn)
     if arch:
         try:
             storage.borrar(arch)

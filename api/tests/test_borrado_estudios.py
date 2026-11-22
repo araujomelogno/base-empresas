@@ -121,7 +121,7 @@ def test_borrar_estudio_cancela_la_ingesta_pendiente(api, sql, monkeypatch):
     e, mid, items = preparar(api, sql, n=2)
     parte = e["partes"][0]["id"]
     a = api.subir(f"/partes/{parte}/sav/analizar", "r.sav", hacer_sav([fila_sav(1, items[0])]), rol="coordinador").json()
-    monkeypatch.setattr(tareas, "despachar", lambda tid: None)       # Cloud Tasks no la ejecuta
+    monkeypatch.setattr(tareas, "despachar", lambda tid, demora=0: None)       # Cloud Tasks no la ejecuta
     r = api.post(f"/partes/{parte}/sav", rol="coordinador", json={"ingesta_id": a["ingesta_id"], "mapeo": a["mapeo"]})
     tid = r.json()["tarea_id"]
     monkeypatch.undo()
@@ -140,10 +140,10 @@ def carga_sin_ejecutar(api, monkeypatch, filas, confirmar=False):
 
     if confirmar:
         c = cargar(api, filas, confirmar=False)
-        monkeypatch.setattr(tareas, "despachar", lambda tid: None)
+        monkeypatch.setattr(tareas, "despachar", lambda tid, demora=0: None)
         tid = api.post(f"/cargas/{c['id']}/confirmar", rol="steward").json()["tarea_id"]
     else:
-        monkeypatch.setattr(tareas, "despachar", lambda tid: None)
+        monkeypatch.setattr(tareas, "despachar", lambda tid, demora=0: None)
         a = api.subir("/cargas/analizar", "b.csv", csv_bytes(filas), rol="steward").json()
         r = api.post("/cargas", rol="steward", json={"archivo_id": a["archivo_id"], "fuente": "x", "tipo_fuente": "x",
                                                      "licencia": "interna", "mapeo": {**a["mapeo"], "origen_defecto": "sin_dato"}})
@@ -177,8 +177,9 @@ def test_borrar_carga_en_proceso_con_tarea_huerfana(api, sql, monkeypatch):
 
 
 def test_cancelar_confirmacion_que_esta_corriendo(api, sql, monkeypatch):
-    """La confirmación de una carga grande corre en otro hilo; se borra la carga a mitad de camino:
-    la confirmación se detiene sin aplicar nada y la carga termina borrada."""
+    """La confirmación de una carga grande corre en otro hilo; se borra la carga a mitad de camino.
+    Con lotes (D50) la confirmación se detiene al final del lote en curso (que se revierte), lo aplicado por los lotes
+    anteriores queda, y el borrado lo quita todo: la carga termina borrada sin dejar nada."""
     from app import tareas
 
     filas = [{"RUT": rut_valido(i), "Razón social": f"Empresa {i}", "Teléfono": f"29{i:06d}"} for i in range(2500)]
@@ -194,7 +195,7 @@ def test_cancelar_confirmacion_que_esta_corriendo(api, sql, monkeypatch):
     hilo.join(60)
     assert not hilo.is_alive()
     assert tarea(api, tid)["estado"] == "cancelada"
-    assert res["empresas_borradas"] == 0                     # la confirmación no dejó nada que borrar
+    assert res.get("empresas_borradas", 0) >= 100, res      # lo que aplicaron los lotes anteriores se borró
     assert cuenta(sql, "empresa") == 0 and cuenta(sql, "empresa_campo_historia") == 0
     assert cuenta(sql, "telefono_vinculo") == 0 and cuenta(sql, "carga") == 0
 
