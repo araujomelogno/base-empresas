@@ -172,6 +172,8 @@ function renderShell() {
       `<button class="nav-item" data-ruta="${ruta}"><span class="nav-icon">${icono}</span>${esc(texto)}<span class="nav-count hidden" data-count="${ruta}"></span></button>`).join('');
   }).join('');
   document.getElementById('app').innerHTML = `
+  ${me.aviso_migraciones ? `<div class="franja-error" role="alert"><strong>La base no está al día.</strong> ${esc(me.aviso_migraciones)}
+    (ver «Actualizaciones» en docs/despliegue.md). Hasta entonces, algunas pantallas pueden fallar.</div>` : ''}
   <div class="app">
     <aside class="sidebar">
       <div class="sidebar-top"><img class="logo-horizontal-white" src="img/logo-horizontal-blanco.png" alt="Equipos Consultores" />

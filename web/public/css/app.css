@@ -406,3 +406,7 @@ td a.mono, td .mono { white-space: nowrap; }
 svg.spark { display: block; }
 .dup-lado { border: 1px solid var(--border); border-radius: 4px; padding: .7rem .85rem; background: var(--white); display: flex; flex-direction: column; gap: .2rem; }
 @media (max-width: 720px) { .cal-ind { grid-template-columns: 1fr auto; } .cal-ind-spark { grid-column: 1 / -1; } }
+
+/* D52: aviso a los administradores cuando la base no tiene todas las migraciones del código */
+.franja-error { background: var(--red); color: #fff; padding: 0.65rem 1.25rem; font-size: 0.9rem; position: sticky; top: 0; z-index: 50; }
+.franja-error code { background: rgba(255,255,255,0.18); color: #fff; }

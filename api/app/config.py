@@ -186,7 +186,7 @@ class ConfigCargas(BaseModel):
     """Cargas por lotes (D50): cada lote es una transacción y un paso de la tarea."""
     tamano_lote: int = Field(5000, ge=500, le=20000)
     pausa_segundos: float = Field(1.0, ge=0, le=60)       # respiro para la base entre lote y lote
-    minutos_trabada: int = Field(35, ge=10, le=240)       # sin avanzar más que esto (y que el plazo de Cloud Tasks)
+    minutos_trabada: int = Field(10, ge=5, le=240)        # sin latido más que esto: se retoma sola una vez (D52)
 
 
 def cargas(parametros: dict) -> dict:

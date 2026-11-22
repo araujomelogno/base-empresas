@@ -365,8 +365,13 @@ def ver_tarea(tarea_id: int, conn=Depends(get_conn), u: Usuario = Depends(usuari
 
 @router.post("/tareas/{tarea_id}/ejecutar")
 def ejecutar_tarea(tarea_id: int, _: str = Depends(requiere_tarea)):
-    """Lo llama Cloud Tasks. Devuelve 200 aunque la tarea falle (el error queda en la tarea)."""
-    return {"resultado": tareas.ejecutar(tarea_id)}
+    """Lo llama Cloud Tasks. Devuelve 200 aunque la tarea falle (el error queda en la tarea). Si la tarea está
+    corriendo en otro proceso vivo (o esta instancia se apaga), 503: Cloud Tasks reintenta más tarde y, si aquel
+    proceso murió, el reintento la retoma (D52)."""
+    r = tareas.ejecutar(tarea_id)
+    if r is tareas.OCUPADA:
+        raise HTTPException(503, "La tarea está corriendo en otro proceso; reintentar más tarde")
+    return {"resultado": r}
 
 
 # ── Administradores iniciales (infra/desplegar.sh invitar) ──

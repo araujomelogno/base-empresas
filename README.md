@@ -26,6 +26,7 @@ Registro maestro de empresas por RUT del que salen muestras aleatorias y auditab
 | Despliegue del arreglo «Failed to fetch» al borrar naturalezas sin código | [`docs/despliegue_naturalezas_sin_codigo.md`](docs/despliegue_naturalezas_sin_codigo.md) |
 | Despliegue de las cargas grandes por lotes (preview, confirmación, deshacer y borrado) | [`docs/despliegue_cargas_por_lotes.md`](docs/despliegue_cargas_por_lotes.md) |
 | Despliegue de «Siguiente» sin esperas: el archivo se lee una vez y la carga se crea en segundo plano | [`docs/despliegue_carga_asincrona.md`](docs/despliegue_carga_asincrona.md) |
+| Despliegue de la robustez de las cargas: servicio de tareas, tareas que se retoman solas y migración antes de desplegar | [`docs/despliegue_robustez.md`](docs/despliegue_robustez.md) |
 
 ## Estructura
 

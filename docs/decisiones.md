@@ -59,6 +59,7 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 | D49 | Naturalezas jurídicas: se edita el nombre y la exclusión; el código y el borrado, solo si ninguna empresa la usa ni la usó; rutas por id | Vigente (20/11/2026) |
 | D50 | Cargas por lotes: preview, confirmación, deshacer y borrado por lotes de 5.000 filas, cada uno una transacción; estado «interrumpida», reanudar, una carga pesada a la vez | Vigente (22/11/2026) |
 | D51 | Crear la carga sin esperas: el archivo se parsea una vez al analizarlo (archivo_fila), los archivos grandes se leen en segundo plano, «Siguiente» responde enseguida y una clave evita cargas duplicadas | Vigente (22/11/2026) |
+| D52 | Robustez de las cargas: lectura en streaming, servicio de Cloud Run aparte para las tareas (1 proceso, 2 GiB), tareas que se retoman solas (latido, reintentos, SIGTERM) y la migración antes de desplegar | Vigente (22/11/2026) |
 
 ## D01 — Cloud SQL Postgres como núcleo
 
@@ -628,6 +629,25 @@ La configuración inicial usa 6 meses de enfriamiento desde el último contacto 
 6. **Las filas intermedias se liberan.** Al confirmar, descartar, deshacer o borrar la carga (si ninguna otra carga en curso usa el archivo), y en el job diario de calidad, que libera las de los archivos de hace más de 24 horas que ninguna carga en curso necesita. No hace falta otro Cloud Scheduler.
 
 **Descartado.** Subir el archivo directo al bucket con una URL firmada (P2, para archivos de más de 30 MB). Guardar las filas en un CSV normalizado en el bucket: la tabla permite contar valores y leer lotes con una consulta.
+
+## D52 — Robustez de las cargas por lotes
+
+**Contexto.** La carga #8 (`acumulaGermanV7.xlsx`, 193.556 filas, 40 lotes) quedó «interrumpida» sin ningún lote de preview hecho. Según los logs de Cloud Run del 22/11/2026: un proceso de uvicorn se murió unas 40 veces seguidas, una cada 6–7 segundos (el patrón del OOM killer con 2 procesos en 1 GiB, uno de ellos con el .xlsx entero en memoria), y al apagarse la instancia murió el proceso que corría el lote 1. La tarea quedó «corriendo» sin que nadie la retomara hasta los 35 minutos. Además, la versión con lotes se desplegó antes que su migración, y la API dio errores 500 hasta que se aplicó. Ver `specs/SPEC_cargas_lotes_robustez.md`.
+
+**Decisión.**
+
+1. **Memoria acotada.** El archivo se lee de a una fila (`lectores.iterar_tabla`: openpyxl en modo `read_only`, el CSV con un lector por líneas) y se copia a `archivo_fila` sin armar la lista entera. Cada lote deja en el log el RSS del proceso al empezar y al terminar (`carga=8 preview lote=1/40 filas=4812 segundos=… rss_mb=180→195`) y un warning si pasa del 75 % del límite; después de los lotes grandes se libera la memoria (`gc.collect()`). Medido con `docs/build/medir_memoria.py` (200.000 filas): 101 MB de pico al leer el archivo y unos 200 MB en un lote de 5.000, contra la meta de 600 MB.
+2. **Opción a: un servicio de Cloud Run aparte para las tareas** (`empresas-tareas`), con la misma imagen, **1 proceso, concurrencia 1 y 2 GiB**. Cloud Tasks le manda todas las tareas (`TAREAS_URL`). La API de la web sigue con 2 procesos y 1 GiB, y una carga pesada no la afecta. Escala a cero: sin costo fijo. Se eligió sobre la opción b (un solo servicio con 1 proceso y 2 GiB) porque esa deja a la web con un solo proceso y la sigue exponiendo a una carga pesada.
+3. **Las tareas que mueren se retoman solas.**
+   - **Latido:** mientras corre, un hilo actualiza `tarea.actualizado` cada 30 s, con la marca de su dueño (`tarea.dueno`). Una tarea viva nunca parece trabada, aunque un lote tarde.
+   - **Retomar:** `tareas.ejecutar` también toma una tarea «corriendo» si no late hace más de **3 minutos** (su proceso murió) y sigue desde el lote que no se terminó; los terminados ya están en `carga_lote`. Si la encuentra viva, responde **503**, así Cloud Tasks reintenta más tarde en lugar de darla por hecha. Al final de cada lote se verifica que el dueño sigue siendo el mismo: si otro proceso la retomó, ese lote no se confirma.
+   - **Cola de Cloud Tasks:** hasta 5 intentos, de 30 s a 5 min (`desplegar.sh`).
+   - **Respaldo:** `revisar_trabadas` (la pantalla y el job diario) baja de 35 a **10 minutos** (configurable) y, antes de dar una carga por «interrumpida», **la vuelve a encolar una vez sola**; recién si se corta de nuevo queda interrumpida para que una persona decida. Cubre también una tarea «pendiente» cuyo aviso se perdió.
+   - **Despliegues:** al recibir SIGTERM, la tarea en curso revierte su lote, vuelve a «pendiente» y se encola de nuevo, para que la tome la revisión nueva; la carga sigue sin quedar interrumpida.
+4. **Nunca código sin su migración.** `desplegar.sh api` construye la imagen, **aplica las migraciones con esa imagen** (job `empresas-migrar`) y solo si salen bien despliega el servicio de tareas y la API; si fallan, no despliega y lo dice. Al arrancar, la API compara las migraciones del código con `public.empresas_migraciones`: si falta alguna, lo escribe en el log y `GET /api/me` se lo avisa a los administradores, que ven una franja roja.
+5. **Avance del lote en curso:** «Lote 1 de 40 · fila 2.300 de 4.812 · 1 min 40 s» (la fila se informa cada 500 y el tiempo lo calcula la base desde que empezó el lote). Si un lote pasa de 10 minutos, la pantalla avisa que, si no avanza en 3 minutos, el sistema lo retoma solo.
+
+**Descartado.** Matar el lote a los 30 minutos y depender solo de Reanudar a mano; agrandar Cloud SQL; leer el archivo entero y solo subir la memoria (el archivo de mañana puede tener más columnas).
 
 ## Preguntas abiertas que heredan del PRD
 

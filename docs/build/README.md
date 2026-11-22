@@ -182,3 +182,21 @@ python docs/build/manual_carga_asincrona.py docs/Manual_de_usuario_Base_de_Empre
 ```bash
 soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
 ```
+
+## Robustez de las cargas (guía 30, D52)
+
+`medir_memoria.py` mide el pico de memoria al leer un .xlsx sintético de 200.000 filas y en un lote de preview y uno de confirmación, cada fase en un proceso aparte (criterio: menos de 600 MB). Necesita una base vacía y migrada:
+
+```bash
+DATABASE_URL=postgresql://postgres@localhost/empresas_medir python docs/build/medir_memoria.py 200000
+```
+
+Las figuras `62-carga-por-lotes` (ahora con la fila y el tiempo del lote) y `64-config-cargas` se sacaron de nuevo con `capturas_lotes.js` (`CARGA_INTERRUMPIDA=0` saltea la 63). `manual_robustez.py` actualiza la guía 30, el parámetro de la guía 15 y Solución de problemas; se aplica después de `manual_lotes.py` y `manual_carga_asincrona.py`, y después se regenera el PDF:
+
+```bash
+python docs/build/manual_robustez.py docs/Manual_de_usuario_Base_de_Empresas.docx docs/manual/img
+```
+
+```bash
+soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
+```

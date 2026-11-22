@@ -15,8 +15,8 @@ function tarjetaCargas(k, dis) {
       <div class="field-hint">Entre 500 y 20.000. Cada lote es una transacción: más chico, más lotes pero cada uno más corto y seguro.</div></div>
     <div class="form-group"><label>Pausa entre lotes (segundos)</label><input type="number" id="c-pausa" min="0" max="60" step="0.5" value="${k.pausa_segundos ?? 1}" ${dis} />
       <div class="field-hint">Deja respirar a la base para que la web siga respondiendo durante una carga grande.</div></div>
-    <div class="form-group"><label>Minutos sin avanzar para darla por cortada</label><input type="number" id="c-trabada" min="10" max="240" value="${k.minutos_trabada ?? 35}" ${dis} />
-      <div class="field-hint">Una tarea que no avanza en ese tiempo queda «interrumpida» y se puede reanudar.</div></div></div>`);
+    <div class="form-group"><label>Minutos sin avanzar para darla por cortada</label><input type="number" id="c-trabada" min="5" max="240" value="${k.minutos_trabada ?? 10}" ${dis} />
+      <div class="field-hint">Una tarea viva avisa cada 30 segundos. Si no avanza en ese tiempo, se retoma sola una vez; si se vuelve a cortar, queda «interrumpida».</div></div></div>`);
 }
 
 export async function config(ctx) {

@@ -10,14 +10,27 @@ from .util import texto
 
 
 def leer_tabla(datos: bytes, tipo: str, avance=None) -> tuple[list[str], list[dict], dict]:
-    """Devuelve (columnas, filas, metadatos). Los metadatos solo vienen para .sav.
-    avance(n): se llama cada 5.000 filas leídas de un Excel (para mostrar «Leyendo el archivo… N filas»)."""
-    if tipo == "csv":
-        return (*_csv(datos), {})
-    if tipo == "xlsx":
-        return (*_xlsx(datos, avance), {})
+    """Devuelve (columnas, filas, metadatos). Los metadatos solo vienen para .sav. Arma la lista entera: para un
+    archivo grande, iterar_tabla (D52) lo recorre sin tener todas las filas en memoria.
+    avance(n): se llama cada 5.000 filas leídas (para mostrar «Leyendo el archivo… N filas»)."""
     if tipo == "sav":
         return leer_sav(datos)
+    columnas, filas = iterar_tabla(datos, tipo)
+    salida = []
+    for f in filas:
+        salida.append(f)
+        if avance and len(salida) % 5000 == 0:
+            avance(len(salida))
+    return columnas, salida, {}
+
+
+def iterar_tabla(datos: bytes, tipo: str):
+    """(columnas, iterador de filas) de un .csv o un .xlsx, de a una fila (R1, D52): nunca tiene el archivo entero
+    parseado en memoria. El Excel se abre en modo read_only y el CSV se recorre con un lector por líneas."""
+    if tipo == "csv":
+        return _csv(datos)
+    if tipo == "xlsx":
+        return _xlsx(datos)
     raise HTTPException(415, f"Tipo no soportado: {tipo}")
 
 
@@ -39,11 +52,16 @@ def _csv(datos: bytes):
         dialecto = csv.excel
         dialecto.delimiter = ";" if muestra.count(";") > muestra.count(",") else ","
     lector = csv.reader(io.StringIO(txt), dialecto)
-    filas = list(lector)
-    if not filas:
-        raise HTTPException(422, "El archivo está vacío")
-    columnas = _columnas(filas[0])
-    return columnas, [dict(zip(columnas, _rellenar(f, len(columnas)))) for f in filas[1:] if any(c.strip() for c in f)]
+    try:
+        columnas = _columnas(next(lector))
+    except StopIteration:
+        raise HTTPException(422, "El archivo está vacío") from None
+
+    def filas():
+        for f in lector:
+            if any(c.strip() for c in f):
+                yield dict(zip(columnas, _rellenar(f, len(columnas))))
+    return columnas, filas()
 
 
 def estimar_filas(datos: bytes, tipo: str) -> int:
@@ -76,7 +94,7 @@ def estimar_filas(datos: bytes, tipo: str) -> int:
     return 0
 
 
-def _xlsx(datos: bytes, avance=None):
+def _xlsx(datos: bytes):
     from openpyxl import load_workbook
 
     try:
@@ -84,21 +102,23 @@ def _xlsx(datos: bytes, avance=None):
     except Exception as e:
         raise HTTPException(422, f"No se pudo abrir el Excel: {e}") from e
     ws = wb.worksheets[0]
-    filas = ws.iter_rows(values_only=True)
+    crudas = ws.iter_rows(values_only=True)
     try:
-        encabezado = next(filas)
+        encabezado = next(crudas)
     except StopIteration:
+        wb.close()
         raise HTTPException(422, "El Excel está vacío") from None
     columnas = _columnas(["" if c is None else str(c) for c in encabezado])
-    salida = []
-    for f in filas:
-        if f is None or all(c is None or str(c).strip() == "" for c in f):
-            continue
-        salida.append(dict(zip(columnas, _rellenar(list(f), len(columnas)))))
-        if avance and len(salida) % 5000 == 0:
-            avance(len(salida))
-    wb.close()
-    return columnas, salida
+
+    def filas():
+        try:
+            for f in crudas:
+                if f is None or all(c is None or str(c).strip() == "" for c in f):
+                    continue
+                yield dict(zip(columnas, _rellenar(list(f), len(columnas))))
+        finally:
+            wb.close()
+    return columnas, filas()
 
 
 def leer_sav(datos: bytes) -> tuple[list[str], list[dict], dict]:

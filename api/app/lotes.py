@@ -13,6 +13,7 @@ transacción corta y una ejecución de la tarea, muy lejos del límite de 30 min
 - Una carga pesada a la vez (confirmar, deshacer, borrar): las demás esperan en cola y arrancan solas.
 """
 import datetime as dt
+import gc
 import logging
 import time
 from collections import Counter
@@ -21,7 +22,7 @@ from decimal import Decimal
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
-from . import auditoria, cargas, config, contactos, empresas, intermediarios, rut as rutmod, tareas
+from . import auditoria, cargas, config, contactos, empresas, intermediarios, memoria, rut as rutmod, tareas
 from .db import conexion
 from .util import celda_json, json_dumps, texto
 
@@ -29,6 +30,7 @@ log = logging.getLogger(__name__)
 PESADAS = ("en_proceso", "deshaciendo", "borrando")
 TANDA_BORRADO = 20000      # filas por sentencia al quitar lo que aportó una carga
 TANDA_EMPRESAS = 2000      # empresas por paso al recalcular
+GC_DESDE = 1000           # después de un lote de al menos estas filas se libera la memoria (gc.collect)
 ALARMA_SEGUNDOS = 600      # un lote que tarda más que esto deja una alarma en el log
 
 
@@ -226,27 +228,40 @@ for _tipo in ("carga.preview", "carga.confirmar", "carga.deshacer", "carga.borra
 
 
 def revisar_trabadas() -> list[int]:
-    """L4: una tarea de carga «corriendo» que no avanza hace más que el plazo configurado (35 min, más que el de Cloud
-    Tasks) se dio por cortada: la carga queda interrumpida y se puede reanudar. La llaman la pantalla de cargas y el
-    job diario. Despacha lo que estaba en cola."""
-    despachar = []
+    """Respaldo de la reanudación automática (D52). Una tarea de carga que no avanza hace más que el plazo configurado
+    (10 minutos; una tarea viva late cada 30 s) se dio por cortada: la primera vez se vuelve a encolar sola, desde el
+    lote o paso que no se terminó; si se vuelve a cortar, la carga queda «interrumpida» para que una persona decida.
+    Cubre también una tarea «pendiente» cuyo aviso de Cloud Tasks se perdió. La llaman la pantalla de cargas y el
+    job diario. Despacha lo que estaba en cola. Devuelve las cargas que quedaron interrumpidas."""
+    despachar, interrumpidas = [], []
     with conexion() as conn:
         _, params = config.vigente(conn)
         mins = config.cargas(params)["minutos_trabada"]
         trabadas = conn.execute(
-            "SELECT c.id AS carga_id, t.id AS tarea_id FROM carga c JOIN tarea t ON t.id = c.tarea_id"
-            " WHERE t.estado = 'corriendo' AND t.actualizado < now() - make_interval(mins => %s)"
+            "SELECT c.id AS carga_id, t.id AS tarea_id, t.reintentos_auto FROM carga c JOIN tarea t ON t.id = c.tarea_id"
+            " WHERE t.estado IN ('corriendo', 'pendiente') AND c.cola IS NULL"
+            " AND t.actualizado < now() - make_interval(mins => %s)"
             " AND c.estado IN ('analizando', 'en_proceso', 'deshaciendo', 'borrando')", (mins,)).fetchall()
         for r in trabadas:
-            msg = f"Se cortó: la tarea no avanzó en más de {mins} minutos (probablemente se reinició el servidor)"
-            conn.execute("UPDATE tarea SET estado = 'error', error = %s, terminado = now() WHERE id = %s", (msg, r["tarea_id"]))
+            if r["reintentos_auto"] < 1:
+                conn.execute("UPDATE tarea SET estado = 'pendiente', dueno = NULL, reintentos_auto = reintentos_auto + 1,"
+                             " actualizado = now(), mensaje = 'Retomando: el proceso anterior se cortó' WHERE id = %s",
+                             (r["tarea_id"],))
+                log.warning("Carga %s: la tarea %s no avanzó en %s minutos; se retoma sola", r["carga_id"], r["tarea_id"], mins)
+                despachar.append(r["tarea_id"])
+                continue
+            msg = (f"Se cortó: la tarea no avanzó en más de {mins} minutos, tampoco después de retomarla sola "
+                   "(probablemente se reinició el servidor)")
+            conn.execute("UPDATE tarea SET estado = 'error', error = %s, terminado = now(), dueno = NULL WHERE id = %s",
+                         (msg, r["tarea_id"]))
             despachar += _interrumpir(conn, r["carga_id"], r["tarea_id"], msg)
+            interrumpidas.append(r["carga_id"])
         if not despachar:
             tid = siguiente_en_cola(conn)  # una cola que quedó sin dueño
             despachar += [tid] if tid else []
     for tid in despachar:
         tareas.despachar(tid)
-    return [r["carga_id"] for r in trabadas]
+    return interrumpidas
 
 
 def reanudar(conn, carga_id: int, actor: str) -> dict:
@@ -288,6 +303,7 @@ def _sigue_vigente(conn, carga_id: int, tarea_id: int, estado: str):
     r = conn.execute("SELECT estado, tarea_id FROM carga WHERE id = %s FOR NO KEY UPDATE", (carga_id,)).fetchone()
     if r is None or r["estado"] != estado or r["tarea_id"] != tarea_id:
         raise tareas.Cancelada(f"La carga #{carga_id} pasó a otra operación")
+    tareas.sigo_siendo_dueno(conn, tarea_id)  # D52: si otro proceso la retomó, este paso no se confirma
     tareas.progreso(tarea_id, *conn.execute("SELECT progreso, total FROM tarea WHERE id = %s", (tarea_id,)).fetchone().values())
 
 
@@ -344,13 +360,13 @@ def _tarea_preview(conn, payload, tarea_id):
     if lote is not None:
         tareas.mensaje(tarea_id, _mensaje(conn, carga, lote["numero"], hechas, "preview_hecho"))
         filas = filas_lote(conn, cid, lote["numero"])
-        t0 = time.monotonic()
+        t0, rss0 = time.monotonic(), memoria.rss_mb()
         res = {}
         try:
             with conn.transaction():  # savepoint que se descarta: los conteos son los reales
                 res["conteos"], res["rechazos"], tocados = cargas.procesar(
                     conn, carga, filas, cfg, carga["responsable"], real=False, tarea_id=tarea_id, hechos=hechas,
-                    total=carga["n_filas"])
+                    total=carga["n_filas"], mensaje_lote=f"Lote {lote['numero']} de {carga['lotes']}")
                 ids = sorted(tocados)
                 res["conteos"]["nuevos_sospechosos"] = intermediarios.contar_nuevos(conn, cfg["umbral_intermediario"], ids) if ids else 0
                 raise _Descartar()
@@ -361,9 +377,15 @@ def _tarea_preview(conn, payload, tarea_id):
         seg = round(time.monotonic() - t0, 1)
         conn.execute("UPDATE carga_lote SET preview_hecho = true, preview_conteos = %s, preview_segundos = %s"
                      " WHERE carga_id = %s AND numero = %s", (Jsonb(res["conteos"]), seg, cid, lote["numero"]))
-        log.info("carga=%s preview lote=%s/%s filas=%s segundos=%s", cid, lote["numero"], carga["lotes"], len(filas), seg)
-        tareas.progreso(tarea_id, hechas + len(filas), carga["n_filas"])
-        return tareas.Continuar(_mensaje(conn, carga, lote["numero"], hechas + len(filas), "preview_hecho"))
+        n_lote = len(filas)
+        del filas, res
+        if n_lote >= GC_DESDE:
+            gc.collect()   # R1 (D52): lo del lote no queda ocupando memoria hasta el siguiente
+        rss1 = memoria.revisar(f"carga={cid} preview lote={lote['numero']}")
+        log.info("carga=%s preview lote=%s/%s filas=%s segundos=%s rss_mb=%s→%s", cid, lote["numero"], carga["lotes"],
+                 n_lote, seg, rss0, rss1)
+        tareas.progreso(tarea_id, hechas + n_lote, carga["n_filas"])
+        return tareas.Continuar(_mensaje(conn, carga, lote["numero"], hechas + n_lote, "preview_hecho"))
     _sigue_vigente(conn, cid, tarea_id, "analizando")
     conteos = _total_conteos(conn, cid, "preview_conteos")
     conteos["lotes"] = carga["lotes"]
@@ -395,9 +417,10 @@ def _tarea_confirmar(conn, payload, tarea_id):
         conn.execute("UPDATE carga_lote SET estado = 'en_proceso', intentos = intentos + 1, inicio = now(), error = NULL"
                      " WHERE carga_id = %s AND numero = %s", (cid, n))
         filas = filas_lote(conn, cid, n)
-        t0 = time.monotonic()
+        t0, rss0 = time.monotonic(), memoria.rss_mb()
         conteos, rechazos, tocados = cargas.procesar(conn, carga, filas, params, carga["responsable"], real=True,
-                                                     tarea_id=tarea_id, hechos=hechas, total=carga["n_filas"])
+                                                     tarea_id=tarea_id, hechos=hechas, total=carga["n_filas"],
+                                                     mensaje_lote=f"Lote {n} de {carga['lotes']}")
         ids = sorted(tocados)
         # Intermediarios por lote: el conteo de un teléfono solo cambia cuando un lote lo toca (mismo resultado que al final)
         conteos["nuevos_sospechosos"] = len(intermediarios.detectar(conn, params["umbral_intermediario"], ids,
@@ -408,12 +431,17 @@ def _tarea_confirmar(conn, payload, tarea_id):
         seg = round(time.monotonic() - t0, 1)
         conn.execute("UPDATE carga_lote SET estado = 'aplicado', conteos = %s, fin = now(), segundos = %s"
                      " WHERE carga_id = %s AND numero = %s", (Jsonb(conteos), seg, cid, n))
+        n_lote = len(filas)
+        del filas, rechazos, tocados
+        if n_lote >= GC_DESDE:
+            gc.collect()   # R1 (D52)
+        rss1 = memoria.revisar(f"carga={cid} confirmar lote={n}")
         nivel = logging.WARNING if seg > ALARMA_SEGUNDOS else logging.INFO
-        log.log(nivel, "carga=%s confirmar lote=%s/%s filas=%s segundos=%s altas=%s actualizaciones=%s%s", cid, n,
-                carga["lotes"], len(filas), seg, conteos.get("altas", 0), conteos.get("actualizaciones", 0),
+        log.log(nivel, "carga=%s confirmar lote=%s/%s filas=%s segundos=%s rss_mb=%s→%s altas=%s actualizaciones=%s%s",
+                cid, n, carga["lotes"], n_lote, seg, rss0, rss1, conteos.get("altas", 0), conteos.get("actualizaciones", 0),
                 " ALARMA: lote lento" if nivel == logging.WARNING else "")
-        tareas.progreso(tarea_id, hechas + len(filas), carga["n_filas"])
-        return tareas.Continuar(_mensaje(conn, carga, n, hechas + len(filas), "aplicado"), ccfg["pausa_segundos"])
+        tareas.progreso(tarea_id, hechas + n_lote, carga["n_filas"])
+        return tareas.Continuar(_mensaje(conn, carga, n, hechas + n_lote, "aplicado"), ccfg["pausa_segundos"])
     # Paso final: conteos totales, auditoría y se libera la tabla intermedia
     _sigue_vigente(conn, cid, tarea_id, "en_proceso")
     conteos = _total_conteos(conn, cid, "conteos")
