@@ -43,14 +43,14 @@ def test_carga_a_la_base_provisoria(api, sql):
 
 
 def test_fila_con_rut_va_a_la_definitiva(api, sql):
-    filas = [{"RUT": "", **sin_rut(0)}, {"RUT": rut_valido(5), **sin_rut(1)}, {"RUT": "1234567", **sin_rut(2)}]
+    filas = [{"RUT": "", **sin_rut(0)}, {"RUT": rut_valido(5), **sin_rut(1)}, {"RUT": "12345", **sin_rut(2)}]
     c = cargar(api, filas, destino="provisoria")
     assert (c["conteos"]["altas_provisoria"], c["conteos"]["altas_definitiva"]) == (2, 1)
     assert sql.execute("SELECT base FROM empresa WHERE rut = %s", (rut_valido(5),)).fetchone()["base"] == "definitiva"
-    # el «RUT con 7 dígitos» no se pierde: queda como id_informado
+    # el «RUT con 5 dígitos» no se pierde: queda como id_informado (de 6 a 11 dígitos entra como no verificado, D54)
     v = sql.execute("SELECT ea.valor_texto FROM empresa_atributo ea JOIN atributo a ON a.id = ea.atributo_id"
                     " WHERE a.clave = 'id_informado'").fetchall()
-    assert [x["valor_texto"] for x in v] == ["1234567"]
+    assert [x["valor_texto"] for x in v] == ["12345"]
     # opción para dejar todo en la provisoria
     c2 = cargar(api, [{"RUT": rut_valido(6), **sin_rut(3)}], destino="provisoria", tipo_fuente="otra",
                 opciones={"con_rut_a_definitiva": False})
@@ -59,14 +59,14 @@ def test_fila_con_rut_va_a_la_definitiva(api, sql):
 
 
 def test_carga_a_la_definitiva_rechaza_o_envia_a_provisoria(api, sql):
-    filas = [fila(0), fila(1, RUT="1234567"), fila(2, RUT="")]
+    filas = [fila(0), fila(1, RUT="12345"), fila(2, RUT="")]
     c = cargar(api, filas)
     assert c["conteos"]["rechazos"] == 2 and not provisorias(sql)
     c2 = cargar(api, filas, tipo_fuente="con opcion", opciones={"sin_rut_a_provisoria": True})
     assert c2["conteos"].get("rechazos", 0) == 0 and c2["conteos"]["altas_provisoria"] == 2
     ids = sql.execute("SELECT ea.valor_texto FROM empresa_atributo ea JOIN atributo a ON a.id = ea.atributo_id"
                       " WHERE a.clave = 'id_informado'").fetchall()
-    assert [x["valor_texto"] for x in ids] == ["1234567"]
+    assert [x["valor_texto"] for x in ids] == ["12345"]
     # sin columna RUT en una carga a la definitiva: no se puede
     a = api.subir("/cargas/analizar", "x.csv", csv_bytes([sin_rut(0)]), rol="steward", tipo_fuente="z").json()
     r = api.post("/cargas", rol="steward", json={"archivo_id": a["archivo_id"], "fuente": "x", "tipo_fuente": "z",

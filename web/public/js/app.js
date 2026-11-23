@@ -33,7 +33,7 @@ const MENU = [
 ];
 
 const RUTAS = [
-  [/^inicio$/, base.inicio], [/^empresas$/, base.empresas], [/^empresas\/(\d{12}|P-\d+)$/, base.ficha], [/^provisorias$/, provisorias.lista],
+  [/^inicio$/, base.inicio], [/^empresas$/, base.empresas], [/^empresas\/(\d{6,12}|P-\d+)$/, base.ficha], [/^provisorias$/, provisorias.lista],
   [/^cargas$/, cargas.lista], [/^cargas\/nueva$/, cargas.nueva], [/^cargas\/(\d+)$/, cargas.detalle],
   [/^intermediarios$/, cargas.intermediarios], [/^revision$/, cargas.revision],
   [/^estudios$/, estudios.lista], [/^estudios\/(\d+)$/, estudios.detalle], [/^estudios\/(\d+)\/nueva-muestra$/, estudios.nuevaMuestra],

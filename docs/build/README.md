@@ -212,3 +212,15 @@ python docs/build/manual_lotes_rapidos.py docs/Manual_de_usuario_Base_de_Empresa
 ```bash
 soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
 ```
+
+## RUT sin control de largo (D54)
+
+`capturas_rut.js` saca `67-rut-no-verificado`, `68-filtro-rut` y de nuevo `64-config-cargas` (con el interruptor). Necesita la demo con dos empresas de identificador corto (`POST /api/empresas` con `"rut": "4.567.891"` y `"38123456"`). `manual_rut.py` actualiza las guías 1, 3 y 15, la tabla de calidad y el glosario; se aplica después de `manual_lotes_rapidos.py` y después se regenera el PDF:
+
+```bash
+python docs/build/manual_rut.py docs/Manual_de_usuario_Base_de_Empresas.docx docs/manual/img
+```
+
+```bash
+soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
+```

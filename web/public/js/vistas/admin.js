@@ -16,7 +16,10 @@ function tarjetaCargas(k, dis) {
     <div class="form-group"><label>Pausa entre lotes (segundos)</label><input type="number" id="c-pausa" min="0" max="60" step="0.5" value="${k.pausa_segundos ?? 1}" ${dis} />
       <div class="field-hint">Deja respirar a la base para que la web siga respondiendo durante una carga grande.</div></div>
     <div class="form-group"><label>Minutos sin avanzar para darla por cortada</label><input type="number" id="c-trabada" min="5" max="240" value="${k.minutos_trabada ?? 10}" ${dis} />
-      <div class="field-hint">Una tarea viva avisa cada 30 segundos. Si no avanza en ese tiempo, se retoma sola una vez; si se vuelve a cortar, queda «interrumpida».</div></div></div>`);
+      <div class="field-hint">Una tarea viva avisa cada 30 segundos. Si no avanza en ese tiempo, se retoma sola una vez; si se vuelve a cortar, queda «interrumpida».</div></div>
+    <div class="form-group"><label class="check"><input type="checkbox" id="c-rut-cortos" ${k.aceptar_rut_no_verificado !== false ? 'checked' : ''} ${dis} />
+      Aceptar identificadores de 6 a 11 dígitos sin validar</label>
+      <div class="field-hint">Por ejemplo, la cédula de una unipersonal. Entran como «RUT no verificado» (se pueden filtrar en Empresas y el tablero de calidad los cuenta). Un RUT de 12 dígitos se valida siempre.</div></div></div>`);
 }
 
 export async function config(ctx) {
@@ -100,7 +103,8 @@ export async function config(ctx) {
       prefijos_salida: $('#c-prefijos').value.split(',').map(s => s.trim()).filter(Boolean),
       franjas, csv_ucontact: { separador: $('#c-sep').value || ';', columnas: cols },
       cdr: leerCdr(),
-      cargas: { tamano_lote: +$('#c-lote').value, pausa_segundos: +$('#c-pausa').value, minutos_trabada: +$('#c-trabada').value },
+      cargas: { tamano_lote: +$('#c-lote').value, pausa_segundos: +$('#c-pausa').value, minutos_trabada: +$('#c-trabada').value,
+        aceptar_rut_no_verificado: $('#c-rut-cortos').checked },
       ...leerEnriquecimiento(p),
     };
     const r = await api.put('/config', { parametros: nuevo, comentario: $('#c-coment').value || null });

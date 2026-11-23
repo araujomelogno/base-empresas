@@ -187,6 +187,8 @@ class ConfigCargas(BaseModel):
     tamano_lote: int = Field(5000, ge=500, le=20000)
     pausa_segundos: float = Field(1.0, ge=0, le=60)       # respiro para la base entre lote y lote
     minutos_trabada: int = Field(10, ge=5, le=240)        # sin latido más que esto: se retoma sola una vez (D52)
+    # D54: aceptar identificadores de 6 a 11 dígitos sin validar (RUT «no verificado»); desactivado, se rechazan
+    aceptar_rut_no_verificado: bool = True
 
 
 def cargas(parametros: dict) -> dict:
@@ -200,6 +202,12 @@ def cargas(parametros: dict) -> dict:
     if settings.CARGAS_PAUSA is not None:
         c["pausa_segundos"] = settings.CARGAS_PAUSA
     return c
+
+
+def rut_cortos(conn_o_parametros) -> bool:
+    """¿Se aceptan identificadores de 6 a 11 dígitos? (Configuración → Cargas grandes; D54)."""
+    params = conn_o_parametros if isinstance(conn_o_parametros, dict) else vigente(conn_o_parametros)[1]
+    return bool(cargas(params)["aceptar_rut_no_verificado"])
 
 
 def cdr(parametros: dict) -> dict:

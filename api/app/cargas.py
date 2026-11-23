@@ -523,6 +523,7 @@ class Contexto:
         self.reglas = carga.get("reglas") or provisorias.REGLAS_DEFECTO
         self.decisiones = carga.get("decisiones") or {}
         self.coincidencias = []
+        self.rut_cortos = config.rut_cortos(cfg)   # D54: identificadores de 6 a 11 dígitos, «no verificados»
         # V2 (D53): las naturalezas se resuelven una vez por lote, no con una consulta por fila
         self.naturalezas = {}
         for n in conn.execute("SELECT codigo, nombre FROM naturaleza_juridica ORDER BY id"):
@@ -564,7 +565,7 @@ def preparar_fila(ctx: Contexto, nfila: int, fila: dict) -> Fila | None:
     """Interpreta una fila y suma sus conteos de lectura. None si se rechaza (no tiene un RUT válido)."""
     mapeo, c = ctx.mapeo, ctx.c
     crudo_rut = texto(fila.get(mapeo["rut"])) if mapeo.get("rut") else None
-    r, motivo = rutmod.validar(crudo_rut) if crudo_rut else (None, "sin RUT")
+    r, motivo = rutmod.validar(crudo_rut, ctx.rut_cortos) if crudo_rut else (None, "sin RUT")
     if r is None and not ctx.sin_rut_a_provisoria:
         ctx.rechazos.append((nfila, motivo, fila))
         c["rechazos"] += 1

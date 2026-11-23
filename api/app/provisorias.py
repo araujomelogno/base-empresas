@@ -151,7 +151,7 @@ def promover(conn, emp: dict, rut: str, actor: str, fuente_tipo: str = "manual",
              carga_id: int | None = None) -> dict:
     """Agrega el RUT a una provisoria: si es válido y no existe, pasa a la definitiva (empresa.promover).
     Si ya existe, 409 con la empresa que lo tiene, para ofrecer la fusión."""
-    r, motivo = rutmod.validar(rut)
+    r, motivo = rutmod.validar(rut, config.rut_cortos(conn))
     if r is None:
         raise HTTPException(422, f"RUT inválido: {motivo}")
     if emp["base"] != "provisoria":
@@ -194,7 +194,7 @@ def descartar(conn, emp: dict, candidata_ids: list[int], actor: str) -> int:
 
 def proponer_rut(conn, emp: dict, rut: str, fuente_tipo: str, fuente_id) -> bool:
     """El .sav trajo un EC_RUT válido para una provisoria: queda como propuesta, no se aplica sola."""
-    r, _ = rutmod.validar(rut)
+    r, _ = rutmod.validar(rut, config.rut_cortos(conn))
     if r is None or emp["base"] != "provisoria" or emp["rut"]:
         return False
     return bool(conn.execute("INSERT INTO provisoria_rut_propuesto (empresa_id, rut, fuente_tipo, fuente_id)"
@@ -285,11 +285,12 @@ def ruts_preview(conn, archivo: dict) -> dict:
     if not col_cod or not col_rut:
         raise HTTPException(422, "El archivo tiene que traer las columnas codigo_provisorio y rut")
     salida = []
+    cortos = config.rut_cortos(conn)
     for i, f in enumerate(filas, start=2):
         cod, rut = texto(f.get(col_cod)), texto(f.get(col_rut))
         fila = {"fila": i, "codigo": cod, "rut_crudo": rut}
         emp = empresas.por_rut(conn, cod or "", seguir_fusion=False) if cod and empresas.CODIGO_PROVISORIO.match(cod) else None
-        r, motivo = rutmod.validar(rut)
+        r, motivo = rutmod.validar(rut, cortos)
         if emp is None or emp["base"] != "provisoria" or emp["baja"]:
             fila.update(accion="error", motivo="no es una empresa de la base provisoria")
         elif r is None:

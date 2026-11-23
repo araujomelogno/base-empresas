@@ -61,6 +61,7 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 | D51 | Crear la carga sin esperas: el archivo se parsea una vez al analizarlo (archivo_fila), los archivos grandes se leen en segundo plano, «Siguiente» responde enseguida y una clave evita cargas duplicadas | Vigente (22/11/2026) |
 | D52 | Robustez de las cargas: lectura en streaming, servicio de Cloud Run aparte para las tareas (1 proceso, 2 GiB), tareas que se retoman solas (latido, reintentos, SIGTERM) y la migración antes de desplegar | Vigente (22/11/2026) |
 | D53 | Lotes rápidos: cada lote se procesa por tandas de 500 filas con unas pocas consultas por tanda (precarga, decisión en memoria con la misma regla de supervivencia y escritura en bloque), planes de consulta correctos y medición por lote | Vigente (23/11/2026) |
+| D54 | Identificadores de 6 a 11 dígitos aceptados como «RUT no verificado» (empresa.rut varchar(12) y rut_verificado), con interruptor en Configuración; un RUT de 12 dígitos se sigue validando | Vigente (23/11/2026) |
 
 ## D01 — Cloud SQL Postgres como núcleo
 
@@ -669,6 +670,30 @@ La configuración inicial usa 6 meses de enfriamiento desde el último contacto 
 **Medido** (máquina de desarrollo, base vacía, 50.000 filas en lotes de 5.000): **0,026 consultas por fila** en el preview y en la confirmación (antes, unas 30); cada lote tarda unos 1,8 s (unas 2.700 filas por segundo; el primero de la confirmación, 3,5 s) y la carga completa, 41 s. Antes de este cambio, la misma carga tardaba unos 5 minutos en esta máquina. En producción, con la ida y vuelta a Cloud SQL y la CPU compartida, va a ser más lento: se verifica con `filas_s` en el log después de desplegar.
 
 **Descartado.** Agrandar Cloud SQL antes de medir esto (`db-custom-1-3840`, unos US$50 por mes; `db-g1-small`, US$25–30): queda como recurso si no se llega a 100 filas por segundo. Reescribir también la cascada de reglas flexibles y los contactos con teléfono por tandas: son casos poco comunes y el algoritmo fila por fila, con planes correctos, los resuelve.
+
+## D54 — RUT sin control de largo
+
+**Contexto.** Al cargar la base `acumulaGermanV7` (Mypes) se rechazaban filas por «RUT con 7 dígitos (se esperan 12)» u «8 dígitos». Suelen ser cédulas de unipersonales, empresas que se quieren tener. Germán Araújo pidió desactivar el control del largo; se le presentaron como alternativas la base provisoria y la cédula como identificador, y eligió esta opción sabiendo sus riesgos. Ver `specs/SPEC_rut_sin_control_de_largo.md`.
+
+**Decisión.**
+
+1. **Validación en dos niveles** (`rut.validar(valor, cortos)`):
+
+   | Caso | Resultado |
+   | --- | --- |
+   | Exactamente 12 dígitos | Se valida como siempre: registro, «001» y dígito verificador. Si falla, se rechaza |
+   | Entre 6 y 11 dígitos, solo números | Se acepta como **«no verificado»**, tal como vino (sin agregar ceros) |
+   | Vacío, con letras o con más de 12 dígitos | Se rechaza |
+
+   Un valor de 11 dígitos sigue recibiendo el 0 de adelante que Excel suele comer. Si así da un RUT válido, entra verificado; si no, se acepta como no verificado con sus 11 dígitos (la spec no decía qué hacer en ese caso).
+2. **Interruptor:** Configuración → Cargas grandes, «Aceptar identificadores de 6 a 11 dígitos sin validar» (`cargas.aceptar_rut_no_verificado`), activado por defecto. Rige donde se crea una empresa o se le asigna el identificador: la carga, el alta manual, «Agregar RUT» de la base provisoria (también por archivo) y el `EC_RUT` que el .sav propone para una provisoria. Para **encontrar** una empresa que ya existe (la ficha por URL, el buscador, la asociación del .sav por `EC_RUT`) se aceptan siempre de 6 a 12 dígitos. Así, apagar el interruptor no deja inaccesibles las que ya entraron.
+3. **Guardado** (migración 0019): `empresa.rut` pasa de `char(12)` (que rellenaba con espacios) a `varchar(12)` con un CHECK de 6 a 12 dígitos. Para eso se rearman la vista de disponibilidad y la columna generada `codigo`. `empresa.rut_verificado` es una columna generada: `true` con 12 dígitos y `false` con menos, así no se puede desincronizar. La unicidad sigue sobre el número normalizado. `carga_promocion.rut_anterior` y `provisoria_rut_propuesto.rut` también pasan a `varchar(12)`.
+4. **Pantallas:** la ficha muestra «RUT no verificado (N dígitos)», el buscador agrega el filtro «RUT verificado / no verificado» y la ruta de la ficha acepta de 6 a 12 dígitos. `rut.formatear` y `rutFmt` muestran los no verificados solo con dígitos. El CSV de uContact y el link de Alchemer llevan el número tal cual en `EC_RUT`.
+5. **Calidad:** «RUT válido» se calcula sobre los RUT de 12 dígitos; el indicador nuevo **«Empresas con RUT no verificado»** (informativo) los cuenta y abre la lista.
+
+**Riesgos aceptados.** Pueden entrar errores de tipeo (un RUT al que le faltan dígitos): quedan marcados, se filtran y el tablero los cuenta. La misma empresa puede quedar dos veces, con su cédula y con su RUT: se resuelve con la bandeja de posibles duplicados (mismo teléfono, web o dirección) y la fusión manual. Un número de otra persona o empresa puede coincidir por casualidad: se revisa con la historia por fuente de la ficha.
+
+**Descartado.** Mandar esas filas a la base provisoria o guardar la cédula como atributo (las alternativas que se presentaron). Distinguir si el número es una cédula, un BPS u otra cosa, y unificar sola una empresa no verificada con su RUT de 12 dígitos (fuera de alcance).
 
 ## Preguntas abiertas que heredan del PRD
 

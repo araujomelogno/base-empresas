@@ -166,7 +166,7 @@ def _candidatos(conn, origen: str, muestra_id=None, filtros=None, rut=None, alca
         f = dict(filtros or {})
         where, args, _ = filtros_busqueda(conn, f.get("q"), f.get("departamento"), f.get("tamano"), f.get("naturaleza"),
                                           f.get("disponible"), f.get("base") or "definitiva", f.get("sin_telefono"),
-                                          f.get("sin_web"))
+                                          f.get("sin_web"), f.get("rut_verificado"))
         return [r["id"] for r in conn.execute(
             "SELECT e.id FROM empresa e LEFT JOIN naturaleza_juridica n ON n.id = e.naturaleza_id"
             " JOIN v_empresa_disponible d ON d.empresa_id = e.id"

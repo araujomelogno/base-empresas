@@ -25,7 +25,8 @@ def me(u: Usuario = Depends(usuario_actual)):
 
 
 def filtros_busqueda(conn, q=None, departamento=None, tamano=None, naturaleza=None, disponible=None,
-                     base="definitiva", sin_telefono=None, sin_web=None) -> tuple[list[str], list, int | None]:
+                     base="definitiva", sin_telefono=None, sin_web=None,
+                     rut_verificado=None) -> tuple[list[str], list, int | None]:
     """WHERE del buscador de Empresas (lo reusa «Enriquecer estas N empresas»). Devuelve (where, args, ítem)."""
     where, args = ["e.baja IS NULL"], []
     prov = empresas.CODIGO_PROVISORIO.match(q or "")
@@ -71,19 +72,23 @@ def filtros_busqueda(conn, q=None, departamento=None, tamano=None, naturaleza=No
         where.append(("NOT " if sin_telefono else "") + "EXISTS (SELECT 1 FROM v_vinculo_discable x WHERE x.empresa_id = e.id)")
     if sin_web is not None:
         where.append("coalesce(e.web, '') = ''" if sin_web else "coalesce(e.web, '') <> ''")
+    if rut_verificado is not None:  # D54: RUT de 12 dígitos validado o identificador aceptado sin validar
+        where.append("e.rut_verificado = %s")
+        args.append(rut_verificado)
     return where, args, item
 
 
 @router.get("/empresas")
 def buscar(q: str | None = None, departamento: str | None = None, tamano: str | None = None,
            naturaleza: str | None = None, disponible: bool | None = None, pagina: int = 1, base: str = "definitiva",
-           sin_telefono: bool | None = None, sin_web: bool | None = None,
+           sin_telefono: bool | None = None, sin_web: bool | None = None, rut_verificado: bool | None = None,
            conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
-    where, args, item = filtros_busqueda(conn, q, departamento, tamano, naturaleza, disponible, base, sin_telefono, sin_web)
+    where, args, item = filtros_busqueda(conn, q, departamento, tamano, naturaleza, disponible, base, sin_telefono, sin_web,
+                                         rut_verificado)
     pagina = max(1, pagina)
     filas = conn.execute(
-        "SELECT e.id, e.codigo AS rut, e.base, e.razon_social, e.fantasia, e.departamento, e.tamano, e.ciiu, e.estado,"
-        " n.codigo AS naturaleza,"
+        "SELECT e.id, e.codigo AS rut, e.base, e.rut_verificado, e.razon_social, e.fantasia, e.departamento, e.tamano,"
+        " e.ciiu, e.estado, n.codigo AS naturaleza,"
         " e.ultimo_contacto_efectivo, d.disponible, d.reglas, d.hasta,"
         " (SELECT count(*) FROM v_vinculo_discable x WHERE x.empresa_id = e.id) AS telefonos_discables,"
         " count(*) OVER () AS total"
@@ -227,7 +232,7 @@ class NuevaEmpresa(BaseModel):
 
 @router.post("/empresas")
 def alta_manual(body: NuevaEmpresa, conn=Depends(get_conn), u: Usuario = Depends(requiere("steward"))):
-    r, motivo = rutmod.validar(body.rut)
+    r, motivo = rutmod.validar(body.rut, config.rut_cortos(conn))
     if r is None:
         raise HTTPException(422, f"RUT rechazado: {motivo}")
     if conn.execute("SELECT 1 FROM empresa WHERE rut = %s", (r,)).fetchone():

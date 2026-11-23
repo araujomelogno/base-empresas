@@ -128,7 +128,7 @@ def test_medicion_diaria_y_evolucion(api, sql):
     cargar(api, [{"RUT": rut_valido(0), "Razón social": "Uno SA", "Teléfono": "29001234"}])
     r = api.c.post("/api/jobs/calidad", headers={"X-Job-Token": "token-job"})
     assert r.status_code == 200, r.text
-    assert sql.execute("SELECT count(DISTINCT indicador) AS n FROM calidad_medicion").fetchone()["n"] == 11
+    assert sql.execute("SELECT count(DISTINCT indicador) AS n FROM calidad_medicion").fetchone()["n"] == 12
     # Seis días más de mediciones: la evolución muestra 7 puntos
     from app import calidad
     from app.db import conexion
