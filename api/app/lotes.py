@@ -12,19 +12,17 @@ transacción corta y una ejecución de la tarea, muy lejos del límite de 30 min
   hasta ahí, y se puede reanudar, deshacer o borrar.
 - Una carga pesada a la vez (confirmar, deshacer, borrar): las demás esperan en cola y arrancan solas.
 """
-import datetime as dt
 import gc
 import logging
 import time
 from collections import Counter
-from decimal import Decimal
 
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
-from . import auditoria, cargas, config, contactos, empresas, intermediarios, memoria, rut as rutmod, tareas
-from .db import conexion
-from .util import celda_json, json_dumps, texto
+from . import auditoria, cargas, config, contactos, empresas, intermediarios, medicion, memoria, rut as rutmod, tareas
+from .db import conexion, pool
+from .util import celda_json, texto
 
 log = logging.getLogger(__name__)
 PESADAS = ("en_proceso", "deshaciendo", "borrando")
@@ -312,13 +310,55 @@ _TABLAS_CARGA = ("empresa", "empresa_campo_historia", "empresa_atributo", "telef
                  "telefono_vinculo_origen", "contacto", "sucursal")
 
 
-def refrescar_estadisticas(conn, numero: int):
-    """Un lote hace miles de consultas iguales (y chequeos de claves foráneas) con planes que Postgres guarda. Si se
-    armaron con las tablas casi vacías (la primera carga grande), recorren la tabla entera aunque crezca, hasta que
-    se actualizan las estadísticas: medido, los primeros lotes tardaban 2 a 3 veces más. Al aplicar los lotes 1, 2,
-    4, 8… (cada vez que la carga duplica lo que aplicó) se actualizan las estadísticas, y eso invalida esos planes."""
-    if numero & (numero - 1) == 0:
+ANALIZAR_CADA = 5          # V1 (D53): al confirmar, las estadísticas se actualizan antes de los lotes 1, 6, 11…
+LENTO_FILAS_S = 20         # V3: un lote más lento que esto deja un warning
+
+
+def analizar_tablas():
+    """ANALYZE de las tablas que toca una carga, en una conexión aparte (fuera de la transacción del lote): con las
+    estadísticas viejas («0 filas»), Postgres recorre tablas enteras en lugar de usar los índices."""
+    with pool().connection() as c:
+        c.autocommit = True
+        c.execute("ANALYZE " + ", ".join(_TABLAS_CARGA))
+
+
+def planes_correctos(conn):
+    """V1 (D53): dentro del lote, un plan por consulta con las estadísticas actuales (psycopg prepara las consultas
+    que se repiten y Postgres fijaría un plan genérico) y los índices aunque las estadísticas digan «tabla vacía»."""
+    conn.execute("SET LOCAL plan_cache_mode = force_custom_plan")
+    conn.execute("SET LOCAL enable_seqscan = off")
+    # Con los recorridos «deshabilitados», Postgres les pone un costo enorme y cualquier lectura de una tabla chica
+    # (los catálogos) pasa el umbral del JIT: compilaría cada consulta (~100 ms). Medido: 7 veces más lento.
+    conn.execute("SET LOCAL jit = off")
+
+
+ANALIZAR_DESDE = 500       # un lote más chico no lo justifica (autovacuum alcanza; y los tests usan lotes de 2 filas)
+
+
+def analizar_en_el_lote(conn, numero: int, filas: int):
+    """Después de escribir el primer lote, ANALYZE dentro de su transacción: ve las filas recién insertadas. Sin
+    esto, con la base vacía al empezar, Postgres cree que las tablas tienen 0 filas y arma planes que recorren tablas
+    enteras por cada fila (medido: la detección de intermediarios, de 1 s a 46 s en el tercer lote de 5.000)."""
+    if numero == 1 and filas >= ANALIZAR_DESDE:
         conn.execute("ANALYZE " + ", ".join(_TABLAS_CARGA))
+
+
+def preparar_lote(conn, numero: int, filas: int, cada: int = 0):
+    """Antes del primer lote de una operación (y cada «cada» lotes) se actualizan las estadísticas."""
+    if filas >= ANALIZAR_DESDE and (numero == 1 or (cada and (numero - 1) % cada == 0)):
+        analizar_tablas()
+    planes_correctos(conn)
+
+
+def medir_lote(cid, operacion, numero, total_lotes, n_filas, seg, med, rss0, rss1, extra=""):
+    """V3: «carga=9 preview lote=1/40 filas=4812 segundos=38 filas_s=126 consultas=410 base_s=12.1 rss_mb=…»."""
+    filas_s = round(n_filas / seg) if seg else n_filas
+    lento = n_filas >= 100 and filas_s < LENTO_FILAS_S
+    nivel = logging.WARNING if (seg > ALARMA_SEGUNDOS or lento) else logging.INFO
+    log.log(nivel, "carga=%s %s lote=%s/%s filas=%s segundos=%s filas_s=%s consultas=%s base_s=%.1f rss_mb=%s→%s%s%s",
+            cid, operacion, numero, total_lotes, n_filas, seg, filas_s, med.consultas, med.segundos, rss0, rss1, extra,
+            " ALARMA: lote lento" if nivel == logging.WARNING else "")
+
 
 
 def _carga_de_tarea(conn, payload, tarea_id, estados, preparar: bool = True) -> dict | None:
@@ -359,31 +399,34 @@ def _tarea_preview(conn, payload, tarea_id):
                           (cid,)).fetchone()["n"]
     if lote is not None:
         tareas.mensaje(tarea_id, _mensaje(conn, carga, lote["numero"], hechas, "preview_hecho"))
+        preparar_lote(conn, lote["numero"], lote["filas"])
         filas = filas_lote(conn, cid, lote["numero"])
         t0, rss0 = time.monotonic(), memoria.rss_mb()
         res = {}
-        try:
-            with conn.transaction():  # savepoint que se descarta: los conteos son los reales
-                res["conteos"], res["rechazos"], tocados = cargas.procesar(
-                    conn, carga, filas, cfg, carga["responsable"], real=False, tarea_id=tarea_id, hechos=hechas,
-                    total=carga["n_filas"], mensaje_lote=f"Lote {lote['numero']} de {carga['lotes']}")
-                ids = sorted(tocados)
-                res["conteos"]["nuevos_sospechosos"] = intermediarios.contar_nuevos(conn, cfg["umbral_intermediario"], ids) if ids else 0
-                raise _Descartar()
-        except _Descartar:
-            pass
-        _sigue_vigente(conn, cid, tarea_id, "analizando")
-        cargas.guardar_rechazos(conn, cid, res["rechazos"], [f for f, _ in filas])
+        with medicion.Medicion(conn) as med:
+            try:
+                with conn.transaction():  # savepoint que se descarta: los conteos son los reales
+                    res["conteos"], res["rechazos"], tocados = cargas.procesar(
+                        conn, carga, filas, cfg, carga["responsable"], real=False, tarea_id=tarea_id, hechos=hechas,
+                        total=carga["n_filas"], mensaje_lote=f"Lote {lote['numero']} de {carga['lotes']}")
+                    analizar_en_el_lote(conn, lote["numero"], len(filas))
+                    ids = sorted(tocados)
+                    res["conteos"]["nuevos_sospechosos"] = intermediarios.contar_nuevos(conn, cfg["umbral_intermediario"], ids) if ids else 0
+                    raise _Descartar()
+            except _Descartar:
+                pass
+            _sigue_vigente(conn, cid, tarea_id, "analizando")
+            cargas.guardar_rechazos(conn, cid, res["rechazos"], [f for f, _ in filas])
         seg = round(time.monotonic() - t0, 1)
-        conn.execute("UPDATE carga_lote SET preview_hecho = true, preview_conteos = %s, preview_segundos = %s"
-                     " WHERE carga_id = %s AND numero = %s", (Jsonb(res["conteos"]), seg, cid, lote["numero"]))
+        conn.execute("UPDATE carga_lote SET preview_hecho = true, preview_conteos = %s, preview_segundos = %s,"
+                     " preview_consultas = %s WHERE carga_id = %s AND numero = %s",
+                     (Jsonb(res["conteos"]), seg, med.consultas, cid, lote["numero"]))
         n_lote = len(filas)
         del filas, res
         if n_lote >= GC_DESDE:
             gc.collect()   # R1 (D52): lo del lote no queda ocupando memoria hasta el siguiente
         rss1 = memoria.revisar(f"carga={cid} preview lote={lote['numero']}")
-        log.info("carga=%s preview lote=%s/%s filas=%s segundos=%s rss_mb=%s→%s", cid, lote["numero"], carga["lotes"],
-                 n_lote, seg, rss0, rss1)
+        medir_lote(cid, "preview", lote["numero"], carga["lotes"], n_lote, seg, med, rss0, rss1)
         tareas.progreso(tarea_id, hechas + n_lote, carga["n_filas"])
         return tareas.Continuar(_mensaje(conn, carga, lote["numero"], hechas + n_lote, "preview_hecho"))
     _sigue_vigente(conn, cid, tarea_id, "analizando")
@@ -416,30 +459,30 @@ def _tarea_confirmar(conn, payload, tarea_id):
         tareas.mensaje(tarea_id, _mensaje(conn, carga, n, hechas, "aplicado"))
         conn.execute("UPDATE carga_lote SET estado = 'en_proceso', intentos = intentos + 1, inicio = now(), error = NULL"
                      " WHERE carga_id = %s AND numero = %s", (cid, n))
+        preparar_lote(conn, n, lote["filas"], ANALIZAR_CADA)
         filas = filas_lote(conn, cid, n)
         t0, rss0 = time.monotonic(), memoria.rss_mb()
-        conteos, rechazos, tocados = cargas.procesar(conn, carga, filas, params, carga["responsable"], real=True,
-                                                     tarea_id=tarea_id, hechos=hechas, total=carga["n_filas"],
-                                                     mensaje_lote=f"Lote {n} de {carga['lotes']}")
-        ids = sorted(tocados)
-        # Intermediarios por lote: el conteo de un teléfono solo cambia cuando un lote lo toca (mismo resultado que al final)
-        conteos["nuevos_sospechosos"] = len(intermediarios.detectar(conn, params["umbral_intermediario"], ids,
-                                                                    carga["responsable"])) if ids else 0
-        refrescar_estadisticas(conn, n)
-        _sigue_vigente(conn, cid, tarea_id, "en_proceso")
-        cargas.guardar_rechazos(conn, cid, rechazos, [f for f, _ in filas])
+        with medicion.Medicion(conn) as med:
+            conteos, rechazos, tocados = cargas.procesar(conn, carga, filas, params, carga["responsable"], real=True,
+                                                         tarea_id=tarea_id, hechos=hechas, total=carga["n_filas"],
+                                                         mensaje_lote=f"Lote {n} de {carga['lotes']}")
+            analizar_en_el_lote(conn, n, len(filas))
+            ids = sorted(tocados)
+            # Intermediarios por lote: el conteo de un teléfono solo cambia cuando un lote lo toca (mismo resultado que al final)
+            conteos["nuevos_sospechosos"] = len(intermediarios.detectar(conn, params["umbral_intermediario"], ids,
+                                                                        carga["responsable"])) if ids else 0
+            _sigue_vigente(conn, cid, tarea_id, "en_proceso")
+            cargas.guardar_rechazos(conn, cid, rechazos, [f for f, _ in filas])
         seg = round(time.monotonic() - t0, 1)
-        conn.execute("UPDATE carga_lote SET estado = 'aplicado', conteos = %s, fin = now(), segundos = %s"
-                     " WHERE carga_id = %s AND numero = %s", (Jsonb(conteos), seg, cid, n))
+        conn.execute("UPDATE carga_lote SET estado = 'aplicado', conteos = %s, fin = now(), segundos = %s, consultas = %s"
+                     " WHERE carga_id = %s AND numero = %s", (Jsonb(conteos), seg, med.consultas, cid, n))
         n_lote = len(filas)
         del filas, rechazos, tocados
         if n_lote >= GC_DESDE:
             gc.collect()   # R1 (D52)
         rss1 = memoria.revisar(f"carga={cid} confirmar lote={n}")
-        nivel = logging.WARNING if seg > ALARMA_SEGUNDOS else logging.INFO
-        log.log(nivel, "carga=%s confirmar lote=%s/%s filas=%s segundos=%s rss_mb=%s→%s altas=%s actualizaciones=%s%s",
-                cid, n, carga["lotes"], n_lote, seg, rss0, rss1, conteos.get("altas", 0), conteos.get("actualizaciones", 0),
-                " ALARMA: lote lento" if nivel == logging.WARNING else "")
+        medir_lote(cid, "confirmar", n, carga["lotes"], n_lote, seg, med, rss0, rss1,
+                   f" altas={conteos.get('altas', 0)} actualizaciones={conteos.get('actualizaciones', 0)}")
         tareas.progreso(tarea_id, hechas + n_lote, carga["n_filas"])
         return tareas.Continuar(_mensaje(conn, carga, n, hechas + n_lote, "aplicado"), ccfg["pausa_segundos"])
     # Paso final: conteos totales, auditoría y se libera la tabla intermedia
@@ -495,6 +538,9 @@ def _tarea_deshacer(conn, payload, tarea_id):
         return {"omitida": True}
     cid, actor = carga["id"], tareas_actor(conn, tarea_id)
     _sigue_vigente(conn, cid, tarea_id, "deshaciendo")  # el deshacer actualiza la carga en cada paso: la bloquea de entrada
+    if (carga["paso"] or "preparar") == "preparar":
+        analizar_tablas()                                # V1 (D53): antes del primer paso
+    planes_correctos(conn)
     _, params = config.vigente(conn)
     pausa = config.cargas(params)["pausa_segundos"]
     paso = carga["paso"] or "preparar"
@@ -532,8 +578,7 @@ def _tarea_deshacer(conn, payload, tarea_id):
             "SELECT objeto_id FROM carga_trabajo WHERE carga_id = %s AND tipo = 'empresa' ORDER BY objeto_id LIMIT %s",
             (cid, TANDA_EMPRESAS))]
         if ids:
-            for eid in ids:
-                empresas.recalcular(conn, eid)
+            empresas.recalcular_varias(conn, ids)   # D53: una tanda de consultas, no cinco por empresa
             anuladas = [r["id"] for r in conn.execute(
                 "UPDATE empresa e SET baja = 'anulada' WHERE e.id = ANY(%s) AND e.baja IS NULL"
                 " AND NOT EXISTS (SELECT 1 FROM empresa_campo_historia h LEFT JOIN carga c ON h.fuente_tipo = 'carga'"

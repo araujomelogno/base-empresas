@@ -187,6 +187,7 @@ En una carga a la **base definitiva**, las filas con RUT inválido o sin RUT se 
 
 Una carga se procesa **por lotes** de 5.000 filas (se cambia en Configuración → Cargas grandes). Cada lote es independiente: si algo se corta, lo que hicieron los lotes terminados queda y no hay que empezar de nuevo. Así se pueden cargar bases de cientos de miles de empresas.
 
+- **El ritmo.** Cada lote se procesa por tandas de 500 filas, y la barra avanza de a 500. La meta es al menos 100 filas por segundo: una base de 190.000 filas, unos 30 a 40 minutos por operación.
 - **El avance.** Mientras se calcula el preview o se aplica la carga, la barra dice en qué lote va: «Lote 12 de 38 · 60.000 de 190.000 filas». El detalle muestra también «N de M lotes aplicados (X filas)» y cuánto tardó el lote más lento. En una carga de más de 20.000 filas, la pantalla se actualiza cada 5 segundos.
 - **El mismo RUT, en el mismo lote.** Las filas con el mismo RUT van siempre juntas, aunque estén lejos en el archivo: cuentan una sola alta. Las filas sin RUT van al final; si son muchas, el preview avisa que sus conteos son **aproximados** (dos filas sin RUT del mismo archivo podrían coincidir entre sí).
 - **Cuánto va a tardar.** Después del preview, el detalle dice cuánto tardó: la confirmación suele tardar algo parecido.

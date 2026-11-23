@@ -200,3 +200,15 @@ python docs/build/manual_robustez.py docs/Manual_de_usuario_Base_de_Empresas.doc
 ```bash
 soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
 ```
+
+## Lotes rápidos (guía 30, D53)
+
+`manual_lotes_rapidos.py` agrega a la guía 30 el párrafo «El ritmo»; se aplica después de `manual_robustez.py` y después se regenera el PDF:
+
+```bash
+python docs/build/manual_lotes_rapidos.py docs/Manual_de_usuario_Base_de_Empresas.docx docs/manual/img
+```
+
+```bash
+soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
+```

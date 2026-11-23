@@ -51,6 +51,12 @@ def db(request):
     if request.module.__name__.endswith("test_unidad"):
         yield None  # reglas puras: no necesitan base
         return
+    reiniciar_base()
+    yield DSN
+
+
+def reiniciar_base():
+    """La base recién migrada, con los usuarios de prueba (también sirve a mitad de un test)."""
     from app import db as appdb
 
     appdb.cerrar()  # el pool no debe reusar planes preparados sobre el esquema anterior
@@ -62,7 +68,6 @@ def db(request):
         for rol, email in USUARIOS.items():
             c.execute("INSERT INTO empresas.usuario (email, rol, exportar_contactos) VALUES (%s, %s, %s)",
                       (email, rol, rol in ("admin", "coordinador")))
-    yield DSN
 
 
 @pytest.fixture

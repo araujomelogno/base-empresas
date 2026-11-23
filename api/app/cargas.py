@@ -385,12 +385,14 @@ class Traductor:
 
     def __init__(self, conn, mapeo: dict):
         self.mapeo = mapeo
-        self.origenes = catalogos.origenes(conn, activos=True)
+        # Sin los conteos de catalogos.origenes / atributos (recorren los vínculos y los valores): esto corre en
+        # cada lote de una carga (D53)
+        self.origenes = conn.execute("SELECT * FROM origen_telefono WHERE activo ORDER BY prioridad, nombre").fetchall()
         self.exacto_origen = {}
         for o in self.origenes:
             self.exacto_origen[o["codigo"]] = o["codigo"]
             self.exacto_origen[o["nombre"]] = o["codigo"]
-        self.defs = {a["clave"]: a for a in catalogos.atributos(conn)}
+        self.defs = {a["clave"]: a for a in conn.execute("SELECT * FROM atributo ORDER BY nombre")}
         self.tr = mapeo.get("traducciones") or {}
 
     def origen(self, fila: dict, col_tel: str) -> tuple[str, str | None]:
@@ -498,163 +500,239 @@ def valores(conn, archivo_id: int, mapeo: dict) -> dict:
     return salida
 
 
+class Contexto:
+    """Lo que comparten todas las filas de un lote: la configuración de la carga, los catálogos y los conteos."""
+
+    def __init__(self, conn, carga: dict, cfg: dict, actor: str, real: bool):
+        self.carga, self.cfg, self.actor, self.real = carga, cfg, actor, real
+        self.mapeo, self.cid, self.confianza = carga["mapeo"], carga["id"], carga["confianza"]
+        self.prefijos = cfg.get("prefijos_salida") or []
+        self.traductor = Traductor(conn, self.mapeo)
+        self.c = Counter()
+        self.por_telefonos = Counter()
+        self.por_origen: dict[str, Counter] = {}
+        self.por_atributo: dict[str, Counter] = {k: Counter() for k in (self.mapeo.get("atributos") or {})}
+        self.por_atributo.update({k: Counter() for k in (self.mapeo.get("contacto_atributos") or {})})
+        self.rechazos, self.conflictos_muestra, self.ruts_vistos = [], [], set()
+        self.telefonos_tocados: set[int] = set()
+        # F6.1 / F6.2: destino, opciones, reglas en cascada y decisiones tomadas en el preview
+        self.destino = carga.get("destino") or "definitiva"
+        opciones = carga.get("opciones") or {}
+        self.sin_rut_a_provisoria = self.destino == "provisoria" or bool(opciones.get("sin_rut_a_provisoria"))
+        self.con_rut_a_definitiva = self.destino == "definitiva" or opciones.get("con_rut_a_definitiva", True) is not False
+        self.reglas = carga.get("reglas") or provisorias.REGLAS_DEFECTO
+        self.decisiones = carga.get("decisiones") or {}
+        self.coincidencias = []
+        # V2 (D53): las naturalezas se resuelven una vez por lote, no con una consulta por fila
+        self.naturalezas = {}
+        for n in conn.execute("SELECT codigo, nombre FROM naturaleza_juridica ORDER BY id"):
+            self.naturalezas.setdefault(("c", (n["codigo"] or "").upper()), n["codigo"])
+            self.naturalezas.setdefault(("n", (n["nombre"] or "").lower()), n["codigo"])
+
+    def naturaleza(self, valor) -> str | None:
+        """Como empresas.resolver_naturaleza: acepta el código o el nombre."""
+        v = str(valor).strip()
+        return self.naturalezas.get(("c", v.upper())) or self.naturalezas.get(("n", v.lower()))
+
+    def conteos(self, n_filas: int) -> dict:
+        c = self.c
+        c["filas"] = n_filas
+        motivos = Counter(m for _, m, _ in self.rechazos)
+        conteos = dict(c)
+        conteos["rechazos_por_motivo"] = dict(motivos)
+        conteos["conflictos_ejemplos"] = self.conflictos_muestra[:30]
+        conteos["filas_por_telefonos"] = {k: self.por_telefonos.get(k, 0) for k in ("0", "1", "2", "3+")}
+        conteos["telefonos_por_origen"] = {o: {"nuevos": n.get("nuevos", 0), "existentes": n.get("existentes", 0)}
+                                           for o, n in sorted(self.por_origen.items())}
+        conteos["atributos"] = {k: {"cargados": n.get("cargados", 0), "invalidos": n.get("invalidos", 0),
+                                    "sin_dato": n.get("sin_dato", 0)} for k, n in self.por_atributo.items()}
+        conteos["coincidencias_a_decidir"] = self.coincidencias
+        conteos["destino"] = self.destino
+        return conteos
+
+
+class Fila:
+    """Una fila ya interpretada (sin tocar la base): RUT, datos, teléfonos y atributos."""
+    __slots__ = ("nfila", "fila", "crudo_rut", "r", "datos", "tels", "attrs")
+
+    def __init__(self, nfila, fila, crudo_rut, r, datos, tels, attrs):
+        self.nfila, self.fila, self.crudo_rut, self.r = nfila, fila, crudo_rut, r
+        self.datos, self.tels, self.attrs = datos, tels, attrs
+
+
+def preparar_fila(ctx: Contexto, nfila: int, fila: dict) -> Fila | None:
+    """Interpreta una fila y suma sus conteos de lectura. None si se rechaza (no tiene un RUT válido)."""
+    mapeo, c = ctx.mapeo, ctx.c
+    crudo_rut = texto(fila.get(mapeo["rut"])) if mapeo.get("rut") else None
+    r, motivo = rutmod.validar(crudo_rut) if crudo_rut else (None, "sin RUT")
+    if r is None and not ctx.sin_rut_a_provisoria:
+        ctx.rechazos.append((nfila, motivo, fila))
+        c["rechazos"] += 1
+        return None
+    if r and r in ctx.ruts_vistos:
+        c["conflictos"] += 1
+        c["rut_repetido_en_archivo"] += 1
+    if r:
+        ctx.ruts_vistos.add(r)
+    datos = {k: _valor(fila, mapeo, k) for k in CAMPOS_MAPEO}
+    if datos.get("naturaleza"):
+        cod = ctx.naturaleza(datos["naturaleza"])
+        if cod is None:
+            c["naturaleza_desconocida"] += 1
+        datos["naturaleza"] = cod
+    if datos.get("estado"):
+        est = sin_tildes(datos["estado"].lower())
+        datos["estado"] = "activa" if est.startswith("activ") else "cerrada" if est.startswith(("cerr", "baja", "clausur")) else None
+    if datos.get("web"):
+        datos["web"] = dominio(datos["web"]) or datos["web"]
+    tels = []
+    for col in mapeo.get("telefonos") or []:
+        crudos = telmod.separar(fila.get(col))
+        if not crudos:
+            continue
+        origen, sin_traducir = ctx.traductor.origen(fila, col)
+        if sin_traducir:
+            c["origen_sin_traducir"] += len(crudos)
+        for crudo in crudos:  # varios números en una celda toman el origen de esa fila y columna
+            tels.append((telmod.normalizar(crudo, ctx.prefijos), origen))
+    n_tels = len(tels)
+    ctx.por_telefonos["0" if n_tels == 0 else "1" if n_tels == 1 else "2" if n_tels == 2 else "3+"] += 1
+    attrs = {}
+    for clave, col in (mapeo.get("atributos") or {}).items():
+        crudo = texto(fila.get(col))
+        if not crudo:
+            continue
+        v = ctx.traductor.atributo(clave, crudo)
+        if v is None:
+            ctx.por_atributo[clave]["sin_dato"] += 1
+            continue
+        attrs[clave] = v
+        ctx.por_atributo[clave]["invalidos" if v["invalido"] else "cargados"] += 1
+    if r is None and crudo_rut:  # un identificador que no es RUT válido no se pierde (atributo de sistema)
+        attrs["id_informado"] = {"valor": crudo_rut, "invalido": False}
+    return Fila(nfila, fila, crudo_rut, r, datos, tels, attrs)
+
+
+def aplicar_una(conn, ctx: Contexto, f: Fila):
+    """El algoritmo fila por fila: busca la empresa (RUT, reglas de fusión, decisiones), la crea o la actualiza y le
+    aplica los datos, teléfonos y el contacto. Lo usa el motor por tandas para las filas que no son el caso común."""
+    mapeo, c, cid, actor, real = ctx.mapeo, ctx.c, ctx.cid, ctx.actor, ctx.real
+    r, datos, tels, attrs, nfila = f.r, f.datos, f.tels, f.attrs, f.nfila
+    emp = conn.execute("SELECT * FROM empresa WHERE rut = %s", (r,)).fetchone() if r else None
+    while emp and emp["baja"] == "fusionada" and emp["fusionada_en"]:
+        emp = conn.execute("SELECT * FROM empresa WHERE id = %s", (emp["fusionada_en"],)).fetchone()
+    es_alta = False
+    if emp is None:
+        email_c = _valor(f.fila, mapeo, "contacto_email") or datos.get("email")
+        m = provisorias.cascada(conn, ctx.reglas, r, datos, [t.e164 for t, _ in tels if t.e164], email_c)
+        if m and m["accion"] == "consultar":
+            decision = ctx.decisiones.get(str(nfila))
+            cand = m["candidata"]
+            if len(ctx.coincidencias) < 500:
+                ctx.coincidencias.append({
+                    "fila": nfila, "rut": r, "datos": {k: v for k, v in datos.items() if v},
+                    "telefonos": [t.e164 or t.crudo for t, _ in tels], "candidata": provisorias._resumen(cand),
+                    "candidatas": m["candidatas"], "criterio": m["regla"]["criterio"], "tipo": m["regla"]["tipo"],
+                    "similitud": m["similitud"], "decision": decision})
+            c["coincidencias"] += 1
+            if decision == "fusionar":
+                emp = cand
+                c["fusiones_decididas"] += 1
+            elif decision == "otra":
+                c["otra_empresa"] += 1
+            else:  # «Decidir después» o sin decisión: a la bandeja de Revisión de fusiones
+                c["revision"] += 1
+                if real:
+                    conn.execute(
+                        "INSERT INTO revision_fusion (carga_id, fila, datos, criterio, candidata_id, similitud)"
+                        " VALUES (%s,%s,%s,%s,%s,%s)",
+                        (cid, nfila, Jsonb({"rut": r, "id_informado": None if r else f.crudo_rut,
+                                            **{k: v for k, v in datos.items() if v},
+                                            "telefonos": [{"crudo": t.crudo, "origen": o} for t, o in tels],
+                                            "atributos": attrs}),
+                         m["regla"]["criterio"] + ("" if m["regla"]["tipo"] == "exacta" else " (flexible)"),
+                         cand["id"], m["similitud"]),
+                    )
+                return
+        elif m and m["accion"] == "fusionar":
+            emp = m["candidata"]
+            c[f"fusion_por_{m['regla']['criterio']}"] += 1
+    if emp is None:
+        base = "definitiva" if r and ctx.con_rut_a_definitiva else "provisoria"
+        emp = conn.execute("INSERT INTO empresa (rut, base, carga_alta_id) VALUES (%s, %s, %s) RETURNING *",
+                           (r, base, cid)).fetchone()
+        es_alta = True
+        c[f"altas_{base}"] += 1
+    elif emp["baja"] == "anulada":
+        conn.execute("UPDATE empresa SET baja = NULL, carga_alta_id = %s WHERE id = %s", (cid, emp["id"]))
+        es_alta = True
+        c[f"altas_{emp['base']}"] += 1
+    elif r and emp["base"] == "provisoria" and not emp["rut"] and ctx.con_rut_a_definitiva:
+        # La fila trae el RUT de una provisoria que coincidió por otra regla: pasa a la definitiva
+        emp = provisorias.promover(conn, emp, r, actor, "carga", cid, carga_id=cid if real else None)
+        c["promovidas"] += 1
+    hubo_cambio = aplicar_fila(conn, emp, datos, tels, cid, ctx.confianza, actor, c, ctx.conflictos_muestra,
+                               ctx.telefonos_tocados, attrs, ctx.por_origen)
+    if mapeo.get("contacto_nombre"):
+        hubo_cambio = aplicar_contacto(conn, emp, f.fila, mapeo, ctx.traductor, ctx.prefijos, cid, actor, c,
+                                       ctx.por_atributo, ctx.telefonos_tocados) or hubo_cambio
+    contar_resultado(ctx, emp, es_alta, hubo_cambio)
+
+
+def contar_resultado(ctx: Contexto, emp: dict, es_alta: bool, hubo_cambio: bool):
+    c = ctx.c
+    if es_alta:
+        c["altas"] += 1
+    elif hubo_cambio:
+        c["actualizaciones"] += 1
+        c[f"actualizaciones_{emp['base']}"] += 1
+    else:
+        c["sin_cambios"] += 1
+
+
+def _avisar(ctx_tarea, i: int, n: int):
+    tarea_id, hechos, total, mensaje_lote = ctx_tarea
+    if tarea_id and i % 500 == 0:
+        tareas.progreso(tarea_id, hechos + i, total)
+        if mensaje_lote and i:  # R4 (D52): «Lote 1 de 40 · fila 2.300 de 4.812»
+            tareas.mensaje(tarea_id, f"{mensaje_lote} · fila {i:,} de {n:,}".replace(",", "."))
+
+
+def procesar_por_fila(conn, carga: dict, filas: list[tuple[int, dict]], cfg: dict, actor: str, real: bool,
+                      tarea_id: int | None = None, hechos: int = 0, total: int | None = None,
+                      mensaje_lote: str | None = None) -> tuple[dict, list, set]:
+    """El algoritmo anterior a D53, fila por fila (unas 30 consultas por fila). Queda como referencia del test de
+    equivalencia y se usa con CARGAS_POR_FILA=1."""
+    ctx = Contexto(conn, carga, cfg, actor, real)
+    aviso = (tarea_id, hechos, total or len(filas), mensaje_lote)
+    for i, (nfila, fila) in enumerate(filas):
+        _avisar(aviso, i, len(filas))
+        f = preparar_fila(ctx, nfila, fila)
+        if f is not None:
+            aplicar_una(conn, ctx, f)
+    return ctx.conteos(len(filas)), ctx.rechazos, ctx.telefonos_tocados
+
+
 def procesar(conn, carga: dict, filas: list[tuple[int, dict]], cfg: dict, actor: str, real: bool,
              tarea_id: int | None = None, hechos: int = 0, total: int | None = None,
              mensaje_lote: str | None = None) -> tuple[dict, list, set]:
     """Aplica las filas de un lote: [(número de fila del archivo, fila)]. Devuelve (conteos, rechazos, teléfonos
     tocados). Si real=False lo corre el preview. La detección de intermediarios la hace quien llama, por lote (D50).
-    hechos y total: filas ya procesadas de la carga y total, para la barra de progreso."""
-    mapeo, cid, confianza = carga["mapeo"], carga["id"], carga["confianza"]
-    prefijos = cfg.get("prefijos_salida") or []
-    traductor = Traductor(conn, mapeo)
-    c = Counter()
-    por_telefonos = Counter()
-    por_origen: dict[str, Counter] = {}
-    por_atributo: dict[str, Counter] = {k: Counter() for k in (mapeo.get("atributos") or {})}
-    por_atributo.update({k: Counter() for k in (mapeo.get("contacto_atributos") or {})})
-    rechazos, conflictos_muestra, ruts_vistos = [], [], set()
-    telefonos_tocados: set[int] = set()
-    # F6.1 / F6.2: destino, opciones, reglas en cascada y decisiones tomadas en el preview
-    destino = carga.get("destino") or "definitiva"
-    opciones = carga.get("opciones") or {}
-    sin_rut_a_provisoria = destino == "provisoria" or bool(opciones.get("sin_rut_a_provisoria"))
-    con_rut_a_definitiva = destino == "definitiva" or opciones.get("con_rut_a_definitiva", True) is not False
-    reglas = carga.get("reglas") or provisorias.REGLAS_DEFECTO
-    decisiones = carga.get("decisiones") or {}
-    coincidencias = []
-    total = total or len(filas)
-    for i, (nfila, fila) in enumerate(filas):
-        if tarea_id and i % 500 == 0:
-            tareas.progreso(tarea_id, hechos + i, total)
-            if mensaje_lote and i:  # R4 (D52): «Lote 1 de 40 · fila 2.300 de 4.812»
-                tareas.mensaje(tarea_id, f"{mensaje_lote} · fila {i:,} de {len(filas):,}".replace(",", "."))
-        crudo_rut = texto(fila.get(mapeo["rut"])) if mapeo.get("rut") else None
-        r, motivo = rutmod.validar(crudo_rut) if crudo_rut else (None, "sin RUT")
-        if r is None and not sin_rut_a_provisoria:
-            rechazos.append((nfila, motivo, fila))
-            c["rechazos"] += 1
-            continue
-        if r and r in ruts_vistos:
-            c["conflictos"] += 1
-            c["rut_repetido_en_archivo"] += 1
-        if r:
-            ruts_vistos.add(r)
-        datos = {k: _valor(fila, mapeo, k) for k in CAMPOS_MAPEO}
-        if datos.get("naturaleza"):
-            cod = empresas.resolver_naturaleza(conn, datos["naturaleza"])
-            if cod is None:
-                c["naturaleza_desconocida"] += 1
-            datos["naturaleza"] = cod
-        if datos.get("estado"):
-            est = sin_tildes(datos["estado"].lower())
-            datos["estado"] = "activa" if est.startswith("activ") else "cerrada" if est.startswith(("cerr", "baja", "clausur")) else None
-        if datos.get("web"):
-            datos["web"] = dominio(datos["web"]) or datos["web"]
-        tels = []
-        for col in mapeo.get("telefonos") or []:
-            crudos = telmod.separar(fila.get(col))
-            if not crudos:
-                continue
-            origen, sin_traducir = traductor.origen(fila, col)
-            if sin_traducir:
-                c["origen_sin_traducir"] += len(crudos)
-            for crudo in crudos:  # varios números en una celda toman el origen de esa fila y columna
-                tels.append((telmod.normalizar(crudo, prefijos), origen))
-        n_tels = len(tels)
-        por_telefonos["0" if n_tels == 0 else "1" if n_tels == 1 else "2" if n_tels == 2 else "3+"] += 1
-        attrs = {}
-        for clave, col in (mapeo.get("atributos") or {}).items():
-            crudo = texto(fila.get(col))
-            if not crudo:
-                continue
-            v = traductor.atributo(clave, crudo)
-            if v is None:
-                por_atributo[clave]["sin_dato"] += 1
-                continue
-            attrs[clave] = v
-            por_atributo[clave]["invalidos" if v["invalido"] else "cargados"] += 1
+    hechos y total: filas ya procesadas de la carga y total, para la barra de progreso.
+    V2 (D53): por tandas de 500 filas, con pocas consultas por tanda (cargas_tanda); el resultado es el mismo que
+    el del algoritmo fila por fila, que se sigue usando para los casos poco comunes."""
+    if settings.CARGAS_POR_FILA:
+        return procesar_por_fila(conn, carga, filas, cfg, actor, real, tarea_id, hechos, total, mensaje_lote)
+    from . import cargas_tanda
 
-        if r is None and crudo_rut:  # un identificador que no es RUT válido no se pierde (atributo de sistema)
-            attrs["id_informado"] = {"valor": crudo_rut, "invalido": False}
-        emp = conn.execute("SELECT * FROM empresa WHERE rut = %s", (r,)).fetchone() if r else None
-        while emp and emp["baja"] == "fusionada" and emp["fusionada_en"]:
-            emp = conn.execute("SELECT * FROM empresa WHERE id = %s", (emp["fusionada_en"],)).fetchone()
-        es_alta = False
-        if emp is None:
-            email_c = _valor(fila, mapeo, "contacto_email") or datos.get("email")
-            m = provisorias.cascada(conn, reglas, r, datos, [t.e164 for t, _ in tels if t.e164], email_c)
-            if m and m["accion"] == "consultar":
-                decision = decisiones.get(str(nfila))
-                cand = m["candidata"]
-                if len(coincidencias) < 500:
-                    coincidencias.append({
-                        "fila": nfila, "rut": r, "datos": {k: v for k, v in datos.items() if v},
-                        "telefonos": [t.e164 or t.crudo for t, _ in tels], "candidata": provisorias._resumen(cand),
-                        "candidatas": m["candidatas"], "criterio": m["regla"]["criterio"], "tipo": m["regla"]["tipo"],
-                        "similitud": m["similitud"], "decision": decision})
-                c["coincidencias"] += 1
-                if decision == "fusionar":
-                    emp = cand
-                    c["fusiones_decididas"] += 1
-                elif decision == "otra":
-                    c["otra_empresa"] += 1
-                else:  # «Decidir después» o sin decisión: a la bandeja de Revisión de fusiones
-                    c["revision"] += 1
-                    if real:
-                        conn.execute(
-                            "INSERT INTO revision_fusion (carga_id, fila, datos, criterio, candidata_id, similitud)"
-                            " VALUES (%s,%s,%s,%s,%s,%s)",
-                            (cid, nfila, Jsonb({"rut": r, "id_informado": None if r else crudo_rut,
-                                                **{k: v for k, v in datos.items() if v},
-                                                "telefonos": [{"crudo": t.crudo, "origen": o} for t, o in tels],
-                                                "atributos": attrs}),
-                             m["regla"]["criterio"] + ("" if m["regla"]["tipo"] == "exacta" else " (flexible)"),
-                             cand["id"], m["similitud"]),
-                        )
-                    continue
-            elif m and m["accion"] == "fusionar":
-                emp = m["candidata"]
-                c[f"fusion_por_{m['regla']['criterio']}"] += 1
-        if emp is None:
-            base = "definitiva" if r and con_rut_a_definitiva else "provisoria"
-            emp = conn.execute("INSERT INTO empresa (rut, base, carga_alta_id) VALUES (%s, %s, %s) RETURNING *",
-                               (r, base, cid)).fetchone()
-            es_alta = True
-            c[f"altas_{base}"] += 1
-        elif emp["baja"] == "anulada":
-            conn.execute("UPDATE empresa SET baja = NULL, carga_alta_id = %s WHERE id = %s", (cid, emp["id"]))
-            es_alta = True
-            c[f"altas_{emp['base']}"] += 1
-        elif r and emp["base"] == "provisoria" and not emp["rut"] and con_rut_a_definitiva:
-            # La fila trae el RUT de una provisoria que coincidió por otra regla: pasa a la definitiva
-            emp = provisorias.promover(conn, emp, r, actor, "carga", cid, carga_id=cid if real else None)
-            c["promovidas"] += 1
-        hubo_cambio = aplicar_fila(conn, emp, datos, tels, cid, confianza, actor, c, conflictos_muestra,
-                                   telefonos_tocados, attrs, por_origen)
-        if mapeo.get("contacto_nombre"):
-            hubo_cambio = aplicar_contacto(conn, emp, fila, mapeo, traductor, prefijos, cid, actor, c, por_atributo,
-                                           telefonos_tocados) or hubo_cambio
-        if es_alta:
-            c["altas"] += 1
-        elif hubo_cambio:
-            c["actualizaciones"] += 1
-            c[f"actualizaciones_{emp['base']}"] += 1
-        else:
-            c["sin_cambios"] += 1
-
-    c["filas"] = len(filas)
-    motivos = Counter(m for _, m, _ in rechazos)
-    conteos = dict(c)
-    conteos["rechazos_por_motivo"] = dict(motivos)
-    conteos["conflictos_ejemplos"] = conflictos_muestra[:30]
-    conteos["filas_por_telefonos"] = {k: por_telefonos.get(k, 0) for k in ("0", "1", "2", "3+")}
-    conteos["telefonos_por_origen"] = {o: {"nuevos": n.get("nuevos", 0), "existentes": n.get("existentes", 0)}
-                                       for o, n in sorted(por_origen.items())}
-    conteos["atributos"] = {k: {"cargados": n.get("cargados", 0), "invalidos": n.get("invalidos", 0),
-                                "sin_dato": n.get("sin_dato", 0)} for k, n in por_atributo.items()}
-    conteos["coincidencias_a_decidir"] = coincidencias
-    conteos["destino"] = destino
-    return conteos, rechazos, telefonos_tocados
+    ctx = Contexto(conn, carga, cfg, actor, real)
+    aviso = (tarea_id, hechos, total or len(filas), mensaje_lote)
+    tam = settings.CARGAS_TANDA
+    for i in range(0, len(filas), tam):
+        _avisar(aviso, i if i % 500 == 0 else i - i % 500, len(filas))
+        preparadas = [f for f in (preparar_fila(ctx, n, fila) for n, fila in filas[i:i + tam]) if f is not None]
+        cargas_tanda.aplicar(conn, ctx, preparadas)
+    return ctx.conteos(len(filas)), ctx.rechazos, ctx.telefonos_tocados
 
 
 def aplicar_contacto(conn, emp, fila, mapeo, traductor, prefijos, cid, actor, c, por_atributo, telefonos_tocados) -> bool:

@@ -8,21 +8,40 @@ from fastapi import HTTPException
 
 from . import auditoria, config, empresas
 
-_CONTEO = """
+_CONTEO_TODOS = """
 SELECT t.id, t.intermediario, t.intermediario_n, count(DISTINCT v.empresa_id) AS n
 FROM telefono t
 JOIN telefono_vinculo v ON v.telefono_id = t.id
 JOIN empresa e ON e.id = v.empresa_id AND e.baja IS NULL
-WHERE (%(ids)s::int[] IS NULL OR t.id = ANY(%(ids)s::int[]))
+{filtro}
 GROUP BY t.id
 HAVING count(DISTINCT v.empresa_id) >= %(umbral)s
 """
 
 
+# Para una lista de teléfonos (un lote de carga), se parte de la lista y se cuentan los vínculos de cada uno por índice.
+# Con «t.id = ANY(…)» y las estadísticas viejas (la tabla «vacía» al empezar la primera carga grande), Postgres
+# recorría todos los vínculos por cada teléfono: medido, 31 s en el segundo lote de 5.000 filas (D53).
+_CONTEO_IDS = """
+SELECT t.id, t.intermediario, t.intermediario_n, x.n
+FROM unnest(%(ids)s::int[]) AS i(id)
+JOIN telefono t ON t.id = i.id
+CROSS JOIN LATERAL (SELECT count(DISTINCT v.empresa_id) AS n FROM telefono_vinculo v
+                    JOIN empresa e ON e.id = v.empresa_id AND e.baja IS NULL WHERE v.telefono_id = t.id) x
+WHERE x.n >= %(umbral)s
+"""
+
+
+def _conteo(conn, umbral: int, telefono_ids: list[int] | None):
+    if telefono_ids is None:
+        return conn.execute(_CONTEO_TODOS.format(filtro=""), {"umbral": umbral}).fetchall()
+    return conn.execute(_CONTEO_IDS, {"ids": sorted(set(telefono_ids)), "umbral": umbral}).fetchall()
+
+
 def detectar(conn, umbral: int, telefono_ids: list[int] | None = None, actor: str = "sistema") -> list[int]:
     """Marca los nuevos sospechosos y devuelve sus ids."""
     nuevos = []
-    for t in conn.execute(_CONTEO, {"ids": telefono_ids, "umbral": umbral}).fetchall():
+    for t in _conteo(conn, umbral, telefono_ids):
         if t["intermediario"] is None or (t["intermediario"] == "liberado" and t["n"] > (t["intermediario_n"] or 0)):
             nuevos.append(t["id"])
     if nuevos:
@@ -37,7 +56,7 @@ def detectar(conn, umbral: int, telefono_ids: list[int] | None = None, actor: st
 
 def contar_nuevos(conn, umbral: int, telefono_ids: list[int] | None = None) -> int:
     n = 0
-    for t in conn.execute(_CONTEO, {"ids": telefono_ids, "umbral": umbral}).fetchall():
+    for t in _conteo(conn, umbral, telefono_ids):
         if t["intermediario"] is None or (t["intermediario"] == "liberado" and t["n"] > (t["intermediario_n"] or 0)):
             n += 1
     return n

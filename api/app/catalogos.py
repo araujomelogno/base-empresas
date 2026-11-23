@@ -434,6 +434,26 @@ def recalcular_atributos(conn, empresa_id: int, ganadores: dict) -> None:
              g["confianza"], g["fecha"]))
 
 
+def poner_atributos(conn, poner: list[tuple[int, dict, dict]]) -> None:
+    """Como recalcular_atributos para muchos ganadores en una sola sentencia: [(empresa_id, atributo, fila ganadora)].
+    Cada (empresa, atributo) tiene que aparecer una sola vez (D53)."""
+    if not poner:
+        return
+    vs = [interpretar(a, g["valor"]) for _, a, g in poner]
+    conn.execute(
+        "INSERT INTO empresa_atributo (empresa_id, atributo_id, valor_texto, valor_numero, valor_fecha, valor_crudo,"
+        " fuente_tipo, fuente_id, confianza, fecha) SELECT * FROM unnest(%s::int[], %s::int[], %s::text[],"
+        " %s::numeric[], %s::date[], %s::text[], %s::text[], %s::int[], %s::int[], %s::timestamptz[])"
+        " ON CONFLICT (empresa_id, atributo_id) DO UPDATE SET valor_texto = EXCLUDED.valor_texto,"
+        " valor_numero = EXCLUDED.valor_numero, valor_fecha = EXCLUDED.valor_fecha, valor_crudo = EXCLUDED.valor_crudo,"
+        " fuente_tipo = EXCLUDED.fuente_tipo, fuente_id = EXCLUDED.fuente_id, confianza = EXCLUDED.confianza,"
+        " fecha = EXCLUDED.fecha",
+        ([e for e, _, _ in poner], [a["id"] for _, a, _ in poner], [v["texto"] for v in vs],
+         [v["numero"] for v in vs], [v["fecha"] for v in vs], [v["crudo"] for v in vs],
+         [g["fuente_tipo"] for _, _, g in poner], [g["fuente_id"] for _, _, g in poner],
+         [g["confianza"] for _, _, g in poner], [g["fecha"] for _, _, g in poner]))
+
+
 def atributos_de_empresa(conn, empresa_id: int) -> list[dict]:
     return conn.execute(
         "SELECT a.clave, a.nombre, a.tipo, a.activo, ea.valor_texto, ea.valor_numero, ea.valor_fecha, ea.valor_crudo,"
