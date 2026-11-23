@@ -232,7 +232,7 @@ def incumplen(conn, indicador: str, pagina: int = 1) -> dict:
                 "filas": filas[ini:ini + POR_PAGINA]}
     if indicador == "rut_no_verificado":
         filas = conn.execute(f"SELECT e.id, e.codigo, e.rut, e.razon_social, e.departamento,"
-                             f" length(e.rut) || ' dígitos' AS problema FROM empresa e"
+                             " length(e.rut) || ' dígitos' AS problema FROM empresa e"
                              f" WHERE {DEFINITIVA} AND e.rut_verificado = false ORDER BY e.razon_social").fetchall()
         ini = (pagina - 1) * POR_PAGINA
         return {"tipo": tipo_lista, "total": len(filas), "pagina": pagina, "por_pagina": POR_PAGINA,
