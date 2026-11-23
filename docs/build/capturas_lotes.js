@@ -28,9 +28,11 @@ const EN_CURSO = process.env.CARGA_EN_CURSO || '5', INTERRUMPIDA = process.env.C
   await ir(`cargas/${EN_CURSO}`, 2500);
   await principal('62-carga-por-lotes', 640);
 
-  // 63 · Carga interrumpida: 4 de 10 lotes aplicados, con Reanudar, Deshacer y Borrar
-  await ir(`cargas/${INTERRUMPIDA}`, 2000);
-  await principal('63-carga-interrumpida', 600);
+  // 63 · Carga interrumpida: 4 de 10 lotes aplicados, con Reanudar, Deshacer y Borrar (CARGA_INTERRUMPIDA=0: no se saca)
+  if (INTERRUMPIDA !== '0') {
+    await ir(`cargas/${INTERRUMPIDA}`, 2000);
+    await principal('63-carga-interrumpida', 600);
+  }
 
   // 64 · Configuración → Cargas grandes
   await ir('config', 2000);

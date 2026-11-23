@@ -66,3 +66,10 @@ CARGAS_PAUSA = float(os.environ["CARGAS_PAUSA"]) if os.environ.get("CARGAS_PAUSA
 # D51: un archivo de más de 10 MB o de más de 20.000 filas (estimadas sin parsearlo) se lee en segundo plano
 ARCHIVO_BYTES_SINCRONICO = int(os.environ.get("ARCHIVO_BYTES_SINCRONICO", 10 * 1024 * 1024))
 ARCHIVO_FILAS_SINCRONICO = int(os.environ.get("ARCHIVO_FILAS_SINCRONICO", 20000))
+# D52: latido de una tarea que corre, y cuánto sin latido para darla por muerta y retomarla
+TAREA_LATIDO_SEGUNDOS = float(os.environ.get("TAREA_LATIDO_SEGUNDOS", 30))
+TAREA_RETOMAR_SEGUNDOS = int(os.environ.get("TAREA_RETOMAR_SEGUNDOS", 180))
+# Límite de memoria de la instancia (para avisar en el log si un lote pasa del 75 %); si no, el del cgroup
+MEMORIA_LIMITE_MB = int(os.environ["MEMORIA_LIMITE_MB"]) if os.environ.get("MEMORIA_LIMITE_MB") else None
+# URL del servicio de Cloud Run que ejecuta las tareas (empresas-tareas); si no, la de la API
+TAREAS_URL = os.environ.get("TAREAS_URL", "")

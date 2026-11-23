@@ -6,6 +6,7 @@ confirmar (corre en diferido) → deshacer (mientras ninguna empresa haya entrad
 El preview corre exactamente el mismo código que la confirmación dentro de un savepoint
 que se descarta, así los conteos del preview son los que después se aplican.
 """
+import gc
 import logging
 import re
 import time
@@ -15,7 +16,7 @@ import psycopg
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
-from . import auditoria, catalogos, config, contactos, empresas, intermediarios, lectores, provisorias, rut as rutmod, settings, storage, tareas
+from . import auditoria, catalogos, config, contactos, empresas, intermediarios, lectores, memoria, provisorias, rut as rutmod, settings, storage, tareas
 from . import telefonos as telmod
 from .util import celda_json, dominio, json_dumps, razon_normalizada, sin_tildes, texto
 
@@ -217,25 +218,26 @@ def es_grande(datos: bytes, tipo: str) -> bool:
 
 
 def _guardar_filas_archivo(conn, archivo: dict, tarea_id: int | None) -> dict:
+    """Lee el archivo de a una fila y lo copia a archivo_fila (COPY), sin tener todas las filas en memoria (R1, D52):
+    con 200.000 filas el proceso queda en un par de cientos de MB en lugar de pasar del giga."""
     datos = storage.leer(archivo)
     estimado = lectores.estimar_filas(datos, archivo["tipo"])
-
-    def avance(n):
-        tareas.mensaje(tarea_id, f"Leyendo el archivo… {n:,} filas".replace(",", "."))
-        tareas.progreso(tarea_id, n, max(estimado, n))
-
     t0 = time.monotonic()
     tareas.mensaje(tarea_id, "Leyendo el archivo…")
-    columnas, filas, _ = lectores.leer_tabla(datos, archivo["tipo"], avance if tarea_id else None)
-    log.info("archivo %s parseado: %s filas en %.1f s", archivo["id"], len(filas), time.monotonic() - t0)
-    n = len(filas)
+    columnas, filas = lectores.iterar_tabla(datos, archivo["tipo"])
+    n = 0
     with conn.cursor() as cur:
         with cur.copy("COPY archivo_fila (archivo_id, fila, datos) FROM STDIN") as cp:
-            for i, f in enumerate(filas):
-                cp.write_row((archivo["id"], i + 2, json_dumps({k: celda_json(v) for k, v in f.items()})))
-                if tarea_id and (i + 1) % 20000 == 0:
-                    tareas.mensaje(tarea_id, f"Guardando las filas… {i + 1:,} de {n:,}".replace(",", "."))
-                    tareas.progreso(tarea_id, i + 1, n)
+            for f in filas:
+                n += 1
+                cp.write_row((archivo["id"], n + 1, json_dumps({k: celda_json(v) for k, v in f.items()})))
+                if n % 5000 == 0 and tarea_id:
+                    tareas.mensaje(tarea_id, f"Leyendo el archivo… {n:,} filas".replace(",", "."))
+                    tareas.progreso(tarea_id, n, max(estimado, n))
+    del datos, filas
+    gc.collect()
+    log.info("archivo %s parseado: %s filas en %.1f s (rss_mb=%s)", archivo["id"], n, time.monotonic() - t0,
+             memoria.rss_mb())
     return conn.execute("UPDATE archivo SET columnas = %s, n_filas = %s, filas_guardadas = now() WHERE id = %s RETURNING *",
                         (Jsonb(columnas), n, archivo["id"])).fetchone()
 
@@ -497,7 +499,8 @@ def valores(conn, archivo_id: int, mapeo: dict) -> dict:
 
 
 def procesar(conn, carga: dict, filas: list[tuple[int, dict]], cfg: dict, actor: str, real: bool,
-             tarea_id: int | None = None, hechos: int = 0, total: int | None = None) -> tuple[dict, list, set]:
+             tarea_id: int | None = None, hechos: int = 0, total: int | None = None,
+             mensaje_lote: str | None = None) -> tuple[dict, list, set]:
     """Aplica las filas de un lote: [(número de fila del archivo, fila)]. Devuelve (conteos, rechazos, teléfonos
     tocados). Si real=False lo corre el preview. La detección de intermediarios la hace quien llama, por lote (D50).
     hechos y total: filas ya procesadas de la carga y total, para la barra de progreso."""
@@ -523,6 +526,8 @@ def procesar(conn, carga: dict, filas: list[tuple[int, dict]], cfg: dict, actor:
     for i, (nfila, fila) in enumerate(filas):
         if tarea_id and i % 500 == 0:
             tareas.progreso(tarea_id, hechos + i, total)
+            if mensaje_lote and i:  # R4 (D52): «Lote 1 de 40 · fila 2.300 de 4.812»
+                tareas.mensaje(tarea_id, f"{mensaje_lote} · fila {i:,} de {len(filas):,}".replace(",", "."))
         crudo_rut = texto(fila.get(mapeo["rut"])) if mapeo.get("rut") else None
         r, motivo = rutmod.validar(crudo_rut) if crudo_rut else (None, "sin RUT")
         if r is None and not sin_rut_a_provisoria:

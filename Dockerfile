@@ -8,4 +8,6 @@ RUN pip install --no-cache-dir -r api/requirements.txt
 COPY api/app api/app
 COPY db db
 WORKDIR /srv/api
-CMD exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 2 --proxy-headers
+# WORKERS: 2 en la API de la web; 1 en el servicio de tareas (empresas-tareas, D52), que corre las cargas pesadas
+ENV WORKERS=2
+CMD exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers ${WORKERS} --proxy-headers

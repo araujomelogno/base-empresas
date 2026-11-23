@@ -152,6 +152,9 @@ export async function pedirTexto(titulo, label, { obligatorio = true, placeholde
 // en pantalla (y se sigue esperando, por si arranca).
 const PENDIENTE_AVISO_MS = 90000;
 
+// 100 → «1 min 40 s»; 45 → «45 s»
+export const duracion = (seg) => seg >= 60 ? `${Math.floor(seg / 60)} min${seg % 60 ? ` ${seg % 60} s` : ''}` : `${seg} s`;
+
 export async function seguirTarea(tareaId, el, { texto = 'Procesando' } = {}) {
   // Las tareas por lotes (D50) vuelven a «pendiente» entre un lote y el siguiente: el aviso de «no arrancó» se basa en
   // cuánto hace que no cambia nada, no en cuánto hace que empezó. Las cargas grandes se consultan cada 5 s.
@@ -167,10 +170,16 @@ export async function seguirTarea(tareaId, el, { texto = 'Procesando' } = {}) {
     // El mensaje de la tarea («Creando la carga…», «Preparando los lotes…», «Leyendo el archivo… 45.000 filas») se
     // muestra solo; el avance por lotes va después del texto de la operación («Calculando el preview… Lote 3 de 38»).
     const enCurso = t.mensaje && !['ok', 'error', 'cancelada'].includes(t.estado);
+    // R4 (D52): en un lote, cuánto lleva («Lote 1 de 40 · fila 2.300 de 4.812 · 1 min 40 s»)
+    const lote = enCurso && /^Lote \d/.test(t.mensaje);
+    const lleva = lote && t.estado === 'corriendo' && t.segundos_paso != null ? ` · ${duracion(t.segundos_paso)}` : '';
     const etiquetaTxt = !enCurso ? `${esc(texto)}… ${est(t.estado)}`
-      : /^Lote \d/.test(t.mensaje) ? `${esc(texto)}… ${esc(t.mensaje)}` : esc(t.mensaje);
+      : lote ? `${esc(texto)}… ${esc(t.mensaje)}${lleva}` : esc(t.mensaje);
+    const lento = lote && t.estado === 'corriendo' && t.segundos_paso > 600;
     if (el) el.innerHTML = `<div class="progress"><span style="width:${p}%"></span></div>
       <div class="progress-label"><span>${etiquetaTxt}</span><span class="mono">${total ? `${num(t.progreso)} / ${num(total)}` : ''}</span></div>` +
+      (lento ? `<div class="alert alert-warn mt">Este lote está tardando más de lo normal; si no avanza en 3 minutos, el
+        sistema lo retoma solo.</div>` : '') +
       (trabada ? `<div class="alert alert-warn mt">La tarea #${esc(String(tareaId))} todavía no arrancó. Si sigue así, avisale a un
         administrador: Cloud Tasks no está pudiendo ejecutarla (ver «Problemas frecuentes» en la guía de despliegue).</div>` : '');
     if (t.estado === 'ok') return t;

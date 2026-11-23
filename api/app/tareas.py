@@ -8,6 +8,12 @@ Cancelación (al borrar la carga, la muestra o el estudio): cancelar() marca la 
 «cancelada» en una conexión con autocommit. Una tarea cancelada no arranca, y una que está
 corriendo lo nota la próxima vez que informa progreso: progreso() lanza Cancelada, que revierte
 toda su transacción. No se aplica nada y la tarea termina «cancelada», no en error.
+
+Robustez (D52): mientras corre, la tarea deja un latido cada 30 s (tarea.actualizado) con su marca de dueño. Si el
+proceso muere (falta de memoria, una instancia que se apaga), el latido se detiene y, pasados 3 minutos, el próximo
+intento la retoma desde el paso que no se terminó; mientras tanto, un intento que la encuentra viva responde
+«ocupada» (503) para que Cloud Tasks reintente más tarde. Al recibir SIGTERM, el paso en curso se revierte y la
+tarea vuelve a la cola enseguida, para que la tome otra instancia.
 """
 import contextvars
 import datetime as dt
@@ -15,6 +21,7 @@ import logging
 import threading
 import time
 import traceback
+import uuid
 from dataclasses import dataclass
 
 from psycopg.types.json import Jsonb
@@ -30,6 +37,52 @@ TRABADA_MINUTOS = 30   # más que el dispatch_deadline de Cloud Tasks (1800 s)
 
 class Cancelada(Exception):
     """La tarea se canceló mientras corría: su transacción se revierte entera."""
+
+
+class Apagando(Exception):
+    """La instancia recibió SIGTERM (despliegue o cierre): el paso en curso se revierte y la tarea vuelve a la cola."""
+
+
+class Desplazada(Exception):
+    """Otro proceso retomó la tarea (este dejó de latir): el paso en curso se revierte sin tocar nada más."""
+
+
+# ejecutar() la devuelve si la tarea está corriendo en otro proceso vivo: Cloud Tasks tiene que reintentar más tarde
+OCUPADA = object()
+
+_apagando = threading.Event()
+_dueno: contextvars.ContextVar[str | None] = contextvars.ContextVar("tarea_dueno", default=None)
+
+
+def apagar():
+    """SIGTERM: no se toman tareas nuevas y la que está corriendo se devuelve a la cola en su próximo aviso."""
+    _apagando.set()
+
+
+def _si_apaga():
+    if _apagando.is_set() and _dueno.get():
+        raise Apagando("La instancia se está apagando")
+
+
+def sigo_siendo_dueno(conn, tarea_id: int):
+    """Al final de un paso: si otro proceso retomó la tarea mientras tanto, este paso no se confirma."""
+    yo = _dueno.get()
+    if yo is None:
+        return
+    r = conn.execute("SELECT dueno FROM tarea WHERE id = %s", (tarea_id,)).fetchone()
+    if r is None or r["dueno"] != yo:
+        raise Desplazada(f"La tarea {tarea_id} la retomó otro proceso")
+
+
+def _latir(tarea_id: int, dueno: str, alto: threading.Event):
+    while not alto.wait(settings.TAREA_LATIDO_SEGUNDOS):
+        try:
+            with pool().connection() as c:
+                c.autocommit = True
+                c.execute("UPDATE tarea SET actualizado = now() WHERE id = %s AND dueno = %s AND estado = 'corriendo'",
+                          (tarea_id, dueno))
+        except Exception:
+            log.warning("No se pudo registrar el latido de la tarea %s", tarea_id)
 
 
 @dataclass
@@ -127,7 +180,7 @@ def despachar(tarea_id: int, demora: float = 0):
 def url_ejecutar(tarea_id: int) -> str:
     """URL a la que Cloud Tasks llama para ejecutar la tarea. Las rutas de la API cuelgan de /api
     (main.py), así que sin ese prefijo Cloud Tasks recibe 404 y la tarea queda pendiente."""
-    return f"{settings.API_URL.rstrip('/')}/api/tareas/{tarea_id}/ejecutar"
+    return f"{(settings.TAREAS_URL or settings.API_URL).rstrip('/')}/api/tareas/{tarea_id}/ejecutar"
 
 
 def _encolar_cloud_tasks(tarea_id: int, demora: float = 0):
@@ -155,6 +208,7 @@ def progreso(tarea_id: int | None, hechos: int, total: int | None = None):
     Si la tarea fue cancelada (o borrada junto con su carga), lanza Cancelada."""
     if tarea_id is None:
         return
+    _si_apaga()
     with pool().connection() as c:
         c.autocommit = True
         r = c.execute("UPDATE tarea SET progreso = %s, total = coalesce(%s, total), actualizado = now() WHERE id = %s"
@@ -168,6 +222,7 @@ def mensaje(tarea_id: int | None, texto: str | None):
     transacción del paso dejaría la fila de la tarea bloqueada y el progreso se quedaría esperando."""
     if tarea_id is None:
         return
+    _si_apaga()
     with pool().connection() as c:
         c.autocommit = True
         c.execute("UPDATE tarea SET mensaje = %s, actualizado = now() WHERE id = %s", (texto, tarea_id))
@@ -189,17 +244,41 @@ def _estado(tarea_id: int) -> str | None:
     return r["estado"] if r else None
 
 
-def ejecutar(tarea_id: int) -> dict | None:
+def _tomar(tarea_id: int, dueno: str) -> tuple[dict | None, str | None]:
+    """Toma la tarea si está pendiente, en error, o «corriendo» sin latido hace más de 3 minutos (su proceso murió).
+    Devuelve (tarea, estado anterior) o (None, estado actual)."""
     with pool().connection() as c:
         c.autocommit = True
         t = c.execute(
-            "UPDATE tarea SET estado = 'corriendo', actualizado = now() WHERE id = %s AND estado IN ('pendiente','error')"
-            " RETURNING *", (tarea_id,),
-        ).fetchone()
+            "WITH antes AS (SELECT id, estado FROM tarea WHERE id = %s FOR UPDATE)"
+            " UPDATE tarea t SET estado = 'corriendo', dueno = %s, paso_inicio = now(), actualizado = now() FROM antes"
+            " WHERE t.id = antes.id AND (antes.estado IN ('pendiente', 'error')"
+            "   OR (antes.estado = 'corriendo' AND t.actualizado < now() - make_interval(secs => %s)))"
+            " RETURNING t.*, antes.estado AS estado_antes",
+            (tarea_id, dueno, settings.TAREA_RETOMAR_SEGUNDOS)).fetchone()
+        if t is None:
+            r = c.execute("SELECT estado FROM tarea WHERE id = %s", (tarea_id,)).fetchone()
+            return None, (r["estado"] if r else None)
+    return t, t.pop("estado_antes")
+
+
+def ejecutar(tarea_id: int):
+    """Corre la tarea (o su paso siguiente). Devuelve el resultado, None si no había nada que hacer, u OCUPADA si
+    está corriendo en otro proceso vivo (o esta instancia se está apagando): Cloud Tasks reintenta más tarde."""
+    if _apagando.is_set():
+        return OCUPADA
+    dueno = uuid.uuid4().hex
+    t, antes = _tomar(tarea_id, dueno)
     if t is None:
-        return None  # ya corrió o está corriendo (Cloud Tasks puede reintentar)
+        return OCUPADA if antes == "corriendo" else None  # ya terminó, se canceló o no existe
+    if antes == "corriendo":
+        log.warning("Tarea %s retomada: el proceso que la corría dejó de responder (sin latido hace más de %s s)",
+                    tarea_id, settings.TAREA_RETOMAR_SEGUNDOS)
     pendientes = []
     token = _despues.set(pendientes)
+    token_dueno = _dueno.set(dueno)
+    alto = threading.Event()
+    threading.Thread(target=_latir, args=(tarea_id, dueno, alto), daemon=True).start()
     try:
         with conexion() as conn:
             resultado = _HANDLERS[t["tipo"]](conn, t["payload"], tarea_id)
@@ -207,8 +286,9 @@ def ejecutar(tarea_id: int) -> dict | None:
             # Paso hecho (ya hizo commit): la misma tarea vuelve a la cola para el paso siguiente
             with pool().connection() as c:
                 c.autocommit = True
-                sigue = c.execute("UPDATE tarea SET estado = 'pendiente', mensaje = coalesce(%s, mensaje), actualizado = now()"
-                                  " WHERE id = %s AND estado = 'corriendo' RETURNING id", (resultado.mensaje, tarea_id)).fetchone()
+                sigue = c.execute("UPDATE tarea SET estado = 'pendiente', mensaje = coalesce(%s, mensaje), actualizado = now(),"
+                                  " dueno = NULL, reintentos_auto = 0 WHERE id = %s AND estado = 'corriendo' AND dueno = %s"
+                                  " RETURNING id", (resultado.mensaje, tarea_id, dueno)).fetchone()
             _despues.reset(token)
             token = None
             for tid in pendientes:
@@ -218,8 +298,8 @@ def ejecutar(tarea_id: int) -> dict | None:
             return None
         with pool().connection() as c:
             c.autocommit = True
-            c.execute("UPDATE tarea SET estado='ok', resultado=%s, terminado=now(), actualizado = now() WHERE id=%s",
-                      (Jsonb(resultado), tarea_id))
+            c.execute("UPDATE tarea SET estado='ok', resultado=%s, terminado=now(), actualizado = now(), dueno = NULL"
+                      " WHERE id=%s AND dueno = %s", (Jsonb(resultado), tarea_id, dueno))
         _despues.reset(token)
         token = None
         for tid in pendientes:
@@ -229,6 +309,22 @@ def ejecutar(tarea_id: int) -> dict | None:
         if token is not None:
             _despues.reset(token)
             token = None
+        if isinstance(e, Apagando):
+            # Despliegue o cierre de la instancia: el paso se revirtió; la tarea vuelve a la cola ya mismo
+            log.warning("Tarea %s devuelta a la cola: la instancia se apaga (el paso en curso se revirtió)", tarea_id)
+            with pool().connection() as c:
+                c.autocommit = True
+                # «pendiente» y sin dueño: el próximo intento (de otra instancia) la toma enseguida
+                c.execute("UPDATE tarea SET estado = 'pendiente', dueno = NULL, actualizado = now()"
+                          " WHERE id = %s AND dueno = %s", (tarea_id, dueno))
+            try:
+                despachar(tarea_id)
+            except Exception:
+                log.error("No se pudo volver a encolar la tarea %s: la retoma el chequeo de trabadas", tarea_id)
+            return None
+        if isinstance(e, Desplazada):
+            log.warning("Tarea %s: otro proceso la retomó; este paso se revirtió", tarea_id)
+            return None
         if isinstance(e, Cancelada) or _estado(tarea_id) in ("cancelada", None):
             # Cancelada (o borrada con su carga) mientras corría: la transacción ya se revirtió.
             # No es un error y no marca la carga ni la ingesta como «error».
@@ -239,12 +335,15 @@ def ejecutar(tarea_id: int) -> dict | None:
         log.error("Tarea %s falló: %s", tarea_id, traceback.format_exc())
         with pool().connection() as c:
             c.autocommit = True
-            c.execute("UPDATE tarea SET estado='error', error=%s, terminado=now() WHERE id=%s",
+            c.execute("UPDATE tarea SET estado='error', error=%s, terminado=now(), dueno = NULL WHERE id=%s",
                       (str(getattr(e, "detail", e)), tarea_id))
             _marcar_error_objeto(c, t, e)
         if settings.TASKS_MODE == "inline":
             raise
         return None
+    finally:
+        alto.set()
+        _dueno.reset(token_dueno)
 
 
 def _marcar_error_objeto(c, t, e):
@@ -265,4 +364,6 @@ def _marcar_error_objeto(c, t, e):
 
 
 def obtener(conn, tarea_id: int) -> dict | None:
-    return conn.execute("SELECT * FROM tarea WHERE id = %s", (tarea_id,)).fetchone()
+    # segundos_paso: hace cuánto empezó el paso (o lote) en curso, medido en la base (sin depender del reloj del navegador)
+    return conn.execute("SELECT *, CASE WHEN estado = 'corriendo' THEN extract(epoch FROM now() - paso_inicio)::int END"
+                        " AS segundos_paso FROM tarea WHERE id = %s", (tarea_id,)).fetchone()

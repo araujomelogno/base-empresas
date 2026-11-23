@@ -194,9 +194,10 @@ Una carga se procesa **por lotes** de 5.000 filas (se cambia en Configuración �
 - **Un archivo grande se lee en segundo plano.** Si el archivo tiene más de 20.000 filas (o pesa más de 10 MB), al tocar **Analizar archivo** aparece «Leyendo el archivo… N filas»; cuando termina, sigue el mapeo como siempre. El archivo se lee una sola vez: revisar los valores y crear la carga ya no lo vuelven a leer.
 - **«Siguiente» siempre muestra qué hace.** Mientras revisa los valores a traducir dice «Revisando los valores…», y al crear la carga la barra muestra enseguida «Creando la carga…», después «Preparando los lotes…» y después «Calculando el preview… Lote N de M».
 - **Sin cargas repetidas.** Tocar «Siguiente» dos veces crea una sola carga. Si ya se está creando una carga de ese archivo, la pantalla ofrece **Ir a la carga #N** en lugar de crear otra.
+- **Si algo se corta, sigue sola.** Si el servidor se reinicia o se despliega una versión nueva mientras corre una carga, el lote en curso se vuelve a hacer y la carga sigue sola, sin repetir lo ya aplicado: no hace falta tocar nada. Mientras corre un lote, la barra dice en qué fila va y cuánto lleva («Lote 1 de 40 · fila 2.300 de 4.812 · 1 min 40 s»). Si un lote pasa de 10 minutos aparece un aviso: si no avanza en 3 minutos, el sistema lo retoma solo.
 - **Una carga grande a la vez.** Si confirmás, deshacés o borrás una carga mientras otra está corriendo, la segunda queda **en cola** con el aviso «Esperando a que termine la carga #N» y arranca sola cuando termina la primera.
 
-**Si una carga queda «interrumpida».** Pasa si un lote falla, si se cancela, o si la tarea no avanza durante 35 minutos (por ejemplo, porque se reinició el servidor). El detalle dice cuántos lotes se aplicaron y el error del lote que falló. Tres opciones:
+**Si una carga queda «interrumpida».** Pasa si un lote falla, si se cancela, o si la tarea no avanza durante 10 minutos, se retoma sola y se vuelve a cortar. El detalle dice cuántos lotes se aplicaron y el error del lote que falló. Tres opciones:
 
 | Acción | Qué hace |
 | --- | --- |
@@ -564,7 +565,7 @@ Todos los parámetros de negocio están en **Configuración** y se cambian sin p
 | Prefijos de salida | Dígitos que la central agrega para tomar línea y que hay que quitar |
 | Franjas horarias | Nombre, días y horario de cada franja del tablero |
 | Formato del CSV | Separador y columnas, para que coincida con la importación de uContact |
-| Cargas grandes | Filas por lote (5.000; entre 500 y 20.000), pausa entre lotes (1 s) y minutos sin avanzar para dar una carga por interrumpida (35). Ver «Cargas grandes» |
+| Cargas grandes | Filas por lote (5.000; entre 500 y 20.000), pausa entre lotes (1 s) y minutos sin avanzar para retomarla sola (10; si se vuelve a cortar, queda interrumpida). Ver «Cargas grandes» |
 
 En el historial, tocá una versión para ver todos sus parámetros.
 
@@ -696,6 +697,8 @@ Registro inalterable de cargas, fusiones, exclusiones, sorteos, exportaciones, i
 **Subí el .sav y quedaron filas sin asociar.** Revisá el motivo en los conteos. Lo más común es que la encuesta no tenga la URL variable `EC_ID_ITEM`; en ese caso el sistema intenta por RUT y teléfono usado. Lo que no se resuelve va a Conciliación.
 
 **Una carga grande quedó «interrumpida».** Abrí su detalle: dice cuántos lotes se aplicaron y por qué se cortó. **Reanudar** sigue desde ahí sin repetir nada. Si preferís sacarla, **Deshacer carga** quita lo aplicado. Ver «Cargas grandes».
+
+**Arriba de la aplicación hay una franja roja «Faltan migraciones».** Solo la ven los administradores: se publicó una versión sin actualizar la base. Corré `./infra/desplegar.sh migrar` (ver la guía de despliegue); la franja desaparece en un minuto.
 
 **Toqué «Siguiente» y quedaron dos cargas del mismo archivo.** Pasaba antes de noviembre de 2026, cuando «Siguiente» no mostraba nada y se cortaba al minuto. Abrí **Cargas**, seguí con una y borrá la otra con **Borrar carga**. Ahora la pantalla avisa «Ir a la carga #N» en lugar de crear otra.
 

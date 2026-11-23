@@ -31,8 +31,8 @@ def test_el_archivo_se_parsea_una_vez_y_se_libera(api, sql, monkeypatch):
     from app import lectores
 
     llamadas = []
-    original = lectores.leer_tabla
-    monkeypatch.setattr(lectores, "leer_tabla", lambda *x, **k: llamadas.append(1) or original(*x, **k))
+    original = lectores.iterar_tabla
+    monkeypatch.setattr(lectores, "iterar_tabla", lambda *x, **k: llamadas.append(1) or original(*x, **k))
     a = api.subir("/cargas/analizar", "b.csv", csv_bytes([fila(i) for i in range(7)]), rol="steward").json()
     r = api.post("/cargas", rol="steward", json={"archivo_id": a["archivo_id"], "fuente": "x", "tipo_fuente": "x",
                                                  "licencia": "interna", "mapeo": {**a["mapeo"], "origen_defecto": "sin_dato"}})
@@ -131,18 +131,29 @@ def test_deshacer_una_interrumpida_deja_la_base_como_antes(api, sql, monkeypatch
     assert cuenta(sql, "carga_fila", f"carga_id = {c['id']}") == 0
 
 
-def test_tarea_trabada_se_marca_interrumpida_y_se_reanuda(api, sql, monkeypatch):
+def test_tarea_trabada_se_retoma_sola_una_vez_y_despues_queda_interrumpida(api, sql, monkeypatch):
+    """D52: una tarea sin latido más que el plazo (10 min) se vuelve a encolar sola; si se corta de nuevo, la carga
+    queda «interrumpida» y ofrece Reanudar."""
     from app import tareas
 
     c = cargar(api, [fila(i) for i in range(4)], confirmar=False)
     monkeypatch.setattr(tareas, "despachar", lambda tid, demora=0: None)   # la instancia murió a mitad de camino
     tid = api.post(f"/cargas/{c['id']}/confirmar", rol="steward").json()["tarea_id"]
     monkeypatch.undo()
-    sql.execute("UPDATE tarea SET estado = 'corriendo', actualizado = now() - interval '40 minutes' WHERE id = %s", (tid,))
-    x = carga(api, c["id"])                                            # la pantalla revisa las trabadas
+    sql.execute("UPDATE tarea SET estado = 'corriendo', actualizado = now() - interval '15 minutes' WHERE id = %s", (tid,))
+    x = carga(api, c["id"])                                            # la pantalla revisa las trabadas: la retoma
+    assert x["estado"] == "confirmada" and cuenta(sql, "empresa") == 4
+
+    c = cargar(api, [fila(i) for i in range(10, 14)], confirmar=False)
+    monkeypatch.setattr(tareas, "despachar", lambda tid, demora=0: None)
+    tid = api.post(f"/cargas/{c['id']}/confirmar", rol="steward").json()["tarea_id"]
+    monkeypatch.undo()
+    sql.execute("UPDATE tarea SET estado = 'corriendo', reintentos_auto = 1, actualizado = now() - interval '15 minutes'"
+                " WHERE id = %s", (tid,))                              # ya se retomó una vez y se volvió a cortar
+    x = carga(api, c["id"])
     assert x["estado"] == "interrumpida" and "no avanzó" in x["error"]
     assert api.post(f"/cargas/{c['id']}/reanudar", rol="steward").status_code == 200
-    assert carga(api, c["id"])["estado"] == "confirmada" and cuenta(sql, "empresa") == 4
+    assert carga(api, c["id"])["estado"] == "confirmada" and cuenta(sql, "empresa") == 8
 
 
 def test_cancelar_deja_la_carga_interrumpida(api, sql, monkeypatch):
@@ -226,7 +237,7 @@ def test_borrar_interrumpido_se_retoma(api, sql, monkeypatch):
 
 def test_configuracion_de_cargas(api, sql):
     cfg = api.get("/config").json()["parametros"]
-    assert cfg["cargas"] == {"tamano_lote": 5000, "pausa_segundos": 1.0, "minutos_trabada": 35}
+    assert cfg["cargas"] == {"tamano_lote": 5000, "pausa_segundos": 1.0, "minutos_trabada": 10}
     cfg["cargas"]["tamano_lote"] = 100
     assert api.put("/config", json={"parametros": cfg}).status_code == 422          # mínimo 500
     cfg["cargas"]["tamano_lote"] = 2000

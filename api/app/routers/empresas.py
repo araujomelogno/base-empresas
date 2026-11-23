@@ -13,7 +13,15 @@ router = APIRouter()
 
 @router.get("/me")
 def me(u: Usuario = Depends(usuario_actual)):
-    return u.__dict__
+    datos = dict(u.__dict__)
+    if u.rol == "admin":  # R3 (D52): la web les muestra una franja roja si la base no tiene todas las migraciones
+        from .. import migraciones
+
+        faltan = migraciones.faltantes()
+        if faltan:
+            datos["migraciones_faltantes"] = faltan
+            datos["aviso_migraciones"] = migraciones.mensaje(faltan)
+    return datos
 
 
 def filtros_busqueda(conn, q=None, departamento=None, tamano=None, naturaleza=None, disponible=None,
