@@ -183,6 +183,10 @@ Las bases (estudios anteriores, padrones, directorios) entran por **Cargas → N
 
 En una carga a la **base definitiva**, las filas con RUT inválido o sin RUT se rechazan (el motivo queda en el detalle de la carga), salvo que marques **Enviar las filas sin RUT válido a la base provisoria**. Deshacer o borrar una carga quita también los contactos que trajo.
 
+**RUT no verificado.** Un identificador de **6 a 11 dígitos** (por ejemplo, la cédula de una unipersonal, frecuente en bases de Mypes) no se rechaza: la empresa entra a la base definitiva con ese número, marcada como **RUT no verificado**. No se controlan el registro ni el dígito verificador. En cambio, un RUT de 12 dígitos se valida siempre: si está mal tipeado, se rechaza. También se rechazan un valor con letras, uno vacío y uno de más de 12 dígitos. La ficha muestra la etiqueta «RUT no verificado (N dígitos)», el buscador tiene el filtro **RUT verificado / no verificado** y el tablero de calidad los cuenta aparte. Se puede desactivar en Configuración → Cargas grandes («Aceptar identificadores de 6 a 11 dígitos sin validar»); desactivado, esas filas vuelven a rechazarse. Para sumar las filas que una carga anterior rechazó por el largo, volvé a cargar el mismo archivo con la misma plantilla: las que ya estaban quedan «sin cambios» y las cortas entran como altas.
+
+![Ficha de una empresa con RUT no verificado](img/67-rut-no-verificado.png)
+
 ### Cargas grandes
 
 Una carga se procesa **por lotes** de 5.000 filas (se cambia en Configuración → Cargas grandes). Cada lote es independiente: si algo se corta, lo que hicieron los lotes terminados queda y no hay que empezar de nuevo. Así se pueden cargar bases de cientos de miles de empresas.
@@ -273,7 +277,7 @@ Comparás la fila que llegó con la empresa existente y elegís: **Alta nueva** 
 
 | Dimensión | Qué mide | Meta |
 | --- | --- | --- |
-| Validez | RUT con dígito verificador correcto; teléfonos en formato uruguayo válido | 100 % |
+| Validez | RUT con dígito verificador correcto (entre los de 12 dígitos); teléfonos en formato uruguayo válido. Las empresas con RUT no verificado se informan aparte, sin meta | 100 % |
 | Unicidad | Una empresa por RUT, un teléfono por número y los posibles duplicados sin resolver | 100 % y 0 pendientes |
 | Completitud | Empresas disponibles con al menos 1 teléfono discable, CIIU y departamento | ≥ 90 % |
 | Exactitud | Teléfonos verificados por la sala sobre el total de discables | Que suba cada trimestre |
@@ -566,7 +570,7 @@ Todos los parámetros de negocio están en **Configuración** y se cambian sin p
 | Prefijos de salida | Dígitos que la central agrega para tomar línea y que hay que quitar |
 | Franjas horarias | Nombre, días y horario de cada franja del tablero |
 | Formato del CSV | Separador y columnas, para que coincida con la importación de uContact |
-| Cargas grandes | Filas por lote (5.000; entre 500 y 20.000), pausa entre lotes (1 s) y minutos sin avanzar para retomarla sola (10; si se vuelve a cortar, queda interrumpida). Ver «Cargas grandes» |
+| Cargas grandes | Filas por lote (5.000; entre 500 y 20.000), pausa entre lotes (1 s), minutos sin avanzar para retomarla sola (10; si se vuelve a cortar, queda interrumpida) y si se aceptan identificadores de 6 a 11 dígitos como RUT no verificado (sí). Ver «Cargas grandes» y «Cargar una base» |
 
 En el historial, tocá una versión para ver todos sus parámetros.
 
@@ -715,6 +719,7 @@ Registro inalterable de cargas, fusiones, exclusiones, sorteos, exportaciones, i
 
 | Término | Significado |
 | --- | --- |
+| RUT no verificado | Identificador de 6 a 11 dígitos (por ejemplo, una cédula) aceptado sin controlar el registro ni el dígito verificador. Se filtra en Empresas y el tablero de calidad lo cuenta aparte |
 | Ítem de muestra | Una empresa sorteada en una muestra, con su estrato, rol (titular o reemplazo) y orden |
 | Parte | Una encuesta de Alchemer dentro de un estudio, con su respondente objetivo |
 | Marco | Las empresas disponibles que cumplen los filtros al momento de sortear |

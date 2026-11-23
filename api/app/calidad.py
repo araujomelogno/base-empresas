@@ -58,6 +58,8 @@ DIMENSIONES = [
 #   tipo: minimo (valor ≥ meta), maximo (valor ≤ meta), sube (≥ que hace 90 días), info
 INDICADORES = {
     "rut_valido": ("validez", "RUT válido", "minimo", 100, "%"),
+    # D54: identificadores de 6 a 11 dígitos aceptados sin validar; no cuentan como RUT inválido
+    "rut_no_verificado": ("validez", "Empresas con RUT no verificado", "info", None, ""),
     "telefono_valido": ("validez", "Teléfonos E.164 de Uruguay", "minimo", 100, "%"),
     "rut_unico": ("unicidad", "Una empresa por RUT", "minimo", 100, "%"),
     "telefono_unico": ("unicidad", "Un teléfono por número", "minimo", 100, "%"),
@@ -87,8 +89,9 @@ def calcular(conn) -> dict[str, dict]:
     excluidas = cfg.get("naturalezas_excluidas") or []
     out = {}
     ruts = [r["rut"] for r in conn.execute(f"SELECT e.rut FROM empresa e WHERE {DEFINITIVA}")]
-    validos = sum(1 for r in ruts if rutmod.es_valido(r))
-    out["rut_valido"] = (validos, len(ruts))
+    de12 = [r for r in ruts if r and len(r) == 12]
+    out["rut_valido"] = (sum(1 for r in de12 if rutmod.es_valido(r)), len(de12))
+    out["rut_no_verificado"] = (len(ruts) - len(de12), len(ruts))
     out["rut_unico"] = (len(set(ruts)), len(ruts))
     t = conn.execute(
         f"SELECT count(DISTINCT t.id) AS den, count(DISTINCT t.id) FILTER (WHERE t.e164 LIKE '+598%%') AS num,"
@@ -222,8 +225,15 @@ def incumplen(conn, indicador: str, pagina: int = 1) -> dict:
     if indicador == "rut_valido":
         malos = [r for r in conn.execute(f"SELECT e.id, e.codigo, e.rut, e.razon_social, e.departamento FROM empresa e"
                                          f" WHERE {DEFINITIVA} ORDER BY e.razon_social")
-                 if not rutmod.es_valido(r["rut"])]
+                 if r["rut"] and len(r["rut"]) == 12 and not rutmod.es_valido(r["rut"])]
         filas = [{**r, "problema": rutmod.validar(r["rut"])[1]} for r in malos]
+        ini = (pagina - 1) * POR_PAGINA
+        return {"tipo": tipo_lista, "total": len(filas), "pagina": pagina, "por_pagina": POR_PAGINA,
+                "filas": filas[ini:ini + POR_PAGINA]}
+    if indicador == "rut_no_verificado":
+        filas = conn.execute(f"SELECT e.id, e.codigo, e.rut, e.razon_social, e.departamento,"
+                             " length(e.rut) || ' dígitos' AS problema FROM empresa e"
+                             f" WHERE {DEFINITIVA} AND e.rut_verificado = false ORDER BY e.razon_social").fetchall()
         ini = (pagina - 1) * POR_PAGINA
         return {"tipo": tipo_lista, "total": len(filas), "pagina": pagina, "por_pagina": POR_PAGINA,
                 "filas": filas[ini:ini + POR_PAGINA]}

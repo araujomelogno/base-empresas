@@ -3,6 +3,10 @@
 El RUT tiene 12 dígitos: 2 de registro (01–22), 6 de número, "001" y el dígito
 verificador. El verificador se calcula con módulo 11 y pesos 4,3,2,9,8,7,6,5,4,3,2;
 si el resultado da 10 el RUT es inválido.
+
+D54 (SPEC_rut_sin_control_de_largo): con «cortos», un identificador de 6 a 11 dígitos (por ejemplo, la cédula de una
+unipersonal) se acepta sin validar el registro ni el dígito verificador: queda como RUT «no verificado». Un valor de
+12 dígitos se valida siempre como RUT de la DGI.
 """
 import re
 
@@ -30,25 +34,49 @@ def digito_verificador(primeros11: str) -> int | None:
     return None if dv == 10 else dv
 
 
-def validar(valor) -> tuple[str | None, str | None]:
-    """Devuelve (rut_compacto, None) si es válido o (None, motivo) si no."""
+CORTO_MIN, CORTO_MAX = 6, 11
+
+
+def _validar12(s: str) -> str | None:
+    """El motivo por el que un valor de 12 dígitos no es un RUT válido, o None si lo es."""
+    if not ("01" <= s[:2] <= "22"):
+        return "RUT con registro inválido (dígitos 1–2)"
+    if s[2:8] == "000000":
+        return "RUT con número en cero"
+    if s[8:11] != "001":
+        return "RUT sin el 001 en las posiciones 9–11"
+    dv = digito_verificador(s[:11])
+    if dv is None or int(s[11]) != dv:
+        return "dígito verificador incorrecto"
+    return None
+
+
+def validar(valor, cortos: bool = False) -> tuple[str | None, str | None]:
+    """Devuelve (rut_compacto, None) si se acepta o (None, motivo) si no.
+    cortos=True (D54): un identificador de 6 a 11 dígitos se acepta tal como vino, «no verificado»."""
     s = compactar(valor)
     if not s:
         return None, "sin RUT"
     if not s.isdigit():
         return None, "RUT con caracteres no numéricos"
-    if len(s) != 12:
-        return None, f"RUT con {len(s)} dígitos (se esperan 12)"
-    if not ("01" <= s[:2] <= "22"):
-        return None, "RUT con registro inválido (dígitos 1–2)"
-    if s[2:8] == "000000":
-        return None, "RUT con número en cero"
-    if s[8:11] != "001":
-        return None, "RUT sin el 001 en las posiciones 9–11"
-    dv = digito_verificador(s[:11])
-    if dv is None or int(s[11]) != dv:
-        return None, "dígito verificador incorrecto"
-    return s, None
+    if len(s) == 12:
+        motivo = _validar12(s)
+        if motivo is None:
+            return s, None
+        original = re.sub(r"[\s.\-/]", "", str(int(valor) if isinstance(valor, float) and valor.is_integer() else valor)).upper()
+        original = original[2:] if original.startswith("UY") else original
+        # 11 dígitos a los que se les repuso el 0 de adelante y no dan un RUT válido: se aceptan como vinieron
+        if cortos and len(original) == 11 and original.isdigit():
+            return original, None
+        return None, motivo
+    if cortos and CORTO_MIN <= len(s) <= CORTO_MAX:
+        return s, None
+    return None, f"RUT con {len(s)} dígitos (se esperan 12)"
+
+
+def verificado(rut: str | None) -> bool | None:
+    """True: RUT de 12 dígitos validado; False: identificador aceptado sin validar (D54); None: sin RUT."""
+    return None if not rut else len(rut) == 12
 
 
 def es_valido(valor) -> bool:

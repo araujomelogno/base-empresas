@@ -263,7 +263,7 @@ def por_rut(conn, rut: str, seguir_fusion: bool = True) -> dict | None:
     if m:
         emp = conn.execute("SELECT * FROM empresa WHERE id = %s AND rut IS NULL", (int(m.group(1)),)).fetchone()
     else:
-        r, _ = rutmod.validar(rut)
+        r, _ = rutmod.validar(rut, cortos=True)   # D54: también los identificadores no verificados que ya están
         if r is None:
             return None
         emp = conn.execute("SELECT * FROM empresa WHERE rut = %s", (r,)).fetchone()

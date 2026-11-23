@@ -237,7 +237,8 @@ def test_borrar_interrumpido_se_retoma(api, sql, monkeypatch):
 
 def test_configuracion_de_cargas(api, sql):
     cfg = api.get("/config").json()["parametros"]
-    assert cfg["cargas"] == {"tamano_lote": 5000, "pausa_segundos": 1.0, "minutos_trabada": 10}
+    assert cfg["cargas"] == {"tamano_lote": 5000, "pausa_segundos": 1.0, "minutos_trabada": 10,
+                             "aceptar_rut_no_verificado": True}
     cfg["cargas"]["tamano_lote"] = 100
     assert api.put("/config", json={"parametros": cfg}).status_code == 422          # mínimo 500
     cfg["cargas"]["tamano_lote"] = 2000

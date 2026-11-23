@@ -28,6 +28,7 @@ Registro maestro de empresas por RUT del que salen muestras aleatorias y auditab
 | Despliegue de «Siguiente» sin esperas: el archivo se lee una vez y la carga se crea en segundo plano | [`docs/despliegue_carga_asincrona.md`](docs/despliegue_carga_asincrona.md) |
 | Despliegue de la robustez de las cargas: servicio de tareas, tareas que se retoman solas y migración antes de desplegar | [`docs/despliegue_robustez.md`](docs/despliegue_robustez.md) |
 | Despliegue de los lotes de carga rápidos (por tandas, planes de consulta correctos y medición por lote) | [`docs/despliegue_lotes_rapidos.md`](docs/despliegue_lotes_rapidos.md) |
+| Despliegue de RUT sin control de largo (identificadores de 6 a 11 dígitos como «RUT no verificado») | [`docs/despliegue_rut_no_verificado.md`](docs/despliegue_rut_no_verificado.md) |
 
 ## Estructura
 

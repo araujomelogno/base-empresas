@@ -215,7 +215,7 @@ class Contexto:
             valor_rut = texto(fila.get(var_rut)) if var_rut else None
         if not valor_rut:
             return None, "sin identificador", []
-        r, motivo = rutmod.validar(valor_rut)
+        r, motivo = rutmod.validar(valor_rut, cortos=True)   # D54: el EC_RUT de un identificador no verificado
         if r is None:
             return None, f"RUT inválido: {motivo}", []
         cands = self.por_rut.get(r, [])

@@ -39,14 +39,14 @@ ALARMA_SEGUNDOS = 600      # un lote que tarda más que esto deja una alarma en 
 _celda = celda_json
 
 
-def armar_lotes(filas: list[dict], mapeo: dict, tamano: int) -> list[int]:
+def armar_lotes(filas: list[dict], mapeo: dict, tamano: int, cortos: bool = False) -> list[int]:
     """Número de lote de cada fila. Las filas con el mismo RUT válido van juntas (en el orden en que aparece el RUT
     por primera vez), sin partir un grupo; las que no traen un RUT válido van en los últimos lotes."""
     col = mapeo.get("rut")
     grupos: dict[str, list[int]] = {}
     sin_rut: list[int] = []
     for i, f in enumerate(filas):
-        r = rutmod.validar(texto(f.get(col)))[0] if col and texto(f.get(col)) else None
+        r = rutmod.validar(texto(f.get(col)), cortos)[0] if col and texto(f.get(col)) else None
         if r:
             grupos.setdefault(r, []).append(i)
         else:
@@ -81,7 +81,7 @@ def preparar_lotes(conn, carga: dict, tarea_id: int | None = None) -> dict:
                          (col or "", archivo["id"])).fetchall()
     _, params = config.vigente(conn)
     lote_de = armar_lotes([{col: f["rut"]} if col else {} for f in filas], carga["mapeo"] or {},
-                          config.cargas(params)["tamano_lote"])
+                          config.cargas(params)["tamano_lote"], config.rut_cortos(params))
     conn.execute("DELETE FROM carga_fila WHERE carga_id = %s", (carga["id"],))
     conn.execute("DELETE FROM carga_lote WHERE carga_id = %s", (carga["id"],))
     with conn.cursor() as cur:

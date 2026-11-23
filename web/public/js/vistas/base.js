@@ -40,7 +40,7 @@ export async function inicio(ctx) {
 }
 
 // ── Buscador ──
-let _filtros = { q: '', departamento: '', tamano: '', naturaleza: '', disponible: '', base: 'definitiva', sin_telefono: '', sin_web: '', pagina: 1 };
+let _filtros = { q: '', departamento: '', tamano: '', naturaleza: '', disponible: '', base: 'definitiva', sin_telefono: '', sin_web: '', rut_verificado: '', pagina: 1 };
 
 export async function empresas(ctx) {
   const v = await api.get('/empresas/valores');
@@ -60,10 +60,11 @@ export async function empresas(ctx) {
         `<option value="${k}" ${k === _filtros.base ? 'selected' : ''}>${t}</option>`).join('')}</select>
       <select class="fselect" id="f-sin_telefono">${opt([['true', 'Sin teléfono discable'], ['false', 'Con teléfono discable']], _filtros.sin_telefono, 'Teléfono')}</select>
       <select class="fselect" id="f-sin_web">${opt([['true', 'Sin sitio web'], ['false', 'Con sitio web']], _filtros.sin_web, 'Sitio web')}</select>
+      <select class="fselect" id="f-rut_verificado">${opt([['true', 'RUT verificado'], ['false', 'RUT no verificado']], _filtros.rut_verificado, 'RUT')}</select>
       <button class="btn btn-dark btn-sm" id="f-buscar">Buscar</button></div></div>
       <div class="card-body tight" id="e-res"></div></div>`;
   const buscar = async (pagina = 1) => {
-    ['q', 'departamento', 'tamano', 'naturaleza', 'disponible', 'base', 'sin_telefono', 'sin_web'].forEach(k => { _filtros[k] = $('#f-' + k).value; });
+    ['q', 'departamento', 'tamano', 'naturaleza', 'disponible', 'base', 'sin_telefono', 'sin_web', 'rut_verificado'].forEach(k => { _filtros[k] = $('#f-' + k).value; });
     _filtros.pagina = pagina;
     const r = await api.get('/empresas', _filtros);
     if (r.item && r.empresas.length === 1) {  // F1.4: #1234 lleva directo a la ficha, pestaña Muestras, con la fila resaltada
@@ -76,7 +77,7 @@ export async function empresas(ctx) {
     }
     const paginas = Math.max(1, Math.ceil(r.total / 50));
     $('#e-res').innerHTML = tabla([
-      { t: 'RUT / código', f: e => `<a class="link mono" href="#/empresas/${e.rut}">${rutFmt(e.rut)}</a>${e.base === 'provisoria' ? ` ${est('sospechoso', 'provisoria')}` : ''}` },
+      { t: 'RUT / código', f: e => `<a class="link mono" href="#/empresas/${e.rut}">${rutFmt(e.rut)}</a>${e.base === 'provisoria' ? ` ${est('sospechoso', 'provisoria')}` : ''}${e.rut_verificado === false ? ` ${est('sospechoso', 'no verificado')}` : ''}` },
       { t: 'Razón social', f: e => `<span class="td-strong">${esc(e.razon_social || '—')}</span>${e.fantasia ? `<div class="small muted">${esc(e.fantasia)}</div>` : ''}` },
       { t: 'Departamento', k: 'departamento' }, { t: 'Tamaño', k: 'tamano' }, { t: 'Nat.', k: 'naturaleza' },
       { t: 'Tel. discables', cls: 'num', f: e => num(e.telefonos_discables) },
@@ -88,7 +89,7 @@ export async function empresas(ctx) {
        <button class="btn btn-outline btn-sm" id="p-sig" ${r.pagina >= paginas ? 'disabled' : ''}>Siguiente ›</button></span></div>`;
     if ($('#e-enriquecer')) $('#e-enriquecer').onclick = () => {
       const filtros = Object.fromEntries(Object.entries(_filtros).filter(([k, v]) => k !== 'pagina' && v !== ''));
-      ['disponible', 'sin_telefono', 'sin_web'].forEach(k => { if (k in filtros) filtros[k] = filtros[k] === 'true'; });
+      ['disponible', 'sin_telefono', 'sin_web', 'rut_verificado'].forEach(k => { if (k in filtros) filtros[k] = filtros[k] === 'true'; });
       enriquecer(ctx, { origen: 'lista', filtros, alcance: 'todas' });
     };
     $('#p-ant').onclick = () => buscar(r.pagina - 1);
@@ -210,7 +211,7 @@ export async function ficha(ctx, rut, params) {
   const prov = e.base === 'provisoria';
   if (prov) acciones.unshift(...(ctx.puede('steward') && !e.baja ? [`<button class="btn btn-orange btn-sm" id="a-rut">Agregar RUT</button>`,
     `<button class="btn btn-outline btn-sm" id="a-fus-def">Fusionar con…</button>`] : []));
-  main().innerHTML = pageHeader(e.razon_social || 'Empresa sin razón social', '', `${prov ? `${est('sospechoso', 'Provisoria')} Código <strong class="mono">${esc(e.codigo)}</strong>` : `RUT <strong class="mono">${rutFmt(e.rut)}</strong>`}
+  main().innerHTML = pageHeader(e.razon_social || 'Empresa sin razón social', '', `${prov ? `${est('sospechoso', 'Provisoria')} Código <strong class="mono">${esc(e.codigo)}</strong>` : `RUT <strong class="mono">${rutFmt(e.rut)}</strong>${e.rut_verificado === false ? ` ${est('sospechoso', `RUT no verificado (${e.rut.length} dígitos)`)}` : ''}`}
     ${e.fantasia ? ' · ' + esc(e.fantasia) : ''} · ${estDe('empresa', e.estado)} ${e.baja ? est('error', e.baja) : ''}`, acciones.join('')) +
     (prov && !e.baja ? `<div class="alert alert-info"><span><strong>Empresa de la base provisoria</strong> (no trae RUT). Se puede sortear y llamar.
       Pasa a la base definitiva al agregarle el RUT o al fusionarla con una empresa que lo tiene.<span id="f-cands"></span></span></div>` : '') +
