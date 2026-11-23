@@ -73,3 +73,6 @@ TAREA_RETOMAR_SEGUNDOS = int(os.environ.get("TAREA_RETOMAR_SEGUNDOS", 180))
 MEMORIA_LIMITE_MB = int(os.environ["MEMORIA_LIMITE_MB"]) if os.environ.get("MEMORIA_LIMITE_MB") else None
 # URL del servicio de Cloud Run que ejecuta las tareas (empresas-tareas); si no, la de la API
 TAREAS_URL = os.environ.get("TAREAS_URL", "")
+# D53: filas por tanda dentro de un lote (pocas consultas por tanda); CARGAS_POR_FILA=1 vuelve al algoritmo anterior
+CARGAS_TANDA = int(os.environ.get("CARGAS_TANDA", 500))
+CARGAS_POR_FILA = os.environ.get("CARGAS_POR_FILA") == "1"

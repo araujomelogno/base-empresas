@@ -36,6 +36,12 @@ WHERE h.empresa_id = %s
 """
 
 
+# La misma consulta, para muchas empresas a la vez (D53)
+_CANDIDATOS_VARIAS = _CANDIDATOS_SQL.replace("SELECT h.id,", "SELECT h.empresa_id, h.id,", 1).replace(
+    "WHERE h.empresa_id = %s", "WHERE h.empresa_id = ANY(%s)", 1)
+assert "ANY(%s)" in _CANDIDATOS_VARIAS and "h.empresa_id, h.id" in _CANDIDATOS_VARIAS
+
+
 def ganador(filas: list[dict]) -> dict | None:
     """Aplica la regla de supervivencia a las filas de historia de un campo."""
     if not filas:
@@ -102,6 +108,65 @@ def recalcular(conn, empresa_id: int, campos=None) -> dict:
     if todos:  # también los atributos (deshacer una carga, fusionar)
         recalcular_atributos(conn, empresa_id)
     return cambios
+
+
+def recalcular_varias(conn, ids: list[int]) -> int:
+    """Como recalcular(conn, id) —todos los campos y todos los atributos— para muchas empresas, con unas pocas
+    consultas en lugar de unas cinco por empresa (D53: deshacer y borrar por tandas). Devuelve cuántas cambiaron."""
+    ids = sorted(set(ids))
+    if not ids:
+        return 0
+    emps = {e["id"]: e for e in conn.execute(
+        "SELECT e.*, n.codigo AS naturaleza FROM empresa e LEFT JOIN naturaleza_juridica n ON n.id = e.naturaleza_id"
+        " WHERE e.id = ANY(%s)", (ids,))}
+    cands: dict[int, dict[str, list]] = {}
+    for f in conn.execute(_CANDIDATOS_VARIAS, (ids,)):
+        cands.setdefault(f["empresa_id"], {}).setdefault(f["campo"], []).append(f)
+    nat_id = {n["codigo"]: n["id"] for n in conn.execute("SELECT id, codigo FROM naturaleza_juridica")}
+    cambiadas = []
+    for eid, emp in emps.items():
+        nuevos = {}
+        for c in CAMPOS:
+            g = ganador(cands.get(eid, {}).get(c, []))
+            nuevos[c] = g["valor"] if g else (None if c != "estado" else "desconocida")
+        if any(nuevos[c] != emp[c] for c in CAMPOS):
+            cambiadas.append((eid, nuevos))
+    if cambiadas:
+        cols = [c for c in CAMPOS if c != "naturaleza"]
+        conn.execute(
+            "UPDATE empresa e SET " + ", ".join(f"{c} = v.{c}" for c in cols) + ", naturaleza_id = v.naturaleza_id,"
+            " actualizado = now() FROM unnest(%s::int[], %s::int[], " + ", ".join("%s::text[]" for _ in cols) +
+            ") AS v(id, naturaleza_id, " + ", ".join(cols) + ") WHERE e.id = v.id AND e.id = ANY(%s::int[])",
+            ([e for e, _ in cambiadas], [nat_id.get(n["naturaleza"]) for _, n in cambiadas],
+             *[[n[c] for _, n in cambiadas] for c in cols], [e for e, _ in cambiadas]))
+    # Atributos: los que alguna vez tuvo en la historia (aunque ya no cuenten) y los que tiene ahora
+    pref = catalogos.PREFIJO
+    campos: dict[int, set] = {}
+    for r in conn.execute("SELECT DISTINCT empresa_id, campo FROM empresa_campo_historia WHERE empresa_id = ANY(%s)"
+                          " AND campo LIKE 'atributo.%%'", (ids,)):
+        campos.setdefault(r["empresa_id"], set()).add(r["campo"])
+    for r in conn.execute("SELECT ea.empresa_id, a.clave FROM empresa_atributo ea JOIN atributo a ON a.id = ea.atributo_id"
+                          " WHERE ea.empresa_id = ANY(%s)", (ids,)):
+        campos.setdefault(r["empresa_id"], set()).add(pref + r["clave"])
+    defs = {a["clave"]: a for a in conn.execute("SELECT * FROM atributo")}
+    borrar, poner = [], []
+    for eid, cs in campos.items():
+        for campo in sorted(cs):
+            a = defs.get(campo[len(pref):])
+            if a is None:
+                continue
+            g = ganador(cands.get(eid, {}).get(campo, []))
+            if a["fusionado_en"] or g is None:
+                borrar.append((eid, a["id"]))
+            else:
+                poner.append((eid, a, g))
+    if borrar:
+        conn.execute("DELETE FROM empresa_atributo ea USING unnest(%s::int[], %s::int[]) AS x(e, a)"
+                     " WHERE ea.empresa_id = x.e AND ea.atributo_id = x.a AND ea.empresa_id = ANY(%s::int[])",
+                     ([e for e, _ in borrar], [a for _, a in borrar], [e for e, _ in borrar]))
+    if poner:
+        catalogos.poner_atributos(conn, poner)
+    return len(cambiadas)
 
 
 def recalcular_atributos(conn, empresa_id: int, claves=None) -> dict:

@@ -231,6 +231,9 @@ def _tarea_borrar_carga(conn, payload, tarea_id):
     x = conn.execute
     actor = tareas_actor(conn, tarea_id)
     paso = carga["paso"] or "preparar"
+    if paso == "preparar":
+        lotes.analizar_tablas()       # V1 (D53): antes del primer paso
+    lotes.planes_correctos(conn)
     res = dict(carga["resumen_op"] or {})
     pausa = 0
 
@@ -296,8 +299,7 @@ def _tarea_borrar_carga(conn, payload, tarea_id):
             res[k] = res.get(k, 0) + n.get(k, 0)
         res["empresas_borradas"] = res.get("empresas_borradas", 0) + n.get("empresas", 0)
         quedan = [r["id"] for r in x("SELECT id FROM empresa WHERE id = ANY(%s) ORDER BY id", (ids,))]
-        for eid in quedan:
-            empresas.recalcular(conn, eid)
+        empresas.recalcular_varias(conn, quedan)   # D53: una tanda de consultas, no cinco por empresa
         res["empresas_recalculadas"] = res.get("empresas_recalculadas", 0) + len(quedan)
         x("DELETE FROM carga_trabajo WHERE carga_id = %s AND tipo = 'empresa' AND objeto_id = ANY(%s)", (cid, ids))
         hechas = res["empresas_borradas"] + res["empresas_recalculadas"]

@@ -268,9 +268,13 @@ def test_volumen_50000_filas(api, sql, monkeypatch):
     t0 = time.monotonic()
     c = cargar(api, filas)
     total = time.monotonic() - t0
-    lotes = sql.execute("SELECT numero, segundos, preview_segundos FROM carga_lote WHERE carga_id = %s ORDER BY numero",
-                        (c["id"],)).fetchall()
+    lotes = sql.execute("SELECT numero, filas, segundos, preview_segundos, consultas, preview_consultas FROM carga_lote"
+                        " WHERE carga_id = %s ORDER BY numero", (c["id"],)).fetchall()
+    filas_s = lambda seg: [round(l["filas"] / float(l[seg])) for l in lotes]   # noqa: E731
     print(f"\n50.000 filas: {total:.0f} s en total; segundos por lote: preview {[float(l['preview_segundos']) for l in lotes]},"
-          f" confirmación {[float(l['segundos']) for l in lotes]}")
+          f" confirmación {[float(l['segundos']) for l in lotes]}; filas por segundo: preview {filas_s('preview_segundos')},"
+          f" confirmación {filas_s('segundos')}; consultas por fila: preview "
+          f"{sum(l['preview_consultas'] for l in lotes) / 50000:.3f}, confirmación {sum(l['consultas'] for l in lotes) / 50000:.3f}")
     assert c["estado"] == "confirmada" and cuenta(sql, "empresa") == 50000
     assert max(max(float(l["segundos"]), float(l["preview_segundos"])) for l in lotes) < 180   # meta: < 3 min por lote
+    assert sum(l["consultas"] for l in lotes) / 50000 < 0.1                                    # D53: < 0,1 por fila
