@@ -21,7 +21,7 @@ import psycopg
 import psycopg.types.json
 from fastapi import HTTPException
 
-from . import auditoria, contactos as contmod, empresas, intermediarios, storage, tareas
+from . import auditoria, contactos as contmod, empresas, intermediarios, mantenimiento, storage, tareas
 
 log = logging.getLogger(__name__)
 
@@ -341,6 +341,7 @@ def _tarea_borrar_carga(conn, payload, tarea_id):
     total = res.get("empresas_total", 0) + 2
     tareas.progreso(tarea_id, total, total)
     lotes._liberar_al_terminar(conn)
+    mantenimiento.al_terminar(f"carga #{cid} borrada", mantenimiento.CARGA + mantenimiento.MUESTRA)
     if arch:
         try:
             storage.borrar(arch)
@@ -427,6 +428,7 @@ def _tarea_borrar_muestra(conn, payload, tarea_id):
                "estado": m["estado"], "semilla": m["semilla"], **{k: v for k, v in n.items() if k != "muestras"}}
     auditoria.registrar(conn, tareas_actor(conn, tarea_id), "muestra.borrar", "muestra", mid, resumen)
     tareas.progreso(tarea_id, 1, 1)
+    mantenimiento.al_terminar(f"muestra #{mid} borrada", mantenimiento.MUESTRA)
     return resumen
 
 
@@ -469,6 +471,7 @@ def _tarea_borrar_estudio(conn, payload, tarea_id):
     except psycopg.errors.LockNotAvailable as ex:
         raise _ocupado(f"El estudio «{eid}»") from ex
     auditoria.registrar(conn, tareas_actor(conn, tarea_id), "estudio.borrar", "estudio", eid, resumen)
+    mantenimiento.al_terminar(f"estudio #{eid} borrado", mantenimiento.MUESTRA)
     for arch in archivos:
         try:
             storage.borrar(arch)

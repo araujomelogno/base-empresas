@@ -2,7 +2,7 @@
 import * as api from '../api.js';
 import { tarjetaEnriquecimiento, leerEnriquecimiento, activarEnriquecimiento } from './fase2.js';
 import { $, $$, esc, main, toast, num, fechaHora, est, pageHeader, tabla, card, modal, pedirTexto, confirmar, tabs,
-  json } from '../ui.js';
+  json, fecha, hace, ocupado } from '../ui.js';
 
 const CAMPOS_CSV = ['id_item', 'tel_e164', 'tel_nacional', 'tel_sin_mas', 'rut', 'razon_social', 'fantasia', 'contacto', 'contacto_cargo',
   'departamento', 'localidad', 'estrato', 'link', 'parte', 'muestra', 'origen_telefono'];
@@ -20,6 +20,43 @@ function tarjetaCargas(k, dis) {
     <div class="form-group"><label class="check"><input type="checkbox" id="c-rut-cortos" ${k.aceptar_rut_no_verificado !== false ? 'checked' : ''} ${dis} />
       Aceptar identificadores de 6 a 11 dígitos sin validar</label>
       <div class="field-hint">Por ejemplo, la cédula de una unipersonal. Entran como «RUT no verificado» (se pueden filtrar en Empresas y el tablero de calidad los cuenta). Un RUT de 12 dígitos se valida siempre.</div></div></div>`);
+}
+
+// D55 (SPEC_rendimiento_base_grande): estadísticas, disponibilidad guardada, resúmenes y las 10 consultas más lentas
+async function pintarRendimiento(ctx) {
+  const el = $('#c-rendimiento');
+  if (!el) return;
+  let m;
+  try { m = await api.get('/mantenimiento'); } catch (e) { el.innerHTML = card('Rendimiento de la base', `<div class="alert alert-error">${esc(e.message)}</div>`); return; }
+  const d = m.disponibilidad, st = m.estadisticas, cl = m.consultas_lentas;
+  const NOMBRES = { valores: 'Valores de los filtros', inicio: 'Contadores de Inicio', naturalezas: 'Uso de las naturalezas' };
+  el.innerHTML = card('Rendimiento de la base', `
+    <div class="form-row"><div>
+      <p><strong>Estadísticas de la base actualizadas: ${hace(st.actualizadas)}</strong>
+        <span class="small muted">(${st.actualizadas ? fechaHora(st.actualizadas) : 'nunca'} · se actualizan al terminar cada carga, deshacer o borrado, y en el job diario)</span></p>
+      <p>Disponibilidad guardada: ${d.lista ? est('ok', 'lista') : est('sospechoso', d.recalculo ? `preparándose: ${num(d.recalculo.hechas)} de ${num(d.recalculo.total)}` : 'por preparar')}
+        ${d.pendientes ? `<span class="small muted"> · ${num(d.pendientes)} empresas por recalcular</span>` : ''}</p>
+      ${m.tarea ? `<p class="small">Mantenimiento ${est(m.tarea.estado)} ${esc(m.tarea.mensaje || '')}</p>` : ''}
+      <p class="small muted">Cada consulta de la web tiene ${num(m.pool.limite_consulta_segundos)} s como máximo; con la base ocupada, un pedido espera
+        ${num(m.pool.espera_segundos)} s por una de sus ${num(m.pool.conexiones)} conexiones.</p>
+    </div><div>
+      ${tabla([{ t: 'Resumen', f: r => esc(NOMBRES[r.clave] || r.clave) }, { t: 'Actualizado', f: r => hace(r.actualizado) },
+        { t: 'Cálculo', cls: 'num', f: r => r.segundos === null ? '—' : `${num(r.segundos)} s` }], m.resumenes, 'Todavía no se calcularon')}
+      <button class="btn btn-outline btn-sm mt" id="c-recalcular">Recalcular ahora</button>
+    </div></div>
+    <h4 class="mt">Las 10 consultas más lentas${cl.desde ? ` <span class="small muted">(desde ${fecha(cl.desde)})</span>` : ''}</h4>
+    ${cl.disponible ? tabla([{ t: 'Consulta', f: q => `<code class="small" style="white-space:normal;word-break:break-word">${esc(q.consulta)}</code>` },
+      { t: 'Veces', cls: 'num', f: q => num(q.llamadas) }, { t: 'Promedio', cls: 'num', f: q => `${num(q.media_ms)} ms` },
+      { t: 'Máximo', cls: 'num', f: q => `${num(q.max_ms)} ms` }], cl.consultas, 'Sin datos todavía')
+      : `<p class="small muted">No disponible: ${esc(cl.motivo || '')}</p>`}`);
+  $('#c-recalcular').onclick = async (ev) => {
+    const listo = ocupado(ev.target, 'Recalculando…');
+    try {
+      const r = await api.post('/mantenimiento/recalcular');
+      toast(r.en_el_momento ? 'Resúmenes recalculados' : 'Recalculando en segundo plano: puede tardar unos minutos', 'ok');
+      pintarRendimiento(ctx);
+    } catch (e) { toast(e.message, 'err'); } finally { listo(); }
+  };
 }
 
 export async function config(ctx) {
@@ -53,6 +90,7 @@ export async function config(ctx) {
     card('Formato del CSV para uContact', `<div class="form-row"><div class="form-group"><label>Separador</label><input type="text" id="c-sep" value="${esc(p.csv_ucontact.separador)}" maxlength="1" ${dis} /></div><div></div></div>
       <div id="c-cols"></div>${editable ? `<button class="btn btn-outline btn-sm" id="c-col-mas">+ Columna</button>` : ''}`) +
     tarjetaCargas(p.cargas || {}, dis) +
+    (editable ? '<div id="c-rendimiento"></div>' : '') +
     tarjetaCdr(p.cdr, c.cdr_password, editable) +
     (enr ? tarjetaEnriquecimiento(p.enriquecimiento, p.dominios_genericos, enr.proveedores, editable) : '') +
     `<div class="grid-2">${editable ? card('Guardar', `<div class="form-group"><label>Comentario del cambio</label><input type="text" id="c-coment" placeholder="p. ej. enfriamiento a 12 meses (dirección, 30/10)" /></div>
@@ -60,6 +98,7 @@ export async function config(ctx) {
       ${card('Historial de versiones', tabla([{ t: 'Versión', f: h => `<a class="link" data-ver="${h.version}">v${h.version}</a>` }, { t: 'Autor', k: 'autor' },
         { t: 'Comentario', k: 'comentario' }, { t: 'Fecha', f: h => fechaHora(h.fecha) }], c.historial), '', true)}</div>`;
 
+  if (editable) pintarRendimiento(ctx);
   let franjas = p.franjas.map(f => ({ ...f }));
   let cols = p.csv_ucontact.columnas.map(x => ({ ...x }));
   const pintarFranjas = () => {
@@ -386,7 +425,8 @@ export async function naturalezas(ctx) {
     ], lista), '', true) +
     `<p class="small muted mt">Cambiar una exclusión crea una versión nueva de la configuración. El código de una naturaleza en uso no se cambia: lo guardan
       la historia de las empresas, la configuración y los criterios de las muestras. Solo se borra (o se le corrige el código a) una naturaleza que ninguna
-      empresa usa ni usó. La carga inicial sale de la hoja "excluidos" del Excel de referencia (ver fase0/cargar_excluidos.py).</p>`;
+      empresa usa ni usó. La carga inicial sale de la hoja "excluidos" del Excel de referencia (ver fase0/cargar_excluidos.py).
+      ${lista.length ? `Cantidades de empresas actualizadas ${hace(lista[0].uso_actualizado)}.` : ''}</p>`;
   // Por id: una naturaleza vieja puede no tener código
   const de = (id) => lista.find(n => n.id === +id);
   const url = (id) => `/naturalezas/${id}`;

@@ -52,7 +52,9 @@ def filas_csv(conn, muestra_id: int, parte_id: int, con_contactos: bool, formato
     rows = conn.execute(
         """
         WITH excluidas AS (
-          SELECT empresa_id, regla FROM bloqueos(%(cfg)s)
+          -- D55: las reglas solo para las empresas de la muestra (no para toda la base)
+          SELECT empresa_id, regla FROM bloqueos_ids(%(cfg)s, (SELECT array_agg(empresa_id) FROM muestra_item
+                                                                WHERE muestra_id = %(muestra)s))
           WHERE regla IN ('naturaleza_excluida','no_llamar','baja','cerrada')
         )
         SELECT i.id AS id_item, i.estrato, e.id AS empresa_id, e.rut, e.codigo, e.razon_social, e.fantasia, e.departamento,
@@ -177,7 +179,7 @@ def _items_planilla(conn, muestra_id: int, parte_id: int, cfg: dict) -> list[dic
         FROM muestra_item i JOIN empresa e ON e.id = i.empresa_id
         LEFT JOIN item_parte_estado ps ON ps.item_id = i.id AND ps.parte_id = %(parte)s
         WHERE i.muestra_id = %(muestra)s AND i.liberado AND coalesce(ps.estado, 'pendiente') = ANY(%(estados)s)
-          AND NOT EXISTS (SELECT 1 FROM bloqueos(%(cfg)s) b WHERE b.empresa_id = e.id
+          AND NOT EXISTS (SELECT 1 FROM bloqueos_ids(%(cfg)s, ARRAY[e.id]) b WHERE b.empresa_id = e.id
                           AND b.regla IN ('naturaleza_excluida','no_llamar','baja','cerrada'))
         ORDER BY i.estrato, i.orden
         """, {"muestra": muestra_id, "parte": parte_id, "estados": list(ESTADOS_EXPORTABLES), "cfg": Jsonb(cfg)}).fetchall()

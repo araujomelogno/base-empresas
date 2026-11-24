@@ -2,7 +2,7 @@
 import * as api from '../api.js';
 import { agregarRut, fusionarCon } from './provisorias.js';
 import { enriquecer } from './fase2.js';
-import { $, $$, esc, main, toast, num, fecha, fechaHora, rutFmt, est, estDe, etiqueta, pageHeader, stats, tabla, card, modal,
+import { $, $$, esc, main, toast, num, fecha, fechaHora, hace, rutFmt, est, estDe, etiqueta, pageHeader, stats, tabla, card, modal,
   pedirTexto, confirmar, tabs } from '../ui.js';
 
 // ── Inicio ──
@@ -17,8 +17,8 @@ export async function inicio(ctx) {
   main().innerHTML = pageHeader('Hola,', nombre, 'Estado de la base y bandejas pendientes.') +
     (r.cdr.aviso && ctx.puede('coordinador') ? `<div class="alert alert-error"><span><strong>CDR:</strong> ${esc(r.cdr.aviso)}.
       ${ctx.puede('admin') ? '<a class="link" href="#/config">Revisar la conexión</a>' : 'Avisale a un administrador.'}</span></div>` : '') +
-    stats([[r.empresas, 'Empresas activas', 's-total'], [r.disponibles, 'Disponibles para muestra', 's-ok'],
-      [r.con_telefono_discable, 'Con teléfono discable', 's-free'], [r.muestras_activas, 'Muestras activas', 's-warn', '#/muestras?estado=activa'],
+    stats([[r.empresas, 'Empresas activas', 's-total'], [r.disponibles ?? 'calculando…', 'Disponibles para muestra', 's-ok'],
+      [r.con_telefono_discable ?? 'calculando…', 'Con teléfono discable', 's-free'], [r.muestras_activas, 'Muestras activas', 's-warn', '#/muestras?estado=activa'],
       [r.intermediarios, 'Intermediarios confirmados', 's-bad'], [r.intentos_7d, 'Llamadas últimos 7 días', ''],
       ...(r.provisorias ? [[`${num(r.provisorias)}${r.provisorias_con_candidatas ? ` · ${num(r.provisorias_con_candidatas)}` : ''}`,
         `Base provisoria${r.provisorias_con_candidatas ? ' · con candidatas' : ''}`, 's-free', '#/provisorias']] : [])]) +
@@ -36,14 +36,18 @@ export async function inicio(ctx) {
     <div class="card mt"><div class="card-body small muted">
       Configuración vigente: <strong>versión ${r.config_version}</strong> ·
       Última corrida del CDR: <strong>${r.cdr.ultima ? `${fechaHora(r.cdr.ultima.inicio)}</strong> ${est(r.cdr.ultima.estado)}` : 'ninguna</strong>'}${r.cdr.activo ? '' : ' <span class="muted">(job inactivo)</span>'} ·
-      Registros activos en no llamar: <strong>${num(r.no_llamar)}</strong></div></div>`;
+      Registros activos en no llamar: <strong>${num(r.no_llamar)}</strong> ·
+      <span title="Empresas, disponibles, teléfonos e intermediarios se precalculan al terminar cada operación grande y cada 10 minutos si hubo cambios">Contadores
+      actualizados <strong>${hace(r.resumen_actualizado)}</strong>${r.resumen_al_dia ? '' : ' (recalculándose)'}</span></div></div>`;
 }
 
 // ── Buscador ──
-let _filtros = { q: '', departamento: '', tamano: '', naturaleza: '', disponible: '', base: 'definitiva', sin_telefono: '', sin_web: '', rut_verificado: '', pagina: 1 };
+let _filtros = { q: '', departamento: '', tamano: '', naturaleza: '', disponible: '', base: 'definitiva', sin_telefono: '', sin_web: '', rut_verificado: '' };
+// D55: paginación por clave. Cada página guarda desde dónde empieza; «Anterior» vuelve a la clave anterior.
+let _pag = { cursores: [null] };
 
 export async function empresas(ctx) {
-  const v = await api.get('/empresas/valores');
+  const v = await api.valores();
   const opt = (arr, sel, todos) => `<option value="">${todos}</option>` + arr.map(x => {
     const [val, t] = Array.isArray(x) ? x : [x, x];
     return `<option value="${esc(val)}" ${val === sel ? 'selected' : ''}>${esc(t)}</option>`;
@@ -63,10 +67,12 @@ export async function empresas(ctx) {
       <select class="fselect" id="f-rut_verificado">${opt([['true', 'RUT verificado'], ['false', 'RUT no verificado']], _filtros.rut_verificado, 'RUT')}</select>
       <button class="btn btn-dark btn-sm" id="f-buscar">Buscar</button></div></div>
       <div class="card-body tight" id="e-res"></div></div>`;
-  const buscar = async (pagina = 1) => {
+  const buscar = async (mover = 'nueva', exacto = false) => {
     ['q', 'departamento', 'tamano', 'naturaleza', 'disponible', 'base', 'sin_telefono', 'sin_web', 'rut_verificado'].forEach(k => { _filtros[k] = $('#f-' + k).value; });
-    _filtros.pagina = pagina;
-    const r = await api.get('/empresas', _filtros);
+    if (mover === 'nueva') _pag = { cursores: [null] };
+    const i = _pag.cursores.length - 1;
+    const r = await api.get('/empresas', { ..._filtros, despues: _pag.cursores[i], exacto: exacto ? 'true' : '' });
+    r.pagina = i + 1;
     if (r.item && r.empresas.length === 1) {  // F1.4: #1234 lleva directo a la ficha, pestaña Muestras, con la fila resaltada
       ctx.ir(`empresas/${r.empresas[0].rut}?tab=muestras&item=${r.item}`);
       return;
@@ -76,28 +82,32 @@ export async function empresas(ctx) {
       return;
     }
     const paginas = Math.max(1, Math.ceil(r.total / 50));
+    const total = `${r.aproximado ? '≈ ' : ''}${num(r.total)}`;
     $('#e-res').innerHTML = tabla([
       { t: 'RUT / código', f: e => `<a class="link mono" href="#/empresas/${e.rut}">${rutFmt(e.rut)}</a>${e.base === 'provisoria' ? ` ${est('sospechoso', 'provisoria')}` : ''}${e.rut_verificado === false ? ` ${est('sospechoso', 'no verificado')}` : ''}` },
       { t: 'Razón social', f: e => `<span class="td-strong">${esc(e.razon_social || '—')}</span>${e.fantasia ? `<div class="small muted">${esc(e.fantasia)}</div>` : ''}` },
       { t: 'Departamento', k: 'departamento' }, { t: 'Tamaño', k: 'tamano' }, { t: 'Nat.', k: 'naturaleza' },
       { t: 'Tel. discables', cls: 'num', f: e => num(e.telefonos_discables) },
-      { t: 'Disponibilidad', f: e => e.disponible ? est('disponible') : e.reglas.map(r => est('no_disponible', etiqueta(r))).join(' ') },
+      { t: 'Disponibilidad', f: e => e.disponible === null ? '<span class="small muted">calculando…</span>'
+        : e.disponible ? est('disponible') : e.reglas.map(r => est('no_disponible', etiqueta(r))).join(' ') },
     ], r.empresas, 'No hay empresas con esos filtros') +
-      `<div class="card-body gap" style="justify-content:space-between"><span class="small muted">${num(r.total)} empresas · página ${r.pagina} de ${paginas}
-         ${ctx.puede('steward') && r.total ? ` · <a class="link" href="javascript:void 0" id="e-enriquecer">✨ Enriquecer estas ${num(r.total)} empresas</a>` : ''}</span>
+      `<div class="card-body gap" style="justify-content:space-between"><span class="small muted" id="e-total">${total} empresas · página ${num(r.pagina)}${r.aproximado ? '' : ` de ${num(paginas)}`}
+         ${r.aproximado ? ` · <a class="link" href="javascript:void 0" id="e-exacto" title="El total es un estimado: contarlo exacto puede tardar unos segundos">Contar exacto</a>` : ''}
+         ${ctx.puede('steward') && r.total ? ` · <a class="link" href="javascript:void 0" id="e-enriquecer">✨ Enriquecer estas ${total} empresas</a>` : ''}</span>
        <span class="gap"><button class="btn btn-outline btn-sm" id="p-ant" ${r.pagina <= 1 ? 'disabled' : ''}>‹ Anterior</button>
-       <button class="btn btn-outline btn-sm" id="p-sig" ${r.pagina >= paginas ? 'disabled' : ''}>Siguiente ›</button></span></div>`;
+       <button class="btn btn-outline btn-sm" id="p-sig" ${r.siguiente ? '' : 'disabled'}>Siguiente ›</button></span></div>`;
     if ($('#e-enriquecer')) $('#e-enriquecer').onclick = () => {
-      const filtros = Object.fromEntries(Object.entries(_filtros).filter(([k, v]) => k !== 'pagina' && v !== ''));
+      const filtros = Object.fromEntries(Object.entries(_filtros).filter(([, v]) => v !== ''));
       ['disponible', 'sin_telefono', 'sin_web', 'rut_verificado'].forEach(k => { if (k in filtros) filtros[k] = filtros[k] === 'true'; });
       enriquecer(ctx, { origen: 'lista', filtros, alcance: 'todas' });
     };
-    $('#p-ant').onclick = () => buscar(r.pagina - 1);
-    $('#p-sig').onclick = () => buscar(r.pagina + 1);
+    $('#p-ant').onclick = () => { _pag.cursores.pop(); buscar('anterior'); };
+    $('#p-sig').onclick = () => { _pag.cursores.push(r.siguiente); buscar('siguiente'); };
+    if ($('#e-exacto')) $('#e-exacto').onclick = () => buscar('misma', true);
   };
-  $('#f-buscar').onclick = () => buscar(1);
-  $('#f-q').addEventListener('keydown', e => { if (e.key === 'Enter') buscar(1); });
-  $$('.toolbar select').forEach(s => s.onchange = () => buscar(1));
+  $('#f-buscar').onclick = () => buscar();
+  $('#f-q').addEventListener('keydown', e => { if (e.key === 'Enter') buscar(); });
+  $$('.toolbar select').forEach(s => s.onchange = () => buscar());
   if ($('#e-nueva')) $('#e-nueva').onclick = () => modal({
     titulo: 'Nueva empresa', cuerpo: `
       <div class="form-group"><label>RUT</label><input type="text" id="n-rut" placeholder="21 000000 001 X" /></div>
@@ -110,7 +120,7 @@ export async function empresas(ctx) {
       ctx.ir('empresas/' + r.rut);
     } }],
   });
-  await buscar(_filtros.pagina);
+  await buscar('misma');   // al volver a la pantalla, la misma página
 }
 
 // F2.2: los números del contacto, con «se habló el …» cuando vienen del .sav
@@ -343,7 +353,7 @@ export async function ficha(ctx, rut, params) {
   }
 
   if ($('#a-editar')) $('#a-editar').onclick = async () => {
-    const v = await api.get('/empresas/valores');
+    const v = await api.valores();
     await modal({
       titulo: 'Editar datos (fuente manual)', ancho: 640, cuerpo: `<div class="form-row">${CAMPOS.map(([c, t]) => {
         if (c === 'naturaleza') return `<div class="form-group"><label>${t}</label><select class="fselect" data-campo="naturaleza"><option value="">—</option>${

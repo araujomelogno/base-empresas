@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
-from . import auditoria, config, lectores, resultados, rut as rutmod, storage, tareas
+from . import auditoria, config, lectores, mantenimiento, resultados, rut as rutmod, storage, tareas
 from . import telefonos as telmod
 from .util import TZ, sin_tildes, texto
 
@@ -492,6 +492,7 @@ def _tarea_confirmar(conn, payload, tarea_id):
                  (Jsonb(conteos), ing["id"]))
     conn.execute("UPDATE parte SET plantilla_mapeo = %s WHERE id = %s", (Jsonb(ing["mapeo"]), parte["id"]))
     auditoria.registrar(conn, ing["actor"], "sav.confirmar", "sav_ingesta", ing["id"], conteos)
+    mantenimiento.al_terminar(f"ingesta .sav #{ing['id']}", mantenimiento.SAV)
     return {"ingesta_id": ing["id"], "conteos": conteos}
 
 
@@ -519,6 +520,7 @@ def _tarea_remapear(conn, payload, tarea_id):
     conn.execute("UPDATE sav_ingesta SET estado = 'confirmada', conteos = %s WHERE id = %s", (Jsonb(conteos), ing["id"]))
     conn.execute("UPDATE parte SET plantilla_mapeo = %s WHERE id = %s", (Jsonb(ing["mapeo"]), parte["id"]))
     auditoria.registrar(conn, ing["actor"], "sav.remapear", "sav_ingesta", ing["id"], conteos)
+    mantenimiento.al_terminar(f"ingesta .sav #{ing['id']} remapeada", mantenimiento.SAV)
     return {"ingesta_id": ing["id"], "conteos": conteos}
 
 

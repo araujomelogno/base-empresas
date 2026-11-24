@@ -309,6 +309,9 @@ def guardar(conn, parametros: dict, autor: str, comentario: str | None = None) -
     ).fetchone()["version"]
     # Espejo del flag en el catálogo (la fuente de verdad versionada es la config).
     conn.execute("UPDATE naturaleza_juridica SET excluida = (codigo = ANY(%s))", (limpios["naturalezas_excluidas"],))
+    from . import disponibilidad  # D55: las empresas a las que les cambia la disponibilidad, o el recálculo completo
+
+    disponibilidad.config_cambiada(conn, anterior, limpios)
     cambios = {k: {"antes": anterior.get(k), "despues": v} for k, v in limpios.items() if anterior.get(k) != v}
     auditoria.registrar(conn, autor, "config.cambiar", "config_version", version,
                         {"comentario": comentario, "cambios": cambios})

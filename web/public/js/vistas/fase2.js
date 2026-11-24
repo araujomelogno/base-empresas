@@ -255,7 +255,7 @@ export async function duplicados(ctx, params) {
 const CASO = { nueva: ['ok', 'nueva'], coincide: ['sospechoso', 'coincide'], ya_guardado: ['liberado', 'ya guardada'] };
 
 export async function descubrimiento(ctx) {
-  const [lotes, valores] = await Promise.all([api.get('/descubrimiento'), api.get('/empresas/valores')]);
+  const [lotes, valores] = await Promise.all([api.get('/descubrimiento'), api.valores()]);
   main().innerHTML = pageHeader('Buscar empresas', 'nuevas', 'Busca por rubro y zona en Google Places. Cada resultado se compara con la base: los nuevos entran a la base provisoria (con origen Google Places) y los que coinciden con una empresa se pueden completar. Nada se guarda hasta confirmar.') +
     card('Búsqueda', `<div class="form-group"><label>Qué buscar</label><input type="text" id="de-q" placeholder="imprentas en Salto" /></div>
       <div class="small muted mb">O armala por partes:</div>

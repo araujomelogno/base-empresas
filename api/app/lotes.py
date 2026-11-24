@@ -20,8 +20,8 @@ from collections import Counter
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
-from . import auditoria, cargas, config, contactos, empresas, intermediarios, medicion, memoria, rut as rutmod, tareas
-from .db import conexion, pool
+from . import auditoria, cargas, config, contactos, empresas, intermediarios, mantenimiento, medicion, memoria, rut as rutmod, tareas
+from .db import conexion
 from .util import celda_json, texto
 
 log = logging.getLogger(__name__)
@@ -316,10 +316,9 @@ LENTO_FILAS_S = 20         # V3: un lote más lento que esto deja un warning
 
 def analizar_tablas():
     """ANALYZE de las tablas que toca una carga, en una conexión aparte (fuera de la transacción del lote): con las
-    estadísticas viejas («0 filas»), Postgres recorre tablas enteras en lugar de usar los índices."""
-    with pool().connection() as c:
-        c.autocommit = True
-        c.execute("ANALYZE " + ", ".join(_TABLAS_CARGA))
+    estadísticas viejas («0 filas»), Postgres recorre tablas enteras en lugar de usar los índices. D55: de a una tabla,
+    con la duración en el log."""
+    mantenimiento.analizar(_TABLAS_CARGA)
 
 
 def planes_correctos(conn):
@@ -335,12 +334,22 @@ def planes_correctos(conn):
 ANALIZAR_DESDE = 500       # un lote más chico no lo justifica (autovacuum alcanza; y los tests usan lotes de 2 filas)
 
 
-def analizar_en_el_lote(conn, numero: int, filas: int):
+# Las que miran las consultas del preview (intermediarios y coincidencias)
+_TABLAS_PREVIEW = ("empresa", "telefono", "telefono_vinculo")
+
+
+def analizar_en_el_lote(conn, numero: int, filas: int, preview: bool = False):
     """Después de escribir el primer lote, ANALYZE dentro de su transacción: ve las filas recién insertadas. Sin
     esto, con la base vacía al empezar, Postgres cree que las tablas tienen 0 filas y arma planes que recorren tablas
-    enteras por cada fila (medido: la detección de intermediarios, de 1 s a 46 s en el tercer lote de 5.000)."""
-    if numero == 1 and filas >= ANALIZAR_DESDE:
+    enteras por cada fila (medido: la detección de intermediarios, de 1 s a 46 s en el tercer lote de 5.000).
+    D55: en el preview, en cada lote. Lo que escribe se descarta, así que un ANALYZE de afuera (autovacuum) ve las
+    tablas vacías y deja «0 filas»: medido, de 1,2 s a 6 s por lote desde el segundo."""
+    if filas < ANALIZAR_DESDE:
+        return
+    if numero == 1:
         conn.execute("ANALYZE " + ", ".join(_TABLAS_CARGA))
+    elif preview:
+        conn.execute("ANALYZE " + ", ".join(_TABLAS_PREVIEW))
 
 
 def preparar_lote(conn, numero: int, filas: int, cada: int = 0):
@@ -409,7 +418,7 @@ def _tarea_preview(conn, payload, tarea_id):
                     res["conteos"], res["rechazos"], tocados = cargas.procesar(
                         conn, carga, filas, cfg, carga["responsable"], real=False, tarea_id=tarea_id, hechos=hechas,
                         total=carga["n_filas"], mensaje_lote=f"Lote {lote['numero']} de {carga['lotes']}")
-                    analizar_en_el_lote(conn, lote["numero"], len(filas))
+                    analizar_en_el_lote(conn, lote["numero"], len(filas), preview=True)
                     ids = sorted(tocados)
                     res["conteos"]["nuevos_sospechosos"] = intermediarios.contar_nuevos(conn, cfg["umbral_intermediario"], ids) if ids else 0
                     raise _Descartar()
@@ -495,6 +504,7 @@ def _tarea_confirmar(conn, payload, tarea_id):
     cargas.liberar_archivo(conn, carga["archivo_id"])
     auditoria.registrar(conn, carga["responsable"], "carga.confirmar", "carga", cid, {"conteos": conteos})
     _liberar_al_terminar(conn)
+    mantenimiento.al_terminar(f"carga #{cid} confirmada", mantenimiento.CARGA)   # D55: ANALYZE, disponibilidad, resumen
     return {"carga_id": cid, "conteos": conteos}
 
 
@@ -614,6 +624,7 @@ def _tarea_deshacer(conn, payload, tarea_id):
     auditoria.registrar(conn, actor, "carga.deshacer", "carga", cid, resumen)
     tareas.progreso(tarea_id, resumen["empresas_recalculadas"] + 2, resumen["empresas_recalculadas"] + 2)
     _liberar_al_terminar(conn)
+    mantenimiento.al_terminar(f"carga #{cid} deshecha", mantenimiento.CARGA)
     return resumen
 
 

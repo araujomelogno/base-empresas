@@ -22,11 +22,13 @@ HAVING count(DISTINCT v.empresa_id) >= %(umbral)s
 # Para una lista de teléfonos (un lote de carga), se parte de la lista y se cuentan los vínculos de cada uno por índice.
 # Con «t.id = ANY(…)» y las estadísticas viejas (la tabla «vacía» al empezar la primera carga grande), Postgres
 # recorría todos los vínculos por cada teléfono: medido, 31 s en el segundo lote de 5.000 filas (D53).
+# count(*) y no count(DISTINCT v.empresa_id): es lo mismo, porque (telefono_id, empresa_id) es única, y sin el DISTINCT
+# no hay un orden que lleve a Postgres a recorrer entero el índice por empresa_id (D55).
 _CONTEO_IDS = """
 SELECT t.id, t.intermediario, t.intermediario_n, x.n
 FROM unnest(%(ids)s::int[]) AS i(id)
 JOIN telefono t ON t.id = i.id
-CROSS JOIN LATERAL (SELECT count(DISTINCT v.empresa_id) AS n FROM telefono_vinculo v
+CROSS JOIN LATERAL (SELECT count(*) AS n FROM telefono_vinculo v
                     JOIN empresa e ON e.id = v.empresa_id AND e.baja IS NULL WHERE v.telefono_id = t.id) x
 WHERE x.n >= %(umbral)s
 """

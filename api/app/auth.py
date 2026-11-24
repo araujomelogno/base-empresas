@@ -68,6 +68,7 @@ def _email_de_request(request: Request) -> str:
 
 def usuario_actual(request: Request, conn=Depends(get_conn)) -> Usuario:
     email = _email_de_request(request)
+    request.state.usuario = email  # P-6 (D55): para el log de pedidos lentos
     row = conn.execute("SELECT * FROM usuario WHERE email = %s", (email,)).fetchone()
     if row is None and email in settings.ADMIN_EMAILS:
         row = conn.execute(
