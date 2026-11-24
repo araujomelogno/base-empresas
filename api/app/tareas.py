@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from psycopg.types.json import Jsonb
 
 from . import settings
-from .db import conexion, pool
+from .db import conexion, pool, sin_limite
 
 log = logging.getLogger(__name__)
 _HANDLERS = {}
@@ -95,6 +95,11 @@ class Continuar:
 
 # Tareas a despachar cuando la transacción del paso en curso haga commit (p. ej. la carga que esperaba en cola)
 _despues: contextvars.ContextVar[list | None] = contextvars.ContextVar("tareas_despues", default=None)
+
+
+def en_tarea() -> bool:
+    """Si el código corre dentro del paso de una tarea (las que encola se despachan después de su commit)."""
+    return _despues.get() is not None
 
 
 def despues(tarea_id: int):
@@ -281,6 +286,7 @@ def ejecutar(tarea_id: int):
     threading.Thread(target=_latir, args=(tarea_id, dueno, alto), daemon=True).start()
     try:
         with conexion() as conn:
+            sin_limite(conn)  # D55: el límite de 15 s es para la web, no para las tareas
             resultado = _HANDLERS[t["tipo"]](conn, t["payload"], tarea_id)
         if isinstance(resultado, Continuar):
             # Paso hecho (ya hizo commit): la misma tarea vuelve a la cola para el paso siguiente

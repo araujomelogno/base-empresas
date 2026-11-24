@@ -153,6 +153,15 @@ export async function pedirTexto(titulo, label, { obligatorio = true, placeholde
 const PENDIENTE_AVISO_MS = 90000;
 
 // 100 → «1 min 40 s»; 45 → «45 s»
+// «hace 3 min» (D55: fecha de los resúmenes y de las estadísticas de la base)
+export function hace(s) {
+  if (!s) return '—';
+  const min = Math.round((Date.now() - new Date(s).getTime()) / 60000);
+  if (min < 1) return 'hace menos de un minuto';
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.round(min / 60);
+  return h < 48 ? `hace ${h} h` : `hace ${Math.round(h / 24)} días`;
+}
 export const duracion = (seg) => seg >= 60 ? `${Math.floor(seg / 60)} min${seg % 60 ? ` ${seg % 60} s` : ''}` : `${seg} s`;
 
 export async function seguirTarea(tareaId, el, { texto = 'Procesando' } = {}) {

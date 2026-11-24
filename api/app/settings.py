@@ -14,6 +14,13 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres@localhost/e
 # Conexiones por instancia de Cloud Run. Con db-f1-micro (25 conexiones en total) va 5 y
 # Cloud Run con máximo 3 instancias; ver docs/cambio_a_small.md.
 DB_POOL_MAX = int(os.environ.get("DB_POOL_MAX", "10"))
+# D55 (P-5): tiempo máximo de cada consulta de la web (statement_timeout, en ms); 0 sin límite. El servicio de tareas y
+# el job del CDR van con 0 (infra/desplegar.sh); las tareas, los jobs y las descargas lo levantan igual (db.sin_limite).
+DB_STATEMENT_TIMEOUT_MS = int(os.environ.get("DB_STATEMENT_TIMEOUT_MS", "15000"))
+# Cuánto espera un pedido por una conexión libre del pool antes de responder «La base está ocupada» (503)
+DB_POOL_TIMEOUT = float(os.environ.get("DB_POOL_TIMEOUT", "10"))
+# P-6: los pedidos que tardan más que esto quedan en el log (endpoint, duración y usuario)
+PEDIDO_LENTO_SEGUNDOS = float(os.environ.get("PEDIDO_LENTO_SEGUNDOS", "2"))
 # firebase: valida el ID token de Firebase Auth. dev: confía en el header X-Dev-User (solo local).
 AUTH_MODE = os.environ.get("AUTH_MODE", "firebase")
 FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID")

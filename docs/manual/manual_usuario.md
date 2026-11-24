@@ -63,6 +63,10 @@ La pantalla de **Inicio** resume el estado de la base (empresas activas, disponi
 
 ![Inicio](img/02-inicio.png)
 
+Los contadores de la base (empresas, disponibles, con teléfono discable, teléfonos, intermediarios y base provisoria) no se cuentan en cada visita: se **precalculan** al terminar cada carga, deshacer o borrado, y cada 10 minutos si hubo cambios. Abajo dice **«Contadores actualizados hace N min»**; si dice «(recalculándose)», los números son los de la última vez y se están poniendo al día. Mientras la base se prepara por primera vez después de una actualización, «Disponibles» puede decir **calculando…**.
+
+![Inicio con la fecha de los contadores](img/70-inicio-contadores.png)
+
 Abajo, la pantalla muestra la **última corrida del job del CDR** y su estado. Si la última corrida programada falló, o si pasaron 26 horas sin ninguna corrida, administradores y coordinadores ven un aviso arriba de todo con el motivo; el administrador tiene un enlace directo a Configuración para resolverlo.
 
 ## Empresas
@@ -83,6 +87,19 @@ Las reglas que bloquean a una empresa son:
 | En muestra activa | Está en una muestra activa (titular o reemplazo) | Hasta que se cierre la muestra |
 | Sin teléfono discable | No tiene ningún número que se pueda llamar | Hasta que se agregue o libere un teléfono |
 | Empresa cerrada | La sala o una fuente informó que cerró | Hasta que un dato más confiable diga otra cosa |
+
+**Bases grandes.** Con cientos de miles de empresas, el buscador responde igual de rápido en cualquier página:
+
+- **El total puede ser un estimado.** Cuando contar exacto sería caro, la pantalla dice **«≈ 193.500 empresas»**. Tocá **Contar exacto** para el número justo (puede tardar unos segundos). Con pocos resultados, o con filtros que dejan pocas empresas, el total siempre es exacto.
+- **Anterior y Siguiente** recorren las páginas una por una (no se salta a una página por número). Al volver a Empresas desde una ficha, seguís en la misma página.
+- **La disponibilidad está guardada**, no se calcula en cada búsqueda: se actualiza sola cuando cambia algo (una carga, un .sav, una muestra, un «no llamar», la configuración). Una empresa recién cargada puede decir **calculando…** unos minutos. La ficha siempre la calcula en el momento.
+- Los valores de los filtros (departamentos, tamaños) se guardan en el navegador por 10 minutos.
+
+![Total estimado y páginas](img/69-empresas-paginas.png)
+
+Si una pantalla tarda demasiado, en lugar de «Error» aparece un mensaje claro (ver «Preguntas frecuentes»). Mientras corre una carga grande, arriba de todo aparece una franja amarilla: **«Hay una carga grande en curso (lote 12 de 39): algunas pantallas pueden estar lentas»**.
+
+![Franja de carga en curso](img/72-franja-carga.png)
 
 ### La ficha de la empresa
 
@@ -574,6 +591,17 @@ Todos los parámetros de negocio están en **Configuración** y se cambian sin p
 
 En el historial, tocá una versión para ver todos sus parámetros.
 
+#### Rendimiento de la base
+
+La tarjeta **Rendimiento de la base** (solo administradores) muestra:
+
+- **«Estadísticas de la base actualizadas: hace N minutos».** Son los datos que Postgres usa para elegir cómo buscar. Se actualizan solas al terminar cada carga, deshacer o borrado, al terminar un enriquecimiento, y en el job diario si una tabla cambió más del 10 %. Ya no hace falta correr `ANALYZE` a mano.
+- **Disponibilidad guardada:** «lista», o «preparándose: N de M» después de una actualización o de cambiar la regla «Excluir empresas sin teléfono discable». Mientras se prepara, Empresas usa el cálculo anterior (más lento) y una franja lo avisa.
+- **Resúmenes:** cuándo se calcularon los valores de los filtros, los contadores de Inicio y el uso de las naturalezas, y cuánto tardó cada uno. **Recalcular ahora** los vuelve a calcular (en una base grande, en segundo plano, con las estadísticas).
+- **Las 10 consultas más lentas** de los últimos 7 días, según `pg_stat_statements`. Sirve para saber qué pantalla conviene mejorar o si hace falta agrandar la base.
+
+![Rendimiento de la base](img/71-config-rendimiento.png)
+
 #### Conexión al CDR
 
 La tarjeta **CDR — conexión a la base de uContact** tiene los datos que usa el job nocturno para leer las llamadas.
@@ -643,6 +671,8 @@ El administrador tiene, en cada fila:
 
 **+ Naturaleza** no deja crear un código que ya existe: para cambiarlo, usá Editar. Todo queda en Auditoría.
 
+Las cantidades de empresas de cada naturaleza se precalculan (abajo de la lista dice cuándo). Antes de borrar, la aplicación vuelve a verificar en el momento que nadie la use.
+
 ![Naturalezas jurídicas](img/25-naturalezas.png)
 
 ### No llamar
@@ -707,6 +737,12 @@ Registro inalterable de cargas, fusiones, exclusiones, sorteos, exportaciones, i
 
 **Toqué «Siguiente» y quedaron dos cargas del mismo archivo.** Pasaba antes de noviembre de 2026, cuando «Siguiente» no mostraba nada y se cortaba al minuto. Abrí **Cargas**, seguí con una y borrá la otra con **Borrar carga**. Ahora la pantalla avisa «Ir a la carga #N» en lugar de crear otra.
 
+**Una pantalla dice «La consulta tardó demasiado. Si hay una carga grande en curso, probá en unos minutos.»** Cada consulta de la web tiene 15 segundos como máximo, para que una pantalla lenta no frene a las demás. Pasa sobre todo mientras corre una carga grande (lo dice la franja amarilla). Probá de nuevo en unos minutos; si pasa seguido sin cargas en curso, avisale a un administrador (Configuración → Rendimiento de la base muestra qué consulta tarda).
+
+**Una pantalla dice «La base está ocupada; reintentá en unos segundos».** Todas las conexiones a la base estaban en uso. La aplicación ya reintentó una vez sola; esperá unos segundos y volvé a probar.
+
+**El total de Empresas dice «≈».** Es un estimado, para que la búsqueda sea rápida con cientos de miles de empresas. Tocá **Contar exacto** si necesitás el número justo.
+
 **Una carga dice «Esperando a que termine la carga #N».** Se procesa una carga grande a la vez: arranca sola cuando termina la otra.
 
 **Me equivoqué al cargar una base.** Si ninguna de sus empresas entró a una muestra, deshacé la carga desde su detalle. Si ya entraron, corregí los datos en la ficha o hacé una carga nueva con más confianza.
@@ -719,6 +755,8 @@ Registro inalterable de cargas, fusiones, exclusiones, sorteos, exportaciones, i
 
 | Término | Significado |
 | --- | --- |
+| Disponibilidad guardada | La disponibilidad de cada empresa, calculada al cambiar algo que la afecta y guardada, para que el buscador no la recalcule en cada búsqueda. La ficha y el sorteo la calculan en el momento |
+| Estadísticas de la base | Lo que Postgres sabe de cada tabla (cuántas filas, qué valores) para elegir cómo buscar. Se actualizan solas al terminar cada operación grande |
 | RUT no verificado | Identificador de 6 a 11 dígitos (por ejemplo, una cédula) aceptado sin controlar el registro ni el dígito verificador. Se filtra en Empresas y el tablero de calidad lo cuenta aparte |
 | Ítem de muestra | Una empresa sorteada en una muestra, con su estrato, rol (titular o reemplazo) y orden |
 | Parte | Una encuesta de Alchemer dentro de un estudio, con su respondente objetivo |

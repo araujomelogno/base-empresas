@@ -1,10 +1,12 @@
 """Empresas: buscador, ficha, edición manual, teléfonos, intermediarios y fusiones (R1.1, R1.2, R1.11)."""
+import base64
+import json
 import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .. import actividad, auditoria, borrado, catalogos, config, contactos, empresas, intermediarios, rut as rutmod
+from .. import actividad, auditoria, borrado, catalogos, config, contactos, disponibilidad, empresas, intermediarios, resumen, rut as rutmod
 from ..auth import Usuario, requiere, usuario_actual
 from ..db import get_conn
 
@@ -24,10 +26,17 @@ def me(u: Usuario = Depends(usuario_actual)):
     return datos
 
 
+def join_disponibilidad(guardada: bool) -> str:
+    """D55: la disponibilidad guardada (empresa_disponibilidad) o, mientras no está lista, el cálculo anterior."""
+    return (" LEFT JOIN empresa_disponibilidad d ON d.empresa_id = e.id" if guardada
+            else " JOIN v_empresa_disponible d ON d.empresa_id = e.id")
+
+
 def filtros_busqueda(conn, q=None, departamento=None, tamano=None, naturaleza=None, disponible=None,
                      base="definitiva", sin_telefono=None, sin_web=None,
-                     rut_verificado=None) -> tuple[list[str], list, int | None]:
-    """WHERE del buscador de Empresas (lo reusa «Enriquecer estas N empresas»). Devuelve (where, args, ítem)."""
+                     rut_verificado=None, guardada: bool = False) -> tuple[list[str], list, int | None]:
+    """WHERE del buscador de Empresas (lo reusa «Enriquecer estas N empresas»). Devuelve (where, args, ítem).
+    «d» es la disponibilidad (join_disponibilidad)."""
     where, args = ["e.baja IS NULL"], []
     prov = empresas.CODIGO_PROVISORIO.match(q or "")
     if base in ("definitiva", "provisoria") and not prov and _item_buscado(q) is None:
@@ -68,7 +77,9 @@ def filtros_busqueda(conn, q=None, departamento=None, tamano=None, naturaleza=No
     if disponible is not None:
         where.append("d.disponible = %s")
         args.append(disponible)
-    if sin_telefono is not None:  # Fase 2: para enriquecer una lista filtrada
+    if sin_telefono is not None and guardada:  # D55: la cantidad guardada, sin recorrer los vínculos
+        where.append("coalesce(d.telefonos_discables, 0) " + ("= 0" if sin_telefono else "> 0"))
+    elif sin_telefono is not None:  # Fase 2: para enriquecer una lista filtrada
         where.append(("NOT " if sin_telefono else "") + "EXISTS (SELECT 1 FROM v_vinculo_discable x WHERE x.empresa_id = e.id)")
     if sin_web is not None:
         where.append("coalesce(e.web, '') = ''" if sin_web else "coalesce(e.web, '') <> ''")
@@ -78,26 +89,80 @@ def filtros_busqueda(conn, q=None, departamento=None, tamano=None, naturaleza=No
     return where, args, item
 
 
+POR_PAGINA = 50
+# Orden del buscador; el índice empresa_orden_buscador_idx (0021) lo sigue, y la paginación por clave lo compara
+_ORDEN = "(e.razon_social IS NULL), coalesce(e.razon_social, ''), e.codigo"
+TOTAL_EXACTO_HASTA = 5000   # con un estimado menor, el total exacto es barato y se cuenta
+
+
+def _cursor(fila: dict) -> str:
+    clave = [fila["razon_social"] is None, fila["razon_social"] or "", fila["rut"]]
+    return base64.urlsafe_b64encode(json.dumps(clave).encode()).decode().rstrip("=")
+
+
+def _leer_cursor(texto: str) -> list:
+    try:
+        clave = json.loads(base64.urlsafe_b64decode(texto + "=" * (-len(texto) % 4)))
+        assert isinstance(clave, list) and len(clave) == 3
+        return [bool(clave[0]), str(clave[1]), str(clave[2])]
+    except Exception as e:
+        raise HTTPException(422, "Página inválida: volvé a buscar") from e
+
+
+def estimar(conn, sql: str, args) -> int:
+    """Filas que el planificador espera para la consulta (sin ejecutarla)."""
+    plan = conn.execute("EXPLAIN (FORMAT JSON) " + sql, args).fetchone()
+    plan = plan[next(iter(plan))]
+    return int((plan[0] if isinstance(plan, list) else json.loads(plan)[0])["Plan"]["Plan Rows"])
+
+
+def _total(conn, desde: str, where: list[str], args: list, base: str, filas: int, primera: bool, hay_mas: bool,
+           exacto: bool) -> tuple[int, bool]:
+    """P-3 (D55): sin count(*) OVER (). Exacto cuando es barato (una sola página, un estimado chico o lo pide el
+    botón); si no, el contador guardado (sin filtros) o el estimado del planificador, marcados como aproximados."""
+    if primera and not hay_mas:
+        return filas, False
+    sql = f"SELECT 1 {desde} WHERE {' AND '.join(where)}"
+    if not exacto:
+        n = None
+        if where == ["e.baja IS NULL", "e.base = %s"] and base in ("definitiva", "provisoria"):
+            n = (resumen.leer(conn, "inicio")["valor"] or {}).get("empresas" if base == "definitiva" else "provisorias")
+        n = int(n) if n is not None else estimar(conn, sql, args)
+        if n > TOTAL_EXACTO_HASTA:
+            return n, True
+    return conn.execute(f"SELECT count(*) AS n FROM ({sql}) x", args).fetchone()["n"], False
+
+
 @router.get("/empresas")
 def buscar(q: str | None = None, departamento: str | None = None, tamano: str | None = None,
            naturaleza: str | None = None, disponible: bool | None = None, pagina: int = 1, base: str = "definitiva",
            sin_telefono: bool | None = None, sin_web: bool | None = None, rut_verificado: bool | None = None,
+           despues: str | None = None, exacto: bool = False,
            conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+    """Buscador (D55): disponibilidad guardada, teléfonos discables guardados, página siguiente por clave («despues»,
+    igual de rápida en la página 50 que en la 1) y total exacto solo cuando es barato o con «exacto»."""
+    guardada = disponibilidad.asegurar(conn)
     where, args, item = filtros_busqueda(conn, q, departamento, tamano, naturaleza, disponible, base, sin_telefono, sin_web,
-                                         rut_verificado)
+                                         rut_verificado, guardada=guardada)
     pagina = max(1, pagina)
+    desde = " FROM empresa e LEFT JOIN naturaleza_juridica n ON n.id = e.naturaleza_id" + join_disponibilidad(guardada)
+    tels = ("coalesce(d.telefonos_discables, 0)" if guardada
+            else "(SELECT count(*) FROM v_vinculo_discable x WHERE x.empresa_id = e.id)")
+    w, a, offset = list(where), list(args), (pagina - 1) * POR_PAGINA
+    if despues:
+        w.append(f"({_ORDEN}) > (%s, %s, %s)")
+        a += _leer_cursor(despues)
+        offset = 0
     filas = conn.execute(
         "SELECT e.id, e.codigo AS rut, e.base, e.rut_verificado, e.razon_social, e.fantasia, e.departamento, e.tamano,"
-        " e.ciiu, e.estado, n.codigo AS naturaleza,"
-        " e.ultimo_contacto_efectivo, d.disponible, d.reglas, d.hasta,"
-        " (SELECT count(*) FROM v_vinculo_discable x WHERE x.empresa_id = e.id) AS telefonos_discables,"
-        " count(*) OVER () AS total"
-        " FROM empresa e LEFT JOIN naturaleza_juridica n ON n.id = e.naturaleza_id"
-        " JOIN v_empresa_disponible d ON d.empresa_id = e.id"
-        f" WHERE {' AND '.join(where)} ORDER BY e.razon_social NULLS LAST, e.codigo LIMIT 50 OFFSET %s",
-        (*args, (pagina - 1) * 50)).fetchall()
-    total = filas[0]["total"] if filas else 0
-    return {"total": total, "pagina": pagina, "empresas": filas, "item": item}
+        " e.ciiu, e.estado, n.codigo AS naturaleza, e.ultimo_contacto_efectivo, d.disponible, d.reglas, d.hasta,"
+        f" {tels} AS telefonos_discables{desde} WHERE {' AND '.join(w)} ORDER BY {_ORDEN} LIMIT %s OFFSET %s",
+        (*a, POR_PAGINA + 1, offset)).fetchall()
+    hay_mas = len(filas) > POR_PAGINA
+    filas = filas[:POR_PAGINA]
+    total, aproximado = _total(conn, desde, where, args, base, len(filas), pagina == 1 and not despues, hay_mas, exacto)
+    return {"total": total, "aproximado": aproximado, "pagina": pagina, "empresas": filas, "item": item,
+            "siguiente": _cursor(filas[-1]) if hay_mas else None, "disponibilidad_al_dia": guardada}
 
 
 def _item_buscado(q: str | None) -> int | None:
@@ -107,14 +172,15 @@ def _item_buscado(q: str | None) -> int | None:
 
 @router.get("/empresas/valores")
 def valores_filtro(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
-    """Valores distintos para los filtros de búsqueda y de muestra."""
-    def distintos(col):
-        return [r["v"] for r in conn.execute(
-            f"SELECT DISTINCT {col} AS v FROM empresa WHERE baja IS NULL AND {col} IS NOT NULL ORDER BY 1")]
-    return {"departamento": distintos("departamento"), "tamano": distintos("tamano"),
-            "ciiu2": [r["v"] for r in conn.execute(
-                "SELECT DISTINCT left(ciiu, 2) AS v FROM empresa WHERE baja IS NULL AND ciiu IS NOT NULL ORDER BY 1")],
-            "naturaleza": conn.execute("SELECT codigo, nombre, excluida FROM naturaleza_juridica ORDER BY nombre").fetchall()}
+    """Valores distintos para los filtros de búsqueda y de muestra. D55: precalculados (resumen_base), con la cantidad
+    de empresas de cada uno y la fecha en que se calcularon."""
+    r = resumen.leer(conn, "valores")
+    v = r["valor"]
+    salida = {k: [x["valor"] for x in v.get(k, [])] for k in ("departamento", "tamano", "ciiu2", "localidad")}
+    salida["cantidades"] = {k: {x["valor"]: x["n"] for x in v.get(k, [])} for k in ("departamento", "tamano", "ciiu2")}
+    salida["naturaleza"] = conn.execute("SELECT codigo, nombre, excluida FROM naturaleza_juridica ORDER BY nombre").fetchall()
+    salida["actualizado"], salida["al_dia"] = r["actualizado"], r["al_dia"]
+    return salida
 
 
 @router.delete("/empresas/{rut}")
@@ -131,8 +197,9 @@ def ficha(rut: str, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)
                                    (e["naturaleza_id"],)).fetchone() if e["naturaleza_id"] else None
     if e["fusionada_en"]:
         e["fusionada_en_rut"] = conn.execute("SELECT codigo FROM empresa WHERE id = %s", (e["fusionada_en"],)).fetchone()["codigo"]
-    e["disponibilidad"] = conn.execute("SELECT disponible, reglas, hasta FROM v_empresa_disponible WHERE empresa_id = %s",
-                                       (eid,)).fetchone()
+    # D55: las mismas reglas que bloqueos(cfg), calculadas al momento solo para esta empresa
+    d = disponibilidad.calcular(conn, [eid])
+    e["disponibilidad"] = {k: d[0][k] for k in ("disponible", "reglas", "hasta")} if d else None
     e["historia"] = conn.execute(
         "SELECT h.id, h.campo, h.valor, h.fuente_tipo, h.fuente_id, h.confianza, h.actor, h.fecha, h.detalle,"
         " (coalesce(" + empresas.CARGA_SIN_EFECTO + ", false) OR f.deshecha IS NOT NULL OR ec.deshecha IS NOT NULL) AS anulada,"

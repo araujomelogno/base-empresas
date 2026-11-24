@@ -31,6 +31,7 @@ async function manejar(r) {
   let detail = r.statusText, datos = null;
   try {
     const j = await r.json();
+    if (j.codigo) datos = { codigo: j.codigo, reintentar: !!j.reintentar };  // D55: 503 «base ocupada» / «consulta lenta»
     if (j.detail && !Array.isArray(j.detail) && typeof j.detail === 'object') {  // {mensaje, ...datos}
       datos = j.detail;
       detail = j.detail.mensaje || detail;
@@ -41,9 +42,34 @@ async function manejar(r) {
   throw new ApiError(r.status, detail, datos);
 }
 
-export async function get(path, params) {
+export async function get(path, params, reintento = false) {
   const q = params ? '?' + new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')) : '';
-  return manejar(await fetch(BASE + path + q, { headers: await headers() }));
+  try {
+    return await manejar(await fetch(BASE + path + q, { headers: await headers() }));
+  } catch (e) {
+    // D55: «La base está ocupada»: un reintento solo, a los 1,5 s; si vuelve a pasar, se muestra el mensaje tal cual
+    if (!reintento && e instanceof ApiError && e.status === 503 && e.datos && e.datos.reintentar) {
+      await new Promise(ok => setTimeout(ok, 1500));
+      return get(path, params, true);
+    }
+    throw e;
+  }
+}
+
+// D55: estado de la base (/estado, cada 30 s): carga en curso y fecha de los resúmenes
+export let estadoBase = null;
+export function setEstadoBase(e) { estadoBase = e; }
+
+// Los valores de los filtros se guardan en el navegador 10 minutos, o hasta que cambia su fecha en el resumen
+const CLAVE_VALORES = 'valoresFiltros';
+export async function valores() {
+  let c = null;
+  try { c = JSON.parse(localStorage.getItem(CLAVE_VALORES) || 'null'); } catch { c = null; }
+  const fecha = estadoBase && estadoBase.resumen ? estadoBase.resumen.valores : null;
+  if (c && c.datos && Date.now() - c.t < 10 * 60 * 1000 && (!fecha || fecha === c.datos.actualizado)) return c.datos;
+  const datos = await get('/empresas/valores');
+  try { localStorage.setItem(CLAVE_VALORES, JSON.stringify({ t: Date.now(), datos })); } catch { /* sin almacenamiento */ }
+  return datos;
 }
 
 export async function send(method, path, body) {

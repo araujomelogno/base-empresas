@@ -6,7 +6,11 @@ Cloud Run. En desarrollo, si SERVE_WEB=1, la misma app sirve la web estática en
 import logging
 import os
 import pathlib
+import time
 from contextlib import asynccontextmanager
+
+import psycopg
+from psycopg_pool import PoolTimeout
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -66,6 +70,54 @@ for r in (empresas.router, contactos.router, provisorias.router, cargas.router, 
 @app.get("/api/salud")
 def salud():
     return {"ok": True}
+
+
+# ── P-5 (D55): la web no se queda esperando ni muestra «Error» ──
+CONSULTA_LENTA = "La consulta tardó demasiado. Si hay una carga grande en curso, probá en unos minutos."
+BASE_OCUPADA = "La base está ocupada; reintentá en unos segundos"
+
+
+@app.exception_handler(psycopg.errors.QueryCanceled)
+async def consulta_cancelada(request: Request, exc: Exception):
+    """statement_timeout: la consulta se cortó a los 15 s y la conexión vuelve al pool para los demás."""
+    logging.getLogger(__name__).warning("Consulta cortada por tiempo en %s %s: %s", request.method, request.url.path,
+                                        str(exc).splitlines()[0] if str(exc) else "")
+    return JSONResponse(status_code=503, content={"detail": CONSULTA_LENTA, "codigo": "consulta_lenta"})
+
+
+@app.exception_handler(PoolTimeout)
+async def pool_ocupado(request: Request, exc: Exception):
+    logging.getLogger(__name__).warning("Sin conexión libre a la base en %s %s (pool)", request.method, request.url.path)
+    return JSONResponse(status_code=503, content={"detail": BASE_OCUPADA, "codigo": "base_ocupada", "reintentar": True})
+
+
+class PedidosLentos:
+    """P-6: los pedidos que tardan más de 2 s quedan en el log con el endpoint, la duración y el usuario. Middleware
+    ASGI puro: no cambia cómo viajan las respuestas ni las excepciones."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or not scope.get("path", "").startswith("/api/"):
+            return await self.app(scope, receive, send)
+        t0, estado = time.monotonic(), {}
+
+        async def enviar(mensaje):
+            if mensaje["type"] == "http.response.start":
+                estado["codigo"] = mensaje["status"]
+            await send(mensaje)
+        try:
+            await self.app(scope, receive, enviar)
+        finally:
+            seg = time.monotonic() - t0
+            if seg > settings.PEDIDO_LENTO_SEGUNDOS:
+                logging.getLogger("pedidos").warning(
+                    "pedido lento: %s %s %.1f s usuario=%s estado=%s", scope.get("method"), scope["path"], seg,
+                    (scope.get("state") or {}).get("usuario", "-"), estado.get("codigo", "error"))
+
+
+app.add_middleware(PedidosLentos)
 
 
 @app.exception_handler(Exception)

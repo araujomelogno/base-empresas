@@ -11,7 +11,7 @@ Nada se guarda hasta confirmar. El lote tiene linaje (fuente «descubrimiento»)
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
-from . import auditoria, empresas, enriquecimiento as enr, intermediarios, config, proveedores, provisorias
+from . import auditoria, empresas, enriquecimiento as enr, intermediarios, config, mantenimiento, proveedores, provisorias
 from . import telefonos as telmod
 
 REGLAS = [{"criterio": "telefono", "tipo": "exacta"}, {"criterio": "dominio_web", "tipo": "exacta"},
@@ -171,6 +171,7 @@ def confirmar(conn, cid: int, seleccion: dict[str, str], actor: str) -> dict:
     conn.execute("UPDATE enriquecimiento_corrida SET estado = 'confirmada', resultado = %s, terminada = now() WHERE id = %s",
                  (Jsonb(res), cid))
     auditoria.registrar(conn, actor, "descubrimiento.confirmar", "enriquecimiento_corrida", cid, conteo)
+    mantenimiento.al_terminar(f"descubrimiento #{cid}", mantenimiento.ENRIQUECIMIENTO)
     return enr.detalle(conn, cid)
 
 
@@ -198,4 +199,5 @@ def deshacer(conn, cid: int, actor: str) -> dict:
             anuladas += 1
     r["provisorias_anuladas"] = anuladas
     auditoria.registrar(conn, actor, "descubrimiento.deshacer", "enriquecimiento_corrida", cid, r)
+    mantenimiento.al_terminar(f"descubrimiento #{cid} deshecho", mantenimiento.ENRIQUECIMIENTO)
     return r

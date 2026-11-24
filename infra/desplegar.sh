@@ -58,8 +58,9 @@ limites() {
     TIER="${TIER:-db-f1-micro}"
   fi
   case "$TIER" in
-    # API + servicio de tareas (D52) + 1 del job de migraciones, sin pasar de las disponibles
-    db-f1-micro) POOL=5; INSTANCIAS=3; POOL_TAREAS=3; INSTANCIAS_TAREAS=2 ;;   # 25 (22 usables): 15 + 6 + 1
+    # API + servicio de tareas (D52) + job del CDR (3) + 1 del job de migraciones, sin pasar de las disponibles.
+    # D55: en la f1-micro la API baja de 5 a 4 por instancia para que entre también el job del CDR.
+    db-f1-micro) POOL=4; INSTANCIAS=3; POOL_TAREAS=3; INSTANCIAS_TAREAS=2 ;;   # 25 (22 usables): 12 + 6 + 3 + 1
     db-g1-small) POOL=8; INSTANCIAS=4; POOL_TAREAS=4; INSTANCIAS_TAREAS=2 ;;   # 50: 32 + 8 + 1
     *) POOL=10; INSTANCIAS=4; POOL_TAREAS=5; INSTANCIAS_TAREAS=3 ;;            # 100 o más
   esac
@@ -219,7 +220,7 @@ tareas() {  # tareas [IMAGEN] — sin imagen, la que tiene la API ahora
   g run deploy "$SERVICIO_TAREAS" --image "$imagen" --region "$REGION" --service-account "$SA" \
     --add-cloudsql-instances "$CONEXION" --allow-unauthenticated --memory 2Gi --cpu 1 --timeout 1800 \
     --min-instances 0 --max-instances "$INSTANCIAS_TAREAS" --concurrency 1 \
-    --set-env-vars "$(entorno "$url" "$admins" "$URL_TAREAS");DB_POOL_MAX=${POOL_TAREAS};WORKERS=1;MEMORIA_LIMITE_MB=2048" \
+    --set-env-vars "$(entorno "$url" "$admins" "$URL_TAREAS");DB_POOL_MAX=${POOL_TAREAS};DB_STATEMENT_TIMEOUT_MS=0;WORKERS=1;MEMORIA_LIMITE_MB=2048" \
     ${RED[@]+"${RED[@]}"} --set-secrets "$SECRETOS"
   if [ -z "$URL_TAREAS" ]; then  # primera vez: el servicio se encola a sí mismo los pasos siguientes
     URL_TAREAS="$(url_de "$SERVICIO_TAREAS")"
@@ -236,7 +237,7 @@ migrar() {  # migrar [IMAGEN] — sin imagen, la que tiene la API ahora
   local imagen="${1:-$(imagen_actual)}"
   g run jobs deploy empresas-migrar --image "$imagen" --region "$REGION" --service-account "$SA" \
     --set-cloudsql-instances "$CONEXION" --set-secrets "DATABASE_URL=empresas-database-url:latest" \
-    --command python --args /srv/db/migrate.py --max-retries 0 || return 1
+    --command python --args /srv/db/migrate.py --max-retries 0 --task-timeout 3600 || return 1   # D55: índices CONCURRENTLY
   g run jobs execute empresas-migrar --region "$REGION" --wait || return 1
 }
 
@@ -279,7 +280,7 @@ cdr() {
   imagen="$(g run services describe "$SERVICIO" --region "$REGION" --format 'value(spec.template.spec.containers[0].image)')"
   g run jobs deploy "$CDR_JOB_NOMBRE" --image "$imagen" --region "$REGION" --service-account "$SA" \
     --set-cloudsql-instances "$CONEXION" --set-secrets "DATABASE_URL=empresas-database-url:latest" \
-    --set-env-vars "^;^AUTH_MODE=firebase;GCP_PROYECTO=${PROYECTO};GCP_REGION=${REGION};CDR_SECRETO=${CDR_SECRETO};STORAGE_BUCKET=${BUCKET};DB_POOL_MAX=3" \
+    --set-env-vars "^;^AUTH_MODE=firebase;GCP_PROYECTO=${PROYECTO};GCP_REGION=${REGION};CDR_SECRETO=${CDR_SECRETO};STORAGE_BUCKET=${BUCKET};DB_POOL_MAX=3;DB_STATEMENT_TIMEOUT_MS=0" \
     --command python --args=-m,app.jobs.cdr_job --task-timeout 3600 --max-retries 0 \
     ${RED[@]+"${RED[@]}"}
   # "Correr ahora" y "Reprocesar desde…": la API ejecuta el job con argumentos propios
@@ -338,12 +339,13 @@ for r in json.load(sys.stdin)["resultados"]:
 }
 
 programar() {
-  echo "▶ Cloud Scheduler: auditoría a BigQuery (5:10), foto de calidad (5:20) y duplicados difusos (5:30), Montevideo"
+  echo "▶ Cloud Scheduler: auditoría a BigQuery (5:10), foto de calidad y mantenimiento diario (5:20), duplicados"
+  echo "  difusos (5:30), Montevideo; y mantenimiento de la base cada 10 minutos (D55)"
   local url token nombre hora ruta
   url="$(g run services describe "$SERVICIO" --region "$REGION" --format 'value(status.url)')"
   token="$(g secrets versions access latest --secret empresas-job-token)"
   for job in "empresas-auditoria-bq|10 5 * * *|auditoria-bq" "empresas-calidad|20 5 * * *|calidad" \
-             "empresas-duplicados|30 5 * * *|duplicados"; do
+             "empresas-duplicados|30 5 * * *|duplicados" "empresas-mantenimiento|*/10 * * * *|mantenimiento"; do
     IFS='|' read -r nombre hora ruta <<< "$job"
     existe g scheduler jobs describe "$nombre" --location "$REGION" && \
       g scheduler jobs delete "$nombre" --location "$REGION" --quiet

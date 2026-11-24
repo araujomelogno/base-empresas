@@ -4,7 +4,7 @@ import datetime as dt
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .. import accesos, auditoria, cdr_corridas, config, empresas, intermediarios, provisorias, settings, tareas, telefonos as telmod
+from .. import accesos, auditoria, cdr_corridas, config, empresas, resumen, settings, tareas, telefonos as telmod
 from ..auth import ROLES, Usuario, requiere, requiere_job, requiere_tarea, usuario_actual
 from ..db import conexion, get_conn
 
@@ -14,23 +14,17 @@ router = APIRouter()
 @router.get("/inicio")
 def inicio(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
     """Resumen para la pantalla de inicio: estado de la base y bandejas pendientes."""
+    # D55: los contadores que recorren la base salen del resumen precalculado (con su fecha); las bandejas, al momento
+    res = resumen.leer(conn, "inicio")
     r = conn.execute(
         """
-        SELECT (SELECT count(*) FROM empresa WHERE baja IS NULL AND base = 'definitiva') AS empresas,
-               (SELECT count(*) FROM empresa WHERE baja IS NULL AND base = 'provisoria') AS provisorias,
-               (SELECT count(*) FROM v_empresa_disponible d JOIN empresa e ON e.id = d.empresa_id
-                 WHERE d.disponible AND e.baja IS NULL) AS disponibles,
-               (SELECT count(*) FROM telefono WHERE e164 IS NOT NULL) AS telefonos,
-               (SELECT count(DISTINCT empresa_id) FROM v_vinculo_discable) AS con_telefono_discable,
-               (""" + intermediarios.SQL_CONTADOR + """) AS sospechosos,
-               (SELECT count(*) FROM telefono WHERE intermediario = 'confirmado') AS intermediarios,
-               (SELECT count(*) FROM revision_fusion WHERE estado = 'pendiente') AS revision,
+        SELECT (SELECT count(*) FROM revision_fusion WHERE estado = 'pendiente') AS revision,
                (SELECT count(*) FROM conciliacion WHERE estado = 'pendiente') AS conciliacion,
                (SELECT count(*) FROM muestra WHERE estado = 'activa') AS muestras_activas,
                (SELECT count(*) FROM no_llamar WHERE activo) AS no_llamar,
                (SELECT count(*) FROM intento WHERE inicio > now() - interval '7 days') AS intentos_7d
         """).fetchone()
-    r["provisorias_con_candidatas"] = provisorias.contar_con_candidatas(conn) if r["provisorias"] else 0
+    r = {**res["valor"], **r, "resumen_actualizado": res["actualizado"], "resumen_al_dia": res["al_dia"]}
     r["ultimas_cargas"] = conn.execute(
         "SELECT id, fuente, estado, fecha, conteos->>'altas' AS altas FROM carga ORDER BY id DESC LIMIT 5").fetchall()
     version, _ = config.vigente(conn)
@@ -127,9 +121,14 @@ SELECT (SELECT count(*) FROM empresa e WHERE e.naturaleza_id = n.id AND e.baja I
 
 @router.get("/naturalezas")
 def naturalezas(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
-    filas = conn.execute(
-        "SELECT n.*, u.* FROM naturaleza_juridica n CROSS JOIN LATERAL (" + _USO_NATURALEZA + ") u ORDER BY n.nombre").fetchall()
+    """D55: el uso de cada naturaleza sale del resumen precalculado (borrarla lo vuelve a verificar al momento)."""
+    uso = resumen.leer(conn, "naturalezas")
+    por_id, historia = uso["valor"].get("por_id", {}), uso["valor"].get("historia", {})
+    filas = conn.execute("SELECT n.* FROM naturaleza_juridica n ORDER BY n.nombre").fetchall()
     for f in filas:
+        e = por_id.get(str(f["id"]), {})
+        f.update({"empresas": e.get("empresas", 0), "empresas_todas": e.get("empresas_todas", 0),
+                  "historia": historia.get(f["codigo"], 0), "uso_actualizado": uso["actualizado"]})
         f["borrable"] = not f["empresas_todas"] and not f["historia"]
     return filas
 
@@ -413,3 +412,80 @@ def exportar_auditoria(conn=Depends(get_conn), _: str = Depends(requiere_job)):
         raise HTTPException(502, f"BigQuery rechazó filas: {errores[:3]}")
     conn.execute("UPDATE export_estado SET ultimo_id = %s, fecha = now() WHERE nombre = 'auditoria_bq'", (filas[-1]["id"],))
     return {"exportadas": len(filas), "ultimo_id": filas[-1]["id"]}
+
+
+# ── D55 · Estado de la base, mantenimiento y consultas lentas (SPEC_rendimiento_base_grande) ──
+
+@router.get("/estado")
+def estado_base(conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+    """Liviano, para la web cada 30 s: la carga pesada en curso (franja «Hay una carga grande en curso»), la
+    preparación de la disponibilidad y la fecha de cada resumen (la web cachea los valores de los filtros hasta que
+    cambia)."""
+    from .. import disponibilidad, lotes
+
+    carga = None
+    cid = lotes.ocupada(conn, 0)
+    if cid:
+        carga = conn.execute(
+            "SELECT c.id, c.estado, c.operacion, c.lotes, t.mensaje, t.progreso, t.total,"
+            " (SELECT count(*) FROM carga_lote l WHERE l.carga_id = c.id AND l.estado = 'aplicado') AS lotes_aplicados"
+            " FROM carga c JOIN tarea t ON t.id = c.tarea_id WHERE c.id = %s", (cid,)).fetchone()
+        if carga and carga["lotes"]:
+            carga["lote"] = min(carga["lotes"], carga["lotes_aplicados"] + 1)
+    c = disponibilidad.control(conn)
+    preparando = None
+    if not disponibilidad.lista(conn):
+        preparando = {"hechas": c.get("hechas") if c.get("cfg_en_curso") is not None else 0,
+                      "total": c.get("total") if c.get("cfg_en_curso") is not None else None}
+    return {"carga": carga, "disponibilidad_preparando": preparando, "resumen": resumen.actualizado(conn)}
+
+
+def _consultas_lentas(conn) -> dict:
+    """P-6: las 10 consultas con más tiempo promedio según pg_stat_statements (si la extensión está activa)."""
+    if not conn.execute("SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements'").fetchone():
+        return {"disponible": False, "motivo": "La extensión pg_stat_statements no está creada en la base"}
+    try:
+        with conn.transaction():  # si no está precargada (shared_preload_libraries), falla sin romper el resto
+            filas = conn.execute(
+                "SELECT left(regexp_replace(s.query, '\\s+', ' ', 'g'), 400) AS consulta, s.calls AS llamadas,"
+                " round(s.mean_exec_time::numeric, 1) AS media_ms, round(s.max_exec_time::numeric, 1) AS max_ms,"
+                " round((s.total_exec_time / 1000)::numeric, 1) AS total_s FROM pg_stat_statements s"
+                " JOIN pg_database d ON d.oid = s.dbid WHERE d.datname = current_database()"
+                " AND s.query NOT ILIKE '%pg_stat_statements%' AND s.query !~* '^[[:space:]]*(ANALYZE|VACUUM|CREATE|ALTER|DROP)'"
+                " ORDER BY s.mean_exec_time DESC LIMIT 10").fetchall()
+            desde = None
+            try:
+                with conn.transaction():
+                    desde = conn.execute("SELECT stats_reset FROM pg_stat_statements_info").fetchone()["stats_reset"]
+            except Exception:
+                pass
+        return {"disponible": True, "desde": desde, "consultas": filas}
+    except Exception as e:
+        return {"disponible": False, "motivo": str(e).splitlines()[0][:200]}
+
+
+@router.get("/mantenimiento")
+def ver_mantenimiento(conn=Depends(get_conn), u: Usuario = Depends(requiere("admin"))):
+    """Configuración → Rendimiento de la base: estadísticas, disponibilidad, resúmenes y consultas lentas."""
+    from .. import disponibilidad, mantenimiento
+
+    return {"estadisticas": mantenimiento.estadisticas(conn), "disponibilidad": disponibilidad.estado(conn),
+            "resumenes": conn.execute("SELECT clave, actualizado, segundos FROM resumen_base ORDER BY clave").fetchall(),
+            "tarea": mantenimiento.en_curso(conn), "consultas_lentas": _consultas_lentas(conn),
+            "pool": {"conexiones": settings.DB_POOL_MAX, "espera_segundos": settings.DB_POOL_TIMEOUT,
+                     "limite_consulta_segundos": settings.DB_STATEMENT_TIMEOUT_MS / 1000}}
+
+
+@router.post("/mantenimiento/recalcular")
+def recalcular_resumen(conn=Depends(get_conn), u: Usuario = Depends(requiere("admin"))):
+    """Botón «Recalcular»: en una base chica, ahora mismo; en una grande, la tarea de mantenimiento (con ANALYZE)."""
+    from .. import disponibilidad, mantenimiento
+
+    auditoria.registrar(conn, u.email, "base.recalcular", "resumen_base", None, {})
+    if disponibilidad.base_chica(conn):
+        mantenimiento.analizar(mantenimiento.TABLAS)
+        disponibilidad.asegurar(conn)
+        hechos = resumen.recalcular(conn)
+        return {"en_el_momento": True, "resumenes": {k: v["actualizado"] for k, v in hechos.items()}}
+    tid = mantenimiento.encolar(f"botón Recalcular ({u.email})", mantenimiento.TABLAS)
+    return {"en_el_momento": False, "tarea_id": tid or (mantenimiento.en_curso(conn) or {}).get("id")}

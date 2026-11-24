@@ -133,7 +133,7 @@ def test_medicion_diaria_y_evolucion(api, sql):
     from app import calidad
     from app.db import conexion
 
-    hoy = dt.date.today()
+    hoy = sql.execute("SELECT (now() AT TIME ZONE 'America/Montevideo')::date AS d").fetchone()["d"]  # el día de la app
     for i in range(1, 7):
         with conexion() as c:
             calidad.medir(c, hoy - dt.timedelta(days=i))
@@ -142,8 +142,8 @@ def test_medicion_diaria_y_evolucion(api, sql):
     assert len(serie) == 7
     # El job puede correr dos veces el mismo día: reemplaza la foto
     api.c.post("/api/jobs/calidad", headers={"X-Job-Token": "token-job"})
-    assert sql.execute("SELECT count(*) AS n FROM calidad_medicion WHERE fecha = current_date AND indicador = 'rut_valido'"
-                       ).fetchone()["n"] == 1
+    assert sql.execute("SELECT count(*) AS n FROM calidad_medicion WHERE fecha = %s AND indicador = 'rut_valido'",
+                       (hoy,)).fetchone()["n"] == 1
 
 
 def test_consistencia_naturaleza_y_razon_social(api, sql):

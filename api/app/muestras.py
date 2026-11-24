@@ -12,7 +12,8 @@ from collections import Counter, defaultdict
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
-from . import auditoria, catalogos, config, criterios as crit
+from . import auditoria, catalogos, config, criterios as crit, disponibilidad, mantenimiento
+from .db import sin_limite
 
 # Filtros y estratos: ver criterios.py (R4: todo dato de la empresa sirve)
 SIN_DATO = "(sin dato)"
@@ -209,7 +210,10 @@ def _universo(conn, criterios: dict, defs: dict | None = None) -> list[dict]:
         + " WHERE " + " AND ".join(where), args).fetchall()
 
 
-def _con_telefono(conn) -> set[int]:
+def _con_telefono(conn, ids: list[int] | None = None) -> set[int]:
+    if ids is not None:
+        return {r["empresa_id"] for r in conn.execute(
+            "SELECT DISTINCT empresa_id FROM v_vinculo_discable WHERE empresa_id = ANY(%s)", (ids,))}
     return {r["empresa_id"] for r in conn.execute("SELECT DISTINCT empresa_id FROM v_vinculo_discable")}
 
 
@@ -239,15 +243,26 @@ def previsualizar_marco(conn, criterios: dict, avisos: list | None = None) -> di
     """Cuántas empresas quedan en cada estrato y cuántas excluye cada regla, sin sortear.
     avisos (aplicar un template): lo que ya no existe se saca con aviso en lugar de rechazar."""
     criterios = _validar_criterios(conn, criterios, avisos, tamanos=False)
+    sin_limite(conn, 120)
     _, cfg = config.vigente(conn)
     defs = crit.definiciones(conn)
     universo = _universo(conn, criterios, defs)
-    bloqueos = _bloqueos(conn, cfg, None)
+    ids = [f["id"] for f in universo]
+    if disponibilidad.asegurar(conn, cfg):
+        # D55: el armado lee la disponibilidad guardada (el sorteo la vuelve a calcular al momento)
+        bloqueos, con_tel = defaultdict(set), set()
+        for r in conn.execute("SELECT empresa_id, reglas, telefonos_discables FROM empresa_disponibilidad"
+                              " WHERE empresa_id = ANY(%s) AND (NOT disponible OR telefonos_discables > 0)", (ids,)):
+            if r["reglas"]:
+                bloqueos[r["empresa_id"]].update(r["reglas"])
+            if r["telefonos_discables"]:
+                con_tel.add(r["empresa_id"])
+    else:
+        bloqueos, con_tel = _bloqueos(conn, cfg, None, ids), _con_telefono(conn, ids)
     _sin_telefono_permitido(criterios, bloqueos)
     _filtro_origen(conn, universo, criterios["origenes"], bloqueos)
     excl, marco = _aplicar_bloqueos(universo, bloqueos)
     etiq = crit.etiquetas(marco, criterios, defs)
-    con_tel = _con_telefono(conn)
     por_estrato, sin_tel = Counter(etiq), Counter(e for f, e in zip(marco, etiq) if f["id"] not in con_tel)
     return {"universo": len(universo), "marco": len(marco), "exclusiones": excl,
             "estratos": [{"estrato": k, "disponibles": por_estrato[k], "sin_telefono": sin_tel.get(k, 0)}
@@ -257,9 +272,11 @@ def previsualizar_marco(conn, criterios: dict, avisos: list | None = None) -> di
             "criterios": criterios}
 
 
-def _bloqueos(conn, cfg, muestra_id):
+def _bloqueos(conn, cfg, muestra_id, ids: list[int]):
+    """Las reglas de bloqueos(cfg) para las empresas del universo, calculadas al momento (D55: bloqueos_ids, las mismas
+    reglas solo para esas empresas, en lugar de toda la base)."""
     b = defaultdict(set)
-    for r in conn.execute("SELECT empresa_id, regla FROM bloqueos(%s, %s)", (Jsonb(cfg), muestra_id)):
+    for r in conn.execute("SELECT empresa_id, regla FROM bloqueos_ids(%s, %s, %s)", (Jsonb(cfg), ids, muestra_id)):
         b[r["empresa_id"]].add(r["regla"])
     return b
 
@@ -286,10 +303,11 @@ def sortear(conn, muestra_id: int, actor: str, semilla: int | None = None) -> di
     if m["estado"] != "borrador":
         raise HTTPException(409, "La muestra ya fue sorteada")
     criterios = m["criterios"]
+    sin_limite(conn, 120)
     version, cfg = config.vigente(conn)
     defs = crit.definiciones(conn)
     universo = _universo(conn, criterios, defs)
-    bloqueos = _bloqueos(conn, cfg, muestra_id)
+    bloqueos = _bloqueos(conn, cfg, muestra_id, [f["id"] for f in universo])
     _sin_telefono_permitido(criterios, bloqueos)
     _filtro_origen(conn, universo, criterios.get("origenes") or [], bloqueos)
     excl, marco_filas = _aplicar_bloqueos(universo, bloqueos)
@@ -319,7 +337,7 @@ def sortear(conn, muestra_id: int, actor: str, semilla: int | None = None) -> di
     _pendientes_partes(conn, muestra_id)
 
     disponibles = Counter(e for _, e in marco)
-    con_tel = _con_telefono(conn)
+    con_tel = _con_telefono(conn, [eid for eid, _, _, _ in sorteados])
     sin_tel = Counter(est for eid, est, _, _ in sorteados if eid not in con_tel)
     avisos, por_estrato = [], []
     for est in sorted(definicion, key=crit.orden_natural):
@@ -344,6 +362,7 @@ def sortear(conn, muestra_id: int, actor: str, semilla: int | None = None) -> di
     auditoria.registrar(conn, actor, "muestra.sortear", "muestra", muestra_id,
                         {"semilla": semilla, "config_version": version, "snapshot_id": snapshot_id,
                          "n_items": len(sorteados), "exclusiones": excl})
+    mantenimiento.al_terminar(f"muestra #{muestra_id} sorteada", ("muestra_item",))
     return {"semilla": semilla, "config_version": version, "snapshot_id": snapshot_id, **resultado}
 
 
@@ -436,6 +455,7 @@ def cerrar(conn, muestra_id: int, actor: str) -> dict:
     if m is None:
         raise HTTPException(409, "Solo se cierra una muestra activa")
     auditoria.registrar(conn, actor, "muestra.cerrar", "muestra", muestra_id)
+    mantenimiento.al_terminar(f"muestra #{muestra_id} cerrada", ())   # D55: la regla «muestra activa» de sus empresas
     return {"id": muestra_id, "estado": "cerrada"}
 
 

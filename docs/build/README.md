@@ -224,3 +224,15 @@ python docs/build/manual_rut.py docs/Manual_de_usuario_Base_de_Empresas.docx doc
 ```bash
 soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
 ```
+
+## Rendimiento con una base grande (D55)
+
+`capturas_rendimiento.js` saca `69-empresas-paginas` (total «≈» y páginas), `70-inicio-contadores`, `71-config-rendimiento` y `72-franja-carga` (la franja se simula con una carga en el lote 12 de 39). Las capturas del manual se sacaron contra la base del test de volumen (200.000 empresas sintéticas: `RUN_LENTOS=1 pytest tests/test_rendimiento.py -k volumen` con `TEST_DATABASE_URL` apuntando a una base aparte) y Postgres con `shared_preload_libraries=pg_stat_statements`, para que la tarjeta muestre las consultas lentas. `manual_rendimiento.py` agrega la guía 31, tres filas a «Solución de problemas» y dos al glosario; se aplica después de `manual_rut.py` y después se regenera el PDF:
+
+```bash
+python docs/build/manual_rendimiento.py docs/Manual_de_usuario_Base_de_Empresas.docx docs/manual/img
+```
+
+```bash
+soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
+```

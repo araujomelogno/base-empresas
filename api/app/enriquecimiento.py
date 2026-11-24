@@ -19,7 +19,7 @@ import random
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
-from . import auditoria, catalogos, config, empresas, intermediarios, proveedores, provisorias, secretos, settings, tareas
+from . import auditoria, catalogos, config, empresas, intermediarios, mantenimiento, proveedores, provisorias, secretos, settings, tareas
 from .db import conexion
 from .util import razon_normalizada
 
@@ -164,12 +164,16 @@ def _candidatos(conn, origen: str, muestra_id=None, filtros=None, rut=None, alca
         from .routers.empresas import filtros_busqueda
 
         f = dict(filtros or {})
+        from . import disponibilidad
+        from .routers.empresas import join_disponibilidad
+
+        guardada = disponibilidad.asegurar(conn)
         where, args, _ = filtros_busqueda(conn, f.get("q"), f.get("departamento"), f.get("tamano"), f.get("naturaleza"),
                                           f.get("disponible"), f.get("base") or "definitiva", f.get("sin_telefono"),
-                                          f.get("sin_web"), f.get("rut_verificado"))
+                                          f.get("sin_web"), f.get("rut_verificado"), guardada=guardada)
         return [r["id"] for r in conn.execute(
             "SELECT e.id FROM empresa e LEFT JOIN naturaleza_juridica n ON n.id = e.naturaleza_id"
-            " JOIN v_empresa_disponible d ON d.empresa_id = e.id"
+            + join_disponibilidad(guardada) +
             f" WHERE {' AND '.join(where)} ORDER BY e.razon_social NULLS LAST, e.codigo LIMIT 100001", args)]
     emp = empresas.obtener_o_404(conn, rut)
     return [emp["id"]]
@@ -631,6 +635,7 @@ def _cerrar(cid, estado, resultados, run, total, error=None) -> dict:
         auditoria.registrar(conn, "tarea:enriquecimiento", "enriquecimiento.terminar", "enriquecimiento_corrida", cid,
                             {"estado": estado, "gasto": float(gasto), "con_telefono_nuevo": res["con_telefono_nuevo"],
                              "procesadas": res["procesadas"]})
+        mantenimiento.al_terminar(f"enriquecimiento #{cid}", mantenimiento.ENRIQUECIMIENTO)
     return {k: v for k, v in res.items() if k != "empresas"}
 
 
@@ -650,6 +655,7 @@ def deshacer(conn, corrida_id: int, actor: str) -> dict:
                  (actor, corrida_id))
     r = quitar_datos(conn, corrida_id, "enriquecimiento", actor)
     auditoria.registrar(conn, actor, "enriquecimiento.deshacer", "enriquecimiento_corrida", corrida_id, r)
+    mantenimiento.al_terminar(f"enriquecimiento #{corrida_id} deshecho", mantenimiento.ENRIQUECIMIENTO)
     return r
 
 

@@ -40,11 +40,23 @@ def job_calidad(conn=Depends(get_conn), _: str = Depends(requiere_job)):
     libera las filas de los archivos que ya no se necesitan (D51)."""
     from .. import lotes
 
-    from .. import cargas
+    from .. import cargas, mantenimiento
 
     trabadas = lotes.revisar_trabadas()
     # D51: las filas de los archivos que se analizaron y no se usaron (o cuya carga terminó) se liberan a las 24 h
-    return {**calidad.medir(conn), "cargas_interrumpidas": trabadas, "archivos_liberados": cargas.limpiar_archivos(conn)}
+    r = {**calidad.medir(conn), "cargas_interrumpidas": trabadas, "archivos_liberados": cargas.limpiar_archivos(conn)}
+    # D55: ANALYZE de las tablas que cambiaron más del 10 %, enfriamientos vencidos y resúmenes
+    r["mantenimiento"] = mantenimiento.job(conn, diario=True)
+    return r
+
+
+@router.post("/jobs/mantenimiento")
+def job_mantenimiento(conn=Depends(get_conn), _: str = Depends(requiere_job)):
+    """Cloud Scheduler cada 10 minutos (D55): si quedó disponibilidad por recalcular o un resumen viejo, encola el
+    mantenimiento (salvo que haya una carga pesada en curso: al terminar encola el suyo)."""
+    from .. import mantenimiento
+
+    return mantenimiento.job(conn)
 
 
 @router.post("/jobs/duplicados")

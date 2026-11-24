@@ -410,3 +410,5 @@ svg.spark { display: block; }
 /* D52: aviso a los administradores cuando la base no tiene todas las migraciones del código */
 .franja-error { background: var(--red); color: #fff; padding: 0.65rem 1.25rem; font-size: 0.9rem; position: sticky; top: 0; z-index: 50; }
 .franja-error code { background: rgba(255,255,255,0.18); color: #fff; }
+.franja-aviso { background: #fff4d6; color: #6b4a00; border-bottom: 1px solid #f0d58a; padding: 0.55rem 1.25rem; font-size: 0.88rem;
+  position: sticky; top: 0; z-index: 49; }

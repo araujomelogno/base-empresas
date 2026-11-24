@@ -2,7 +2,7 @@
 //  Base de Empresas — shell: login, navegación por rol y ruteo
 // ════════════════════════════════════════════════════════════════
 import * as api from './api.js';
-import { $, $$, esc, initials, toast, main, cargando, errorEn } from './ui.js';
+import { $, $$, esc, initials, toast, main, cargando, errorEn, num } from './ui.js';
 import * as base from './vistas/base.js';
 import * as cargas from './vistas/cargas.js';
 import * as estudios from './vistas/estudios.js';
@@ -174,6 +174,7 @@ function renderShell() {
   document.getElementById('app').innerHTML = `
   ${me.aviso_migraciones ? `<div class="franja-error" role="alert"><strong>La base no está al día.</strong> ${esc(me.aviso_migraciones)}
     (ver «Actualizaciones» en docs/despliegue.md). Hasta entonces, algunas pantallas pueden fallar.</div>` : ''}
+  <div class="franja-aviso hidden" id="franja-estado" role="status"></div>
   <div class="app">
     <aside class="sidebar">
       <div class="sidebar-top"><img class="logo-horizontal-white" src="img/logo-horizontal-blanco.png" alt="Equipos Consultores" />
@@ -195,6 +196,31 @@ function renderShell() {
   };
   $$('#nav .nav-item').forEach(b => b.onclick = () => ctx.ir(b.dataset.ruta));
   actualizarContadores();
+  revisarEstado();
+  if (!S.estadoTimer) S.estadoTimer = setInterval(revisarEstado, 30000);
+}
+
+// D55: franja «Hay una carga grande en curso» y preparación de la disponibilidad (cada 30 s y al cambiar de pantalla)
+export async function revisarEstado() {
+  if (!S.me) return;
+  try {
+    const e = await api.get('/estado');
+    api.setEstadoBase(e);
+    const el = document.getElementById('franja-estado');
+    if (!el) return;
+    let t = '';
+    if (e.carga) {
+      const lote = e.carga.operacion === 'confirmar' && e.carga.lotes ? ` (lote ${num(e.carga.lote)} de ${num(e.carga.lotes)})` : '';
+      const que = { confirmar: 'una carga grande en curso', deshacer: 'una carga deshaciéndose', borrar: 'una carga borrándose' }[e.carga.operacion]
+        || 'una carga grande en curso';
+      t = `Hay ${que}${lote}: algunas pantallas pueden estar lentas.`;
+    } else if (e.disponibilidad_preparando) {
+      const p = e.disponibilidad_preparando;
+      t = `Preparando la base para búsquedas rápidas${p.total ? `: ${num(p.hechas)} de ${num(p.total)} empresas` : ''}. Mientras tanto, Empresas puede tardar más.`;
+    }
+    el.textContent = t;
+    el.classList.toggle('hidden', !t);
+  } catch { /* la franja es accesoria */ }
 }
 
 export async function actualizarContadores() {
@@ -214,6 +240,7 @@ async function rutear() {
   for (const [re, vista] of RUTAS) {
     const m = path.match(re);
     if (m) {
+      revisarEstado();
       cargando();
       window.scrollTo(0, 0);
       try { await vista(ctx, ...m.slice(1), new URLSearchParams(query || '')); }
