@@ -1,0 +1,112 @@
+[
+  {
+    "insertId": "s=1dd9a63f56fd4ffaab9d10af6283b320;i=1a1746;b=c057ce7910114a4ea158decf9248a102;m=e58afea029;t=660e3c8661f74;x=eaf2a4043b43f5f4-0@a2",
+    "labels": {
+      "INSTANCE_UID": "1-4ba5cacf-8d71-442c-9355-d2638f0e17aa",
+      "LOG_BUCKET_NUM": "42",
+      "PROJECT_NUMBER": "1097579860263",
+      "SOURCE_ID": "39656563626165343463643263623336e3b0c442"
+    },
+    "logName": "projects/equipos-base-empresas/logs/cloudsql.googleapis.com%2Fpostgres.log",
+    "receiveTimestamp": "2026-11-22T21:01:39.901380612Z",
+    "resource": {
+      "labels": {
+        "database_id": "equipos-base-empresas:empresas-pg",
+        "project_id": "equipos-base-empresas",
+        "region": "us-central"
+      },
+      "type": "cloudsql_database"
+    },
+    "severity": "ALERT",
+    "textPayload": "2026-11-22 21:01:36.242 UTC [703093]: [4-1] db=empresas,user=empresas_app FATAL:  connection to client lost",
+    "timestamp": "2026-11-22T21:01:36.243177Z"
+  },
+  {
+    "insertId": "s=1dd9a63f56fd4ffaab9d10af6283b320;i=1a06f0;b=c057ce7910114a4ea158decf9248a102;m=e4f9e7930c;t=660e3374f1256;x=5b7187672e4b86f8-0@a7",
+    "labels": {
+      "INSTANCE_UID": "1-4ba5cacf-8d71-442c-9355-d2638f0e17aa",
+      "LOG_BUCKET_NUM": "42",
+      "PROJECT_NUMBER": "1097579860263",
+      "SOURCE_ID": "39656563626165343463643263623336e3b0c442"
+    },
+    "logName": "projects/equipos-base-empresas/logs/cloudsql.googleapis.com%2Fpostgres.log",
+    "receiveTimestamp": "2026-11-22T20:21:31.156599241Z",
+    "resource": {
+      "labels": {
+        "database_id": "equipos-base-empresas:empresas-pg",
+        "project_id": "equipos-base-empresas",
+        "region": "us-central"
+      },
+      "type": "cloudsql_database"
+    },
+    "severity": "ERROR",
+    "textPayload": "2026-11-22 20:21:04.950 UTC [702902]: [3-1] db=empresas,user=empresas_app ERROR:  column c.tarea_id does not exist at character 79",
+    "timestamp": "2026-11-22T20:21:04.951128Z"
+  },
+  {
+    "insertId": "s=1dd9a63f56fd4ffaab9d10af6283b320;i=1a06f0;b=c057ce7910114a4ea158decf9248a102;m=e4f9e7930c;t=660e3374f1256;x=5b7187672e4b86f8-0@a5",
+    "labels": {
+      "INSTANCE_UID": "1-4ba5cacf-8d71-442c-9355-d2638f0e17aa",
+      "LOG_BUCKET_NUM": "42",
+      "PROJECT_NUMBER": "1097579860263",
+      "SOURCE_ID": "39656563626165343463643263623336e3b0c442"
+    },
+    "logName": "projects/equipos-base-empresas/logs/cloudsql.googleapis.com%2Fpostgres.log",
+    "receiveTimestamp": "2026-11-22T20:21:31.156599241Z",
+    "resource": {
+      "labels": {
+        "database_id": "equipos-base-empresas:empresas-pg",
+        "project_id": "equipos-base-empresas",
+        "region": "us-central"
+      },
+      "type": "cloudsql_database"
+    },
+    "severity": "ERROR",
+    "textPayload": "2026-11-22 20:21:04.722 UTC [702901]: [3-1] db=empresas,user=empresas_app ERROR:  column c.tarea_id does not exist at character 79",
+    "timestamp": "2026-11-22T20:21:04.723073Z"
+  },
+  {
+    "insertId": "s=1dd9a63f56fd4ffaab9d10af6283b320;i=1a06f0;b=c057ce7910114a4ea158decf9248a102;m=e4f9e7930c;t=660e3374f1256;x=5b7187672e4b86f8-0@a3",
+    "labels": {
+      "INSTANCE_UID": "1-4ba5cacf-8d71-442c-9355-d2638f0e17aa",
+      "LOG_BUCKET_NUM": "42",
+      "PROJECT_NUMBER": "1097579860263",
+      "SOURCE_ID": "39656563626165343463643263623336e3b0c442"
+    },
+    "logName": "projects/equipos-base-empresas/logs/cloudsql.googleapis.com%2Fpostgres.log",
+    "receiveTimestamp": "2026-11-22T20:21:31.156599241Z",
+    "resource": {
+      "labels": {
+        "database_id": "equipos-base-empresas:empresas-pg",
+        "project_id": "equipos-base-empresas",
+        "region": "us-central"
+      },
+      "type": "cloudsql_database"
+    },
+    "severity": "ERROR",
+    "textPayload": "2026-11-22 20:21:02.288 UTC [702901]: [1-1] db=empresas,user=empresas_app ERROR:  column c.tarea_id does not exist at character 79",
+    "timestamp": "2026-11-22T20:21:02.289200Z"
+  },
+  {
+    "insertId": "s=1dd9a63f56fd4ffaab9d10af6283b320;i=1a06f0;b=c057ce7910114a4ea158decf9248a102;m=e4f9e7930c;t=660e3374f1256;x=5b7187672e4b86f8-0@a1",
+    "labels": {
+      "INSTANCE_UID": "1-4ba5cacf-8d71-442c-9355-d2638f0e17aa",
+      "LOG_BUCKET_NUM": "42",
+      "PROJECT_NUMBER": "1097579860263",
+      "SOURCE_ID": "39656563626165343463643263623336e3b0c442"
+    },
+    "logName": "projects/equipos-base-empresas/logs/cloudsql.googleapis.com%2Fpostgres.log",
+    "receiveTimestamp": "2026-11-22T20:21:31.156599241Z",
+    "resource": {
+      "labels": {
+        "database_id": "equipos-base-empresas:empresas-pg",
+        "project_id": "equipos-base-empresas",
+        "region": "us-central"
+      },
+      "type": "cloudsql_database"
+    },
+    "severity": "ERROR",
+    "textPayload": "2026-11-22 20:21:02.035 UTC [702902]: [1-1] db=empresas,user=empresas_app ERROR:  column c.tarea_id does not exist at character 79",
+    "timestamp": "2026-11-22T20:21:02.035542Z"
+  }
+]

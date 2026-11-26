@@ -1,0 +1,482 @@
+[
+  {
+    "insertId": "6b04c020000a475b92530756",
+    "labels": {
+      "instanceId": "00e8a408bd43495c2acb4493482a8badcc4279ec58b554de94b838f9bf835325147231446362ab29f8e86661aa35697a8317e2e9ba6852e414e1f3bff63e17722dfee9dff6442c173372589371eb68fe7fd4cdcd8cd94849b1"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T22:37:20.680923563Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:24350 - \"POST /api/tareas/36/ejecutar HTTP/1.1\" 200 OK",
+    "timestamp": "2026-11-23T22:37:20.673627Z"
+  },
+  {
+    "insertId": "6b04c01f00099ba875c46282",
+    "labels": {
+      "instanceId": "00e8a408bd43495c2acb4493482a8badcc4279ec58b554de94b838f9bf835325147231446362ab29f8e86661aa35697a8317e2e9ba6852e414e1f3bff63e17722dfee9dff6442c173372589371eb68fe7fd4cdcd8cd94849b1"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T22:37:19.636672074Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:app.lotes:carga=11 confirmar lote=33/40 filas=5000 segundos=255.7 filas_s=20 consultas=71 base_s=253.7 rss_mb=176→176 altas=5000 actualizaciones=0",
+    "timestamp": "2026-11-23T22:37:19.629672Z"
+  },
+  {
+    "insertId": "6b04bf1a000246ea07e76ddf",
+    "labels": {
+      "instanceId": "00e8a408bdd6fce0edba4a51a55315b221d5145b5767f735421c15e76c3750f7ab7de11f1e5f396e4c989545c23cd3f39ed1062f6ccf6a40d5d23fda0ee319d53333e1d60a06ce957e1971b23309f80b7c59d7e34de8de677b"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T22:32:58.156689379Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:52798 - \"POST /api/tareas/36/ejecutar HTTP/1.1\" 200 OK",
+    "timestamp": "2026-11-23T22:32:58.149226Z"
+  },
+  {
+    "insertId": "6b04bf190009e9c059c380d4",
+    "labels": {
+      "instanceId": "00e8a408bdd6fce0edba4a51a55315b221d5145b5767f735421c15e76c3750f7ab7de11f1e5f396e4c989545c23cd3f39ed1062f6ccf6a40d5d23fda0ee319d53333e1d60a06ce957e1971b23309f80b7c59d7e34de8de677b"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T22:32:57.657208156Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:app.lotes:carga=11 confirmar lote=32/40 filas=5000 segundos=169.7 filas_s=29 consultas=71 base_s=167.1 rss_mb=193→193 altas=5000 actualizaciones=0",
+    "timestamp": "2026-11-23T22:32:57.649664Z"
+  },
+  {
+    "insertId": "6b04be62000a87ce9c00defc",
+    "labels": {
+      "instanceId": "00e8a408bdd6fce0edba4a51a55315b221d5145b5767f735421c15e76c3750f7ab7de11f1e5f396e4c989545c23cd3f39ed1062f6ccf6a40d5d23fda0ee319d53333e1d60a06ce957e1971b23309f80b7c59d7e34de8de677b"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T22:29:54.696637654Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:5662 - \"POST /api/tareas/36/ejecutar HTTP/1.1\" 200 OK",
+    "timestamp": "2026-11-23T22:29:54.690126Z"
+  },
+  {
+    "insertId": "6b04be6200027b0741f1fe53",
+    "labels": {
+      "instanceId": "00e8a408bdd6fce0edba4a51a55315b221d5145b5767f735421c15e76c3750f7ab7de11f1e5f396e4c989545c23cd3f39ed1062f6ccf6a40d5d23fda0ee319d53333e1d60a06ce957e1971b23309f80b7c59d7e34de8de677b"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T22:29:54.171151046Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:app.lotes:carga=11 confirmar lote=31/40 filas=5000 segundos=184.2 filas_s=27 consultas=71 base_s=182.2 rss_mb=193→193 altas=5000 actualizaciones=0",
+    "timestamp": "2026-11-23T22:29:54.162567Z"
+  },
+  {
+    "insertId": "6b04bd4a000a666280a8a5db",
+    "labels": {
+      "instanceId": "00e8a408bd43495c2acb4493482a8badcc4279ec58b554de94b838f9bf835325147231446362ab29f8e86661aa35697a8317e2e9ba6852e414e1f3bff63e17722dfee9dff6442c173372589371eb68fe7fd4cdcd8cd94849b1"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T22:25:14.690668455Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:64044 - \"POST /api/tareas/36/ejecutar HTTP/1.1\" 200 OK",
+    "timestamp": "2026-11-23T22:25:14.681570Z"
+  },
+  {
+    "insertId": "6b04bd4a0005eca8619094ff",
+    "labels": {
+      "instanceId": "00e8a408bd43495c2acb4493482a8badcc4279ec58b554de94b838f9bf835325147231446362ab29f8e86661aa35697a8317e2e9ba6852e414e1f3bff63e17722dfee9dff6442c173372589371eb68fe7fd4cdcd8cd94849b1"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T22:25:14.395635271Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:app.lotes:carga=11 confirmar lote=30/40 filas=5000 segundos=230.2 filas_s=22 consultas=71 base_s=228.0 rss_mb=176→176 altas=5000 actualizaciones=0",
+    "timestamp": "2026-11-23T22:25:14.388264Z"
+  },
+  {
+    "insertId": "6b04bc5e000a31f52b5d07cd",
+    "labels": {
+      "instanceId": "00e8a408bd43495c2acb4493482a8badcc4279ec58b554de94b838f9bf835325147231446362ab29f8e86661aa35697a8317e2e9ba6852e414e1f3bff63e17722dfee9dff6442c173372589371eb68fe7fd4cdcd8cd94849b1"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T22:21:18.675662230Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:51902 - \"POST /api/tareas/36/ejecutar HTTP/1.1\" 200 OK",
+    "timestamp": "2026-11-23T22:21:18.668149Z"
+  },
+  {
+    "insertId": "6b04bc5e000678b98cf532fb",
+    "labels": {
+      "instanceId": "00e8a408bd43495c2acb4493482a8badcc4279ec58b554de94b838f9bf835325147231446362ab29f8e86661aa35697a8317e2e9ba6852e414e1f3bff63e17722dfee9dff6442c173372589371eb68fe7fd4cdcd8cd94849b1"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T22:21:18.430588447Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:app.lotes:carga=11 confirmar lote=29/40 filas=5000 segundos=220.2 filas_s=23 consultas=71 base_s=218.4 rss_mb=176→176 altas=5000 actualizaciones=0",
+    "timestamp": "2026-11-23T22:21:18.424121Z"
+  },
+  {
+    "insertId": "6b04bb7f00026902028000af",
+    "labels": {
+      "instanceId": "00e8a408bd43495c2acb4493482a8badcc4279ec58b554de94b838f9bf835325147231446362ab29f8e86661aa35697a8317e2e9ba6852e414e1f3bff63e17722dfee9dff6442c173372589371eb68fe7fd4cdcd8cd94849b1"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T22:17:35.166819651Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:12186 - \"POST /api/tareas/36/ejecutar HTTP/1.1\" 200 OK",
+    "timestamp": "2026-11-23T22:17:35.157954Z"
+  },
+  {
+    "insertId": "6b04bb7e000daff6d1809b6c",
+    "labels": {
+      "instanceId": "00e8a408bd43495c2acb4493482a8badcc4279ec58b554de94b838f9bf835325147231446362ab29f8e86661aa35697a8317e2e9ba6852e414e1f3bff63e17722dfee9dff6442c173372589371eb68fe7fd4cdcd8cd94849b1"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T22:17:34.903408867Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "WARNING:app.lotes:carga=11 confirmar lote=28/40 filas=5000 segundos=283.5 filas_s=18 consultas=71 base_s=281.4 rss_mb=176→176 altas=5000 actualizaciones=0 ALARMA: lote lento",
+    "timestamp": "2026-11-23T22:17:34.897014Z"
+  },
+  {
+    "insertId": "6b04ba5b000884d2148c4bda",
+    "labels": {
+      "instanceId": "00e8a408bdd6fce0edba4a51a55315b221d5145b5767f735421c15e76c3750f7ab7de11f1e5f396e4c989545c23cd3f39ed1062f6ccf6a40d5d23fda0ee319d53333e1d60a06ce957e1971b23309f80b7c59d7e34de8de677b"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T22:12:43.565624007Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:28594 - \"POST /api/tareas/36/ejecutar HTTP/1.1\" 200 OK",
+    "timestamp": "2026-11-23T22:12:43.558290Z"
+  },
+  {
+    "insertId": "6b04ba5b0005d86813fbcdbe",
+    "labels": {
+      "instanceId": "00e8a408bdd6fce0edba4a51a55315b221d5145b5767f735421c15e76c3750f7ab7de11f1e5f396e4c989545c23cd3f39ed1062f6ccf6a40d5d23fda0ee319d53333e1d60a06ce957e1971b23309f80b7c59d7e34de8de677b"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T22:12:43.387785514Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:app.lotes:carga=11 confirmar lote=27/40 filas=5000 segundos=198.2 filas_s=25 consultas=71 base_s=195.7 rss_mb=193→193 altas=5000 actualizaciones=0",
+    "timestamp": "2026-11-23T22:12:43.383080Z"
+  },
+  {
+    "insertId": "6b04b98c000dbdbd52d44d70",
+    "labels": {
+      "instanceId": "00e8a408bd43495c2acb4493482a8badcc4279ec58b554de94b838f9bf835325147231446362ab29f8e86661aa35697a8317e2e9ba6852e414e1f3bff63e17722dfee9dff6442c173372589371eb68fe7fd4cdcd8cd94849b1"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T22:09:16.908522259Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:57502 - \"POST /api/tareas/36/ejecutar HTTP/1.1\" 200 OK",
+    "timestamp": "2026-11-23T22:09:16.900541Z"
+  },
+  {
+    "insertId": "6b04b98c0005775db540cdab",
+    "labels": {
+      "instanceId": "00e8a408bd43495c2acb4493482a8badcc4279ec58b554de94b838f9bf835325147231446362ab29f8e86661aa35697a8317e2e9ba6852e414e1f3bff63e17722dfee9dff6442c173372589371eb68fe7fd4cdcd8cd94849b1"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T22:09:16.364584748Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:app.lotes:carga=11 confirmar lote=26/40 filas=5000 segundos=237.7 filas_s=21 consultas=102 base_s=235.8 rss_mb=176→176 altas=5000 actualizaciones=0",
+    "timestamp": "2026-11-23T22:09:16.358237Z"
+  },
+  {
+    "insertId": "6b04b83c000277f4a3c610e1",
+    "labels": {
+      "instanceId": "00e8a408bd43495c2acb4493482a8badcc4279ec58b554de94b838f9bf835325147231446362ab29f8e86661aa35697a8317e2e9ba6852e414e1f3bff63e17722dfee9dff6442c173372589371eb68fe7fd4cdcd8cd94849b1"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T22:03:40.169961313Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:23074 - \"POST /api/tareas/36/ejecutar HTTP/1.1\" 200 OK",
+    "timestamp": "2026-11-23T22:03:40.161780Z"
+  },
+  {
+    "insertId": "6b04b83b0005841890c0e548",
+    "labels": {
+      "instanceId": "00e8a408bd43495c2acb4493482a8badcc4279ec58b554de94b838f9bf835325147231446362ab29f8e86661aa35697a8317e2e9ba6852e414e1f3bff63e17722dfee9dff6442c173372589371eb68fe7fd4cdcd8cd94849b1"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T22:03:39.369407896Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "WARNING:app.lotes:carga=11 confirmar lote=25/40 filas=5000 segundos=318.2 filas_s=16 consultas=144 base_s=315.9 rss_mb=176→176 altas=5000 actualizaciones=0 ALARMA: lote lento",
+    "timestamp": "2026-11-23T22:03:39.361496Z"
+  },
+  {
+    "insertId": "6b04b6f90002690d8da2d1d4",
+    "labels": {
+      "instanceId": "00e8a408bdd6fce0edba4a51a55315b221d5145b5767f735421c15e76c3750f7ab7de11f1e5f396e4c989545c23cd3f39ed1062f6ccf6a40d5d23fda0ee319d53333e1d60a06ce957e1971b23309f80b7c59d7e34de8de677b"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T21:58:17.163027219Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:19610 - \"POST /api/tareas/36/ejecutar HTTP/1.1\" 200 OK",
+    "timestamp": "2026-11-23T21:58:17.157965Z"
+  },
+  {
+    "insertId": "6b04b6f8000dc8a22eddb42c",
+    "labels": {
+      "instanceId": "00e8a408bdd6fce0edba4a51a55315b221d5145b5767f735421c15e76c3750f7ab7de11f1e5f396e4c989545c23cd3f39ed1062f6ccf6a40d5d23fda0ee319d53333e1d60a06ce957e1971b23309f80b7c59d7e34de8de677b"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T21:58:16.911930998Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "WARNING:app.lotes:carga=11 confirmar lote=24/40 filas=5000 segundos=341.9 filas_s=15 consultas=144 base_s=338.7 rss_mb=193→193 altas=5000 actualizaciones=0 ALARMA: lote lento",
+    "timestamp": "2026-11-23T21:58:16.903330Z"
+  },
+  {
+    "insertId": "6b04b5a000017ae427d2c042",
+    "labels": {
+      "instanceId": "00e8a408bd43495c2acb4493482a8badcc4279ec58b554de94b838f9bf835325147231446362ab29f8e86661aa35697a8317e2e9ba6852e414e1f3bff63e17722dfee9dff6442c173372589371eb68fe7fd4cdcd8cd94849b1"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T21:52:32.103503828Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:5874 - \"POST /api/tareas/36/ejecutar HTTP/1.1\" 200 OK",
+    "timestamp": "2026-11-23T21:52:32.096996Z"
+  },
+  {
+    "insertId": "6b04b59f00055764ef8c646c",
+    "labels": {
+      "instanceId": "00e8a408bd43495c2acb4493482a8badcc4279ec58b554de94b838f9bf835325147231446362ab29f8e86661aa35697a8317e2e9ba6852e414e1f3bff63e17722dfee9dff6442c173372589371eb68fe7fd4cdcd8cd94849b1"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T21:52:31.358245857Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "WARNING:app.lotes:carga=11 confirmar lote=23/40 filas=5000 segundos=313.2 filas_s=16 consultas=144 base_s=309.6 rss_mb=176→176 altas=5000 actualizaciones=0 ALARMA: lote lento",
+    "timestamp": "2026-11-23T21:52:31.350052Z"
+  },
+  {
+    "insertId": "6b04b46300073b37e874c595",
+    "labels": {
+      "instanceId": "00e8a408bd43495c2acb4493482a8badcc4279ec58b554de94b838f9bf835325147231446362ab29f8e86661aa35697a8317e2e9ba6852e414e1f3bff63e17722dfee9dff6442c173372589371eb68fe7fd4cdcd8cd94849b1"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T21:47:15.480964719Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:48854 - \"POST /api/tareas/36/ejecutar HTTP/1.1\" 200 OK",
+    "timestamp": "2026-11-23T21:47:15.473911Z"
+  },
+  {
+    "insertId": "6b04b46300058c99fb7612be",
+    "labels": {
+      "instanceId": "00e8a408bd43495c2acb4493482a8badcc4279ec58b554de94b838f9bf835325147231446362ab29f8e86661aa35697a8317e2e9ba6852e414e1f3bff63e17722dfee9dff6442c173372589371eb68fe7fd4cdcd8cd94849b1"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T21:47:15.372190817Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00004-ncq",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "WARNING:app.lotes:carga=11 confirmar lote=22/40 filas=5000 segundos=269.4 filas_s=19 consultas=144 base_s=266.1 rss_mb=176→176 altas=5000 actualizaciones=0 ALARMA: lote lento",
+    "timestamp": "2026-11-23T21:47:15.363673Z"
+  }
+]

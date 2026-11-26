@@ -1,0 +1,720 @@
+[
+  {
+    "errorGroups": [
+      {
+        "id": "CMOpoKCsscjrGA"
+      }
+    ],
+    "insertId": "6b04e4a70007d8d4088890a3",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-24T01:13:11.833931620Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py\", line 422, in run_asgi\n    result = await app(  # type: ignore[func-returns-value]\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py\", line 63, in __call__\n    return await self.app(scope, receive, send)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/applications.py\", line 1194, in __call__\n    await super().__call__(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/applications.py\", line 96, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 186, in __call__\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 164, in __call__\n    await self.app(scope, receive, _send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/telemetry/_asgi.py\", line 151, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 683, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2811, in app\n    await route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1839, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2894, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1865, in _handle_selected\n    await original_route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1328, in handle\n    await effective_context.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 166, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 152, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 511, in app\n    solved_result = await solve_dependencies(\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 725, in solve_dependencies\n    solved = await _solve_generator(\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 631, in _solve_generator\n    return await stack.enter_async_context(cm)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 659, in enter_async_context\n    result = await _enter(cm)\n             ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 210, in __aenter__\n    return await anext(self.gen)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 37, in contextmanager_in_threadpool\n    raise e\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 29, in contextmanager_in_threadpool\n    yield await run_in_threadpool(cm.__enter__)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/starlette/concurrency.py\", line 34, in run_in_threadpool\n    return await anyio.to_thread.run_sync(func)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/to_thread.py\", line 65, in run_sync\n    return await get_async_backend().run_sync_in_worker_thread(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 2779, in run_sync_in_worker_thread\n    return await future\n           ^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 1124, in run\n    result = context.run(func, *args)\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 46, in get_conn\n    with conexion() as conn:\n         ^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 39, in conexion\n    with pool().connection() as conn:\n         ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 184, in connection\n    conn = self.getconn(timeout=timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 218, in getconn\n    raise PoolTimeout(\npsycopg_pool.PoolTimeout: couldn't get a connection after 30.00 sec",
+    "timestamp": "2026-11-24T01:13:11.514260Z"
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CMOpoKCsscjrGA"
+      }
+    ],
+    "insertId": "6b04e4a70007cdb72e441142",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-24T01:13:11.833931620Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 164, in __call__\n    await self.app(scope, receive, _send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/telemetry/_asgi.py\", line 151, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 683, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2811, in app\n    await route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1839, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2894, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1865, in _handle_selected\n    await original_route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1328, in handle\n    await effective_context.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 166, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 152, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 511, in app\n    solved_result = await solve_dependencies(\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 725, in solve_dependencies\n    solved = await _solve_generator(\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 631, in _solve_generator\n    return await stack.enter_async_context(cm)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 659, in enter_async_context\n    result = await _enter(cm)\n             ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 210, in __aenter__\n    return await anext(self.gen)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 37, in contextmanager_in_threadpool\n    raise e\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 29, in contextmanager_in_threadpool\n    yield await run_in_threadpool(cm.__enter__)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/starlette/concurrency.py\", line 34, in run_in_threadpool\n    return await anyio.to_thread.run_sync(func)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/to_thread.py\", line 65, in run_sync\n    return await get_async_backend().run_sync_in_worker_thread(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 2779, in run_sync_in_worker_thread\n    return await future\n           ^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 1124, in run\n    result = context.run(func, *args)\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 46, in get_conn\n    with conexion() as conn:\n         ^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 39, in conexion\n    with pool().connection() as conn:\n         ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 184, in connection\n    conn = self.getconn(timeout=timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 218, in getconn\n    raise PoolTimeout(\npsycopg_pool.PoolTimeout: couldn't get a connection after 30.00 sec",
+    "timestamp": "2026-11-24T01:13:11.511415Z"
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CMOpoKCsscjrGA"
+      }
+    ],
+    "insertId": "6b04e4a70001d17eac21b653",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-24T01:13:11.168086090Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py\", line 422, in run_asgi\n    result = await app(  # type: ignore[func-returns-value]\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py\", line 63, in __call__\n    return await self.app(scope, receive, send)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/applications.py\", line 1194, in __call__\n    await super().__call__(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/applications.py\", line 96, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 186, in __call__\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 164, in __call__\n    await self.app(scope, receive, _send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/telemetry/_asgi.py\", line 151, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 683, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2811, in app\n    await route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1839, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2894, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1865, in _handle_selected\n    await original_route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1328, in handle\n    await effective_context.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 166, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 152, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 511, in app\n    solved_result = await solve_dependencies(\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 725, in solve_dependencies\n    solved = await _solve_generator(\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 631, in _solve_generator\n    return await stack.enter_async_context(cm)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 659, in enter_async_context\n    result = await _enter(cm)\n             ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 210, in __aenter__\n    return await anext(self.gen)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 37, in contextmanager_in_threadpool\n    raise e\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 29, in contextmanager_in_threadpool\n    yield await run_in_threadpool(cm.__enter__)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/starlette/concurrency.py\", line 34, in run_in_threadpool\n    return await anyio.to_thread.run_sync(func)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/to_thread.py\", line 65, in run_sync\n    return await get_async_backend().run_sync_in_worker_thread(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 2779, in run_sync_in_worker_thread\n    return await future\n           ^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 1124, in run\n    result = context.run(func, *args)\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 46, in get_conn\n    with conexion() as conn:\n         ^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 39, in conexion\n    with pool().connection() as conn:\n         ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 184, in connection\n    conn = self.getconn(timeout=timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 218, in getconn\n    raise PoolTimeout(\npsycopg_pool.PoolTimeout: couldn't get a connection after 30.00 sec",
+    "timestamp": "2026-11-24T01:13:11.119166Z"
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CMOpoKCsscjrGA"
+      }
+    ],
+    "insertId": "6b04e4a70001c543bb5a155a",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-24T01:13:11.168086090Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 164, in __call__\n    await self.app(scope, receive, _send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/telemetry/_asgi.py\", line 151, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 683, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2811, in app\n    await route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1839, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2894, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1865, in _handle_selected\n    await original_route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1328, in handle\n    await effective_context.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 166, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 152, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 511, in app\n    solved_result = await solve_dependencies(\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 725, in solve_dependencies\n    solved = await _solve_generator(\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 631, in _solve_generator\n    return await stack.enter_async_context(cm)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 659, in enter_async_context\n    result = await _enter(cm)\n             ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 210, in __aenter__\n    return await anext(self.gen)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 37, in contextmanager_in_threadpool\n    raise e\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 29, in contextmanager_in_threadpool\n    yield await run_in_threadpool(cm.__enter__)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/starlette/concurrency.py\", line 34, in run_in_threadpool\n    return await anyio.to_thread.run_sync(func)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/to_thread.py\", line 65, in run_sync\n    return await get_async_backend().run_sync_in_worker_thread(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 2779, in run_sync_in_worker_thread\n    return await future\n           ^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 1124, in run\n    result = context.run(func, *args)\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 46, in get_conn\n    with conexion() as conn:\n         ^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 39, in conexion\n    with pool().connection() as conn:\n         ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 184, in connection\n    conn = self.getconn(timeout=timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 218, in getconn\n    raise PoolTimeout(\npsycopg_pool.PoolTimeout: couldn't get a connection after 30.00 sec",
+    "timestamp": "2026-11-24T01:13:11.116035Z"
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CMOpoKCsscjrGA"
+      }
+    ],
+    "insertId": "6b04e4a50003e8f2439226d6",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-24T01:13:09.506157841Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py\", line 422, in run_asgi\n    result = await app(  # type: ignore[func-returns-value]\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py\", line 63, in __call__\n    return await self.app(scope, receive, send)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/applications.py\", line 1194, in __call__\n    await super().__call__(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/applications.py\", line 96, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 186, in __call__\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 164, in __call__\n    await self.app(scope, receive, _send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/telemetry/_asgi.py\", line 151, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 683, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2811, in app\n    await route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1839, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2894, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1865, in _handle_selected\n    await original_route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1328, in handle\n    await effective_context.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 166, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 152, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 511, in app\n    solved_result = await solve_dependencies(\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 725, in solve_dependencies\n    solved = await _solve_generator(\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 631, in _solve_generator\n    return await stack.enter_async_context(cm)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 659, in enter_async_context\n    result = await _enter(cm)\n             ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 210, in __aenter__\n    return await anext(self.gen)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 37, in contextmanager_in_threadpool\n    raise e\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 29, in contextmanager_in_threadpool\n    yield await run_in_threadpool(cm.__enter__)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/starlette/concurrency.py\", line 34, in run_in_threadpool\n    return await anyio.to_thread.run_sync(func)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/to_thread.py\", line 65, in run_sync\n    return await get_async_backend().run_sync_in_worker_thread(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 2779, in run_sync_in_worker_thread\n    return await future\n           ^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 1124, in run\n    result = context.run(func, *args)\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 46, in get_conn\n    with conexion() as conn:\n         ^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 39, in conexion\n    with pool().connection() as conn:\n         ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 184, in connection\n    conn = self.getconn(timeout=timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 218, in getconn\n    raise PoolTimeout(\npsycopg_pool.PoolTimeout: couldn't get a connection after 30.00 sec",
+    "timestamp": "2026-11-24T01:13:09.256242Z"
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CMOpoKCsscjrGA"
+      }
+    ],
+    "insertId": "6b04e4a50003d71a189374d8",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-24T01:13:09.506157841Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 164, in __call__\n    await self.app(scope, receive, _send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/telemetry/_asgi.py\", line 151, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 683, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2811, in app\n    await route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1839, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2894, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1865, in _handle_selected\n    await original_route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1328, in handle\n    await effective_context.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 166, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 152, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 511, in app\n    solved_result = await solve_dependencies(\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 725, in solve_dependencies\n    solved = await _solve_generator(\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 631, in _solve_generator\n    return await stack.enter_async_context(cm)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 659, in enter_async_context\n    result = await _enter(cm)\n             ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 210, in __aenter__\n    return await anext(self.gen)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 37, in contextmanager_in_threadpool\n    raise e\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 29, in contextmanager_in_threadpool\n    yield await run_in_threadpool(cm.__enter__)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/starlette/concurrency.py\", line 34, in run_in_threadpool\n    return await anyio.to_thread.run_sync(func)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/to_thread.py\", line 65, in run_sync\n    return await get_async_backend().run_sync_in_worker_thread(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 2779, in run_sync_in_worker_thread\n    return await future\n           ^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 1124, in run\n    result = context.run(func, *args)\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 46, in get_conn\n    with conexion() as conn:\n         ^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 39, in conexion\n    with pool().connection() as conn:\n         ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 184, in connection\n    conn = self.getconn(timeout=timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 218, in getconn\n    raise PoolTimeout(\npsycopg_pool.PoolTimeout: couldn't get a connection after 30.00 sec",
+    "timestamp": "2026-11-24T01:13:09.251674Z"
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CMOpoKCsscjrGA"
+      }
+    ],
+    "insertId": "6b04e4a3000ca82f9c15d4ce",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-24T01:13:08.166734224Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py\", line 422, in run_asgi\n    result = await app(  # type: ignore[func-returns-value]\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py\", line 63, in __call__\n    return await self.app(scope, receive, send)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/applications.py\", line 1194, in __call__\n    await super().__call__(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/applications.py\", line 96, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 186, in __call__\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 164, in __call__\n    await self.app(scope, receive, _send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/telemetry/_asgi.py\", line 151, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 683, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2811, in app\n    await route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1839, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2894, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1865, in _handle_selected\n    await original_route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1328, in handle\n    await effective_context.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 166, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 152, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 511, in app\n    solved_result = await solve_dependencies(\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 725, in solve_dependencies\n    solved = await _solve_generator(\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 631, in _solve_generator\n    return await stack.enter_async_context(cm)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 659, in enter_async_context\n    result = await _enter(cm)\n             ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 210, in __aenter__\n    return await anext(self.gen)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 37, in contextmanager_in_threadpool\n    raise e\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 29, in contextmanager_in_threadpool\n    yield await run_in_threadpool(cm.__enter__)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/starlette/concurrency.py\", line 34, in run_in_threadpool\n    return await anyio.to_thread.run_sync(func)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/to_thread.py\", line 65, in run_sync\n    return await get_async_backend().run_sync_in_worker_thread(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 2779, in run_sync_in_worker_thread\n    return await future\n           ^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 1124, in run\n    result = context.run(func, *args)\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 46, in get_conn\n    with conexion() as conn:\n         ^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 39, in conexion\n    with pool().connection() as conn:\n         ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 184, in connection\n    conn = self.getconn(timeout=timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 218, in getconn\n    raise PoolTimeout(\npsycopg_pool.PoolTimeout: couldn't get a connection after 30.00 sec",
+    "timestamp": "2026-11-24T01:13:07.829487Z"
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CMOpoKCsscjrGA"
+      }
+    ],
+    "insertId": "6b04e4a3000ca07291cf1d87",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-24T01:13:07.838287676Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 164, in __call__\n    await self.app(scope, receive, _send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/telemetry/_asgi.py\", line 151, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 683, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2811, in app\n    await route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1839, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2894, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1865, in _handle_selected\n    await original_route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1328, in handle\n    await effective_context.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 166, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 152, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 511, in app\n    solved_result = await solve_dependencies(\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 725, in solve_dependencies\n    solved = await _solve_generator(\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 631, in _solve_generator\n    return await stack.enter_async_context(cm)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 659, in enter_async_context\n    result = await _enter(cm)\n             ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 210, in __aenter__\n    return await anext(self.gen)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 37, in contextmanager_in_threadpool\n    raise e\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 29, in contextmanager_in_threadpool\n    yield await run_in_threadpool(cm.__enter__)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/starlette/concurrency.py\", line 34, in run_in_threadpool\n    return await anyio.to_thread.run_sync(func)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/to_thread.py\", line 65, in run_sync\n    return await get_async_backend().run_sync_in_worker_thread(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 2779, in run_sync_in_worker_thread\n    return await future\n           ^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 1124, in run\n    result = context.run(func, *args)\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 46, in get_conn\n    with conexion() as conn:\n         ^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 39, in conexion\n    with pool().connection() as conn:\n         ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 184, in connection\n    conn = self.getconn(timeout=timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 218, in getconn\n    raise PoolTimeout(\npsycopg_pool.PoolTimeout: couldn't get a connection after 30.00 sec",
+    "timestamp": "2026-11-24T01:13:07.827506Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "30.007519307s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://equipos-base-empresas.web.app/",
+      "remoteIp": "192.178.11.32",
+      "requestMethod": "GET",
+      "requestSize": "2538",
+      "requestUrl": "https://empresas-api-rbg3vwvhaq-uc.a.run.app/api/empresas?base=definitiva&pagina=1",
+      "responseSize": "139",
+      "serverIp": "34.143.78.2",
+      "status": 500,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36"
+    },
+    "insertId": "6b04e4a70007d0a36393f754",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-24T01:13:11.833647084Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "7df5ffc55df4ad7a",
+    "timestamp": "2026-11-24T01:12:41.501141Z",
+    "trace": "projects/equipos-base-empresas/traces/b9fc36b7bc17ba9888fdd5539bbdf0cc"
+  },
+  {
+    "httpRequest": {
+      "latency": "30.011451058s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://equipos-base-empresas.web.app/",
+      "remoteIp": "66.102.8.108",
+      "requestMethod": "GET",
+      "requestSize": "2375",
+      "requestUrl": "https://empresas-api-rbg3vwvhaq-uc.a.run.app/api/naturalezas",
+      "responseSize": "139",
+      "serverIp": "34.143.74.2",
+      "status": 500,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36"
+    },
+    "insertId": "6b04e4a70001c7dac20ae372",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-24T01:13:11.165538114Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "f1e73747be748f1a",
+    "timestamp": "2026-11-24T01:12:41.101965Z",
+    "trace": "projects/equipos-base-empresas/traces/172bbe7d716b6254b223deb0056461a4"
+  },
+  {
+    "httpRequest": {
+      "latency": "30.008989446s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://equipos-base-empresas.web.app/",
+      "remoteIp": "66.102.8.163",
+      "requestMethod": "GET",
+      "requestSize": "2494",
+      "requestUrl": "https://empresas-api-rbg3vwvhaq-uc.a.run.app/api/naturalezas",
+      "responseSize": "139",
+      "serverIp": "34.143.73.2",
+      "status": 500,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36"
+    },
+    "insertId": "6b04e4a50003dadde1d03a27",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-24T01:13:09.499331354Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "727fe0c15f0816ab",
+    "timestamp": "2026-11-24T01:12:39.240873Z",
+    "trace": "projects/equipos-base-empresas/traces/1be538b01541d2f2a9ddad776cb90b5e"
+  },
+  {
+    "httpRequest": {
+      "latency": "30.009049888s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://equipos-base-empresas.web.app/",
+      "remoteIp": "192.178.11.36",
+      "requestMethod": "GET",
+      "requestSize": "2538",
+      "requestUrl": "https://empresas-api-rbg3vwvhaq-uc.a.run.app/api/empresas?base=definitiva&pagina=1",
+      "responseSize": "139",
+      "serverIp": "34.143.78.2",
+      "status": 500,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36"
+    },
+    "insertId": "6b04e4a3000ca462ddf6ad83",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-24T01:13:07.839164576Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "bcccf6a573617333",
+    "timestamp": "2026-11-24T01:12:37.806447Z",
+    "trace": "projects/equipos-base-empresas/traces/c163bea06653c37b664a21054ab3cc82",
+    "traceSampled": true
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CMOpoKCsscjrGA"
+      }
+    ],
+    "insertId": "6b04e46d00006658010a8ae8",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-24T01:12:13.260951668Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py\", line 422, in run_asgi\n    result = await app(  # type: ignore[func-returns-value]\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py\", line 63, in __call__\n    return await self.app(scope, receive, send)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/applications.py\", line 1194, in __call__\n    await super().__call__(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/applications.py\", line 96, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 186, in __call__\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 164, in __call__\n    await self.app(scope, receive, _send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/telemetry/_asgi.py\", line 151, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 683, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2811, in app\n    await route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1839, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2894, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1865, in _handle_selected\n    await original_route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1328, in handle\n    await effective_context.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 166, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 152, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 511, in app\n    solved_result = await solve_dependencies(\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 725, in solve_dependencies\n    solved = await _solve_generator(\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 631, in _solve_generator\n    return await stack.enter_async_context(cm)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 659, in enter_async_context\n    result = await _enter(cm)\n             ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 210, in __aenter__\n    return await anext(self.gen)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 37, in contextmanager_in_threadpool\n    raise e\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 29, in contextmanager_in_threadpool\n    yield await run_in_threadpool(cm.__enter__)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/starlette/concurrency.py\", line 34, in run_in_threadpool\n    return await anyio.to_thread.run_sync(func)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/to_thread.py\", line 65, in run_sync\n    return await get_async_backend().run_sync_in_worker_thread(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 2779, in run_sync_in_worker_thread\n    return await future\n           ^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 1124, in run\n    result = context.run(func, *args)\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 46, in get_conn\n    with conexion() as conn:\n         ^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 39, in conexion\n    with pool().connection() as conn:\n         ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 184, in connection\n    conn = self.getconn(timeout=timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 218, in getconn\n    raise PoolTimeout(\npsycopg_pool.PoolTimeout: couldn't get a connection after 30.00 sec",
+    "timestamp": "2026-11-24T01:12:13.026200Z"
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CMOpoKCsscjrGA"
+      }
+    ],
+    "insertId": "6b04e46d000055535c699f4d",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-24T01:12:13.260951668Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 164, in __call__\n    await self.app(scope, receive, _send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/telemetry/_asgi.py\", line 151, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 683, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2811, in app\n    await route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1839, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2894, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1865, in _handle_selected\n    await original_route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1328, in handle\n    await effective_context.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 166, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 152, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 511, in app\n    solved_result = await solve_dependencies(\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 725, in solve_dependencies\n    solved = await _solve_generator(\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 631, in _solve_generator\n    return await stack.enter_async_context(cm)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 659, in enter_async_context\n    result = await _enter(cm)\n             ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 210, in __aenter__\n    return await anext(self.gen)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 37, in contextmanager_in_threadpool\n    raise e\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 29, in contextmanager_in_threadpool\n    yield await run_in_threadpool(cm.__enter__)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/starlette/concurrency.py\", line 34, in run_in_threadpool\n    return await anyio.to_thread.run_sync(func)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/to_thread.py\", line 65, in run_sync\n    return await get_async_backend().run_sync_in_worker_thread(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 2779, in run_sync_in_worker_thread\n    return await future\n           ^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 1124, in run\n    result = context.run(func, *args)\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 46, in get_conn\n    with conexion() as conn:\n         ^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 39, in conexion\n    with pool().connection() as conn:\n         ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 184, in connection\n    conn = self.getconn(timeout=timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 218, in getconn\n    raise PoolTimeout(\npsycopg_pool.PoolTimeout: couldn't get a connection after 30.00 sec",
+    "timestamp": "2026-11-24T01:12:13.021843Z"
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CMOpoKCsscjrGA"
+      }
+    ],
+    "insertId": "6b04e46c000934be3eaec70f",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-24T01:12:12.928095985Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py\", line 422, in run_asgi\n    result = await app(  # type: ignore[func-returns-value]\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py\", line 63, in __call__\n    return await self.app(scope, receive, send)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/applications.py\", line 1194, in __call__\n    await super().__call__(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/applications.py\", line 96, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 186, in __call__\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 164, in __call__\n    await self.app(scope, receive, _send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/telemetry/_asgi.py\", line 151, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 683, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2811, in app\n    await route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1839, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2894, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1865, in _handle_selected\n    await original_route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1328, in handle\n    await effective_context.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 166, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 152, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 511, in app\n    solved_result = await solve_dependencies(\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 725, in solve_dependencies\n    solved = await _solve_generator(\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 631, in _solve_generator\n    return await stack.enter_async_context(cm)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 659, in enter_async_context\n    result = await _enter(cm)\n             ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 210, in __aenter__\n    return await anext(self.gen)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 37, in contextmanager_in_threadpool\n    raise e\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 29, in contextmanager_in_threadpool\n    yield await run_in_threadpool(cm.__enter__)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/starlette/concurrency.py\", line 34, in run_in_threadpool\n    return await anyio.to_thread.run_sync(func)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/to_thread.py\", line 65, in run_sync\n    return await get_async_backend().run_sync_in_worker_thread(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 2779, in run_sync_in_worker_thread\n    return await future\n           ^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 1124, in run\n    result = context.run(func, *args)\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 46, in get_conn\n    with conexion() as conn:\n         ^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 39, in conexion\n    with pool().connection() as conn:\n         ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 184, in connection\n    conn = self.getconn(timeout=timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 218, in getconn\n    raise PoolTimeout(\npsycopg_pool.PoolTimeout: couldn't get a connection after 30.00 sec",
+    "timestamp": "2026-11-24T01:12:12.603326Z"
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CMOpoKCsscjrGA"
+      }
+    ],
+    "insertId": "6b04e46c00092ca7e7e21f7d",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-24T01:12:12.928095985Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 164, in __call__\n    await self.app(scope, receive, _send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/telemetry/_asgi.py\", line 151, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 683, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2811, in app\n    await route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1839, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2894, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1865, in _handle_selected\n    await original_route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1328, in handle\n    await effective_context.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 166, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 152, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 511, in app\n    solved_result = await solve_dependencies(\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 725, in solve_dependencies\n    solved = await _solve_generator(\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 631, in _solve_generator\n    return await stack.enter_async_context(cm)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 659, in enter_async_context\n    result = await _enter(cm)\n             ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 210, in __aenter__\n    return await anext(self.gen)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 37, in contextmanager_in_threadpool\n    raise e\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 29, in contextmanager_in_threadpool\n    yield await run_in_threadpool(cm.__enter__)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/starlette/concurrency.py\", line 34, in run_in_threadpool\n    return await anyio.to_thread.run_sync(func)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/to_thread.py\", line 65, in run_sync\n    return await get_async_backend().run_sync_in_worker_thread(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 2779, in run_sync_in_worker_thread\n    return await future\n           ^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 1124, in run\n    result = context.run(func, *args)\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 46, in get_conn\n    with conexion() as conn:\n         ^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 39, in conexion\n    with pool().connection() as conn:\n         ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 184, in connection\n    conn = self.getconn(timeout=timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 218, in getconn\n    raise PoolTimeout(\npsycopg_pool.PoolTimeout: couldn't get a connection after 30.00 sec",
+    "timestamp": "2026-11-24T01:12:12.601255Z"
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CMOpoKCsscjrGA"
+      }
+    ],
+    "insertId": "6b04e46c000924d7a82ca983",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-24T01:12:12.928095985Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py\", line 422, in run_asgi\n    result = await app(  # type: ignore[func-returns-value]\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py\", line 63, in __call__\n    return await self.app(scope, receive, send)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/applications.py\", line 1194, in __call__\n    await super().__call__(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/applications.py\", line 96, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 186, in __call__\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 164, in __call__\n    await self.app(scope, receive, _send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/telemetry/_asgi.py\", line 151, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 683, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2811, in app\n    await route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1839, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2894, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1865, in _handle_selected\n    await original_route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1328, in handle\n    await effective_context.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 166, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 152, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 511, in app\n    solved_result = await solve_dependencies(\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 725, in solve_dependencies\n    solved = await _solve_generator(\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 631, in _solve_generator\n    return await stack.enter_async_context(cm)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 659, in enter_async_context\n    result = await _enter(cm)\n             ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 210, in __aenter__\n    return await anext(self.gen)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 37, in contextmanager_in_threadpool\n    raise e\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 29, in contextmanager_in_threadpool\n    yield await run_in_threadpool(cm.__enter__)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/starlette/concurrency.py\", line 34, in run_in_threadpool\n    return await anyio.to_thread.run_sync(func)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/to_thread.py\", line 65, in run_sync\n    return await get_async_backend().run_sync_in_worker_thread(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 2779, in run_sync_in_worker_thread\n    return await future\n           ^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 1124, in run\n    result = context.run(func, *args)\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 46, in get_conn\n    with conexion() as conn:\n         ^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 39, in conexion\n    with pool().connection() as conn:\n         ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 184, in connection\n    conn = self.getconn(timeout=timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 218, in getconn\n    raise PoolTimeout(\npsycopg_pool.PoolTimeout: couldn't get a connection after 30.00 sec",
+    "timestamp": "2026-11-24T01:12:12.599255Z"
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CMOpoKCsscjrGA"
+      }
+    ],
+    "insertId": "6b04e46c0008f89a2a76f4f4",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-24T01:12:12.594184413Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py\", line 164, in __call__\n    await self.app(scope, receive, _send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/telemetry/_asgi.py\", line 151, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/middleware/exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/routing.py\", line 683, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2811, in app\n    await route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1839, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 2894, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1865, in _handle_selected\n    await original_route.handle(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 1328, in handle\n    await effective_context.app(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 166, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/usr/local/lib/python3.12/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 152, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/routing.py\", line 511, in app\n    solved_result = await solve_dependencies(\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 725, in solve_dependencies\n    solved = await _solve_generator(\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 631, in _solve_generator\n    return await stack.enter_async_context(cm)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 659, in enter_async_context\n    result = await _enter(cm)\n             ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 210, in __aenter__\n    return await anext(self.gen)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 37, in contextmanager_in_threadpool\n    raise e\n  File \"/usr/local/lib/python3.12/site-packages/fastapi/concurrency.py\", line 29, in contextmanager_in_threadpool\n    yield await run_in_threadpool(cm.__enter__)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/starlette/concurrency.py\", line 34, in run_in_threadpool\n    return await anyio.to_thread.run_sync(func)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/to_thread.py\", line 65, in run_sync\n    return await get_async_backend().run_sync_in_worker_thread(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 2779, in run_sync_in_worker_thread\n    return await future\n           ^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 1124, in run\n    result = context.run(func, *args)\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 46, in get_conn\n    with conexion() as conn:\n         ^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/srv/api/app/db.py\", line 39, in conexion\n    with pool().connection() as conn:\n         ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/contextlib.py\", line 137, in __enter__\n    return next(self.gen)\n           ^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 184, in connection\n    conn = self.getconn(timeout=timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/site-packages/psycopg_pool/pool.py\", line 218, in getconn\n    raise PoolTimeout(\npsycopg_pool.PoolTimeout: couldn't get a connection after 30.00 sec",
+    "timestamp": "2026-11-24T01:12:12.587930Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "30.007974530s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://equipos-base-empresas.web.app/",
+      "remoteIp": "66.102.8.35",
+      "requestMethod": "GET",
+      "requestSize": "2495",
+      "requestUrl": "https://empresas-api-rbg3vwvhaq-uc.a.run.app/api/naturalezas",
+      "responseSize": "139",
+      "serverIp": "34.143.72.2",
+      "status": 500,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36"
+    },
+    "insertId": "6b04e46d000057996637dbf7",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-24T01:12:13.261322934Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "5dc6a01849810846",
+    "timestamp": "2026-11-24T01:11:43.012543Z",
+    "trace": "projects/equipos-base-empresas/traces/d567b7cad79e41b95dea3f092ee5206e"
+  },
+  {
+    "httpRequest": {
+      "latency": "30.049008666s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://equipos-base-empresas.web.app/",
+      "remoteIp": "74.125.210.68",
+      "requestMethod": "GET",
+      "requestSize": "2468",
+      "requestUrl": "https://empresas-api-rbg3vwvhaq-uc.a.run.app/api/empresas?base=definitiva&pagina=1",
+      "responseSize": "139",
+      "serverIp": "34.143.73.2",
+      "status": 500,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36"
+    },
+    "insertId": "6b04e46c00092ecb1ff53229",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-24T01:12:12.928005685Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "d137c32bc1d53199",
+    "timestamp": "2026-11-24T01:11:42.550259Z",
+    "trace": "projects/equipos-base-empresas/traces/7da5fe2a1139cb05462afe5b299c1053"
+  },
+  {
+    "httpRequest": {
+      "latency": "30.039523184s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://equipos-base-empresas.web.app/",
+      "remoteIp": "192.178.11.97",
+      "requestMethod": "GET",
+      "requestSize": "2375",
+      "requestUrl": "https://empresas-api-rbg3vwvhaq-uc.a.run.app/api/naturalezas",
+      "responseSize": "139",
+      "serverIp": "34.143.74.2",
+      "status": 500,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36"
+    },
+    "insertId": "6b04e46c0008fb64d4c5e201",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-24T01:12:12.596571553Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "9acbbe4467ad2b27",
+    "timestamp": "2026-11-24T01:11:42.546355Z",
+    "trace": "projects/equipos-base-empresas/traces/2cbd68654a3aa796be5dfe7194bd2e48"
+  },
+  {
+    "httpRequest": {
+      "latency": "22.594471862s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://equipos-base-empresas.web.app/",
+      "remoteIp": "66.102.8.204",
+      "requestMethod": "GET",
+      "requestSize": "2503",
+      "requestUrl": "https://empresas-api-rbg3vwvhaq-uc.a.run.app/api/empresas/valores",
+      "responseSize": "3685",
+      "serverIp": "34.143.79.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36"
+    },
+    "insertId": "6b04e40d000827cf750c66ed",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-24T01:10:37.539674740Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "dcea66d981b59b5f",
+    "timestamp": "2026-11-24T01:10:14.936969Z",
+    "trace": "projects/equipos-base-empresas/traces/f33fe91b03974f237fec5dcb3b188299",
+    "traceSampled": true
+  },
+  {
+    "httpRequest": {
+      "latency": "9.346749785s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://equipos-base-empresas.web.app/",
+      "remoteIp": "74.125.210.102",
+      "requestMethod": "GET",
+      "requestSize": "2539",
+      "requestUrl": "https://empresas-api-rbg3vwvhaq-uc.a.run.app/api/empresas?base=definitiva&pagina=1",
+      "responseSize": "18384",
+      "serverIp": "34.143.75.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36"
+    },
+    "insertId": "6b04e3a500095c85b9d61f02",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-24T01:08:53.781603911Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "c6d0b4fa92295eb7",
+    "timestamp": "2026-11-24T01:08:44.264642Z",
+    "trace": "projects/equipos-base-empresas/traces/da187274c356ab7e2be0a7b56243037f",
+    "traceSampled": true
+  },
+  {
+    "httpRequest": {
+      "latency": "11.092104399s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://equipos-base-empresas.web.app/",
+      "remoteIp": "74.125.210.194",
+      "requestMethod": "GET",
+      "requestSize": "2504",
+      "requestUrl": "https://empresas-api-rbg3vwvhaq-uc.a.run.app/api/empresas/valores",
+      "responseSize": "3685",
+      "serverIp": "34.143.75.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36"
+    },
+    "insertId": "6b04e39c00001be3d596278b",
+    "labels": {
+      "instanceId": "00e8a408bd46fba9a90a9d8d9462c13ea9ac9a1ddc9b01ded57263eda3d86c4dc8bddc64ba816482bb110a669bb7f3a9727c55b9ef3f0949be570eff703e7e0d91f189e1b03e59e64e4d45d3829964c483027b722eb7fc21a161a86193d2"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-24T01:08:44.122511660Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-api",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-api-00022-rgk",
+        "service_name": "empresas-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "d48587df4b7f9d0c",
+    "timestamp": "2026-11-24T01:08:32.606840Z",
+    "trace": "projects/equipos-base-empresas/traces/8e9df54c5ab99ffb1eb3ac02dc979d92",
+    "traceSampled": true
+  }
+]

@@ -1,0 +1,43 @@
+codigo,nombre,excluida
+AC,Asociación civil,f
+ASOC,Asociacion,f
+CONS,Consorcio,f
+COOP,Cooperativa,f
+COOPAC,Cooperativa De Ahorro y credito,f
+COOPAGRA,Cooperativa Agraria,f
+COOPAGRO,Cooperativa Agropecuaria,f
+COOPCON,Cooperativa De Consumo,f
+COOPP,Cooperativa De Produccion,f
+COOPSOC,Cooperativa Social,f
+COOPVIV,Cooperativa De Vivienda,f
+EDI,Edificio En Propiedad,f
+EMPEXT,Empresa Extranjera,f
+FID,Fideicomiso,f
+FUND,Fundación,f
+FUNDCORP,"Fundaciones, Corporaciones",f
+GD,Gobierno departamental,f
+GIE,Grupo de interés económico,f
+ORGPAR,Organismo Paraestatal,f
+ORGPUB,Organismo Publico,f
+ORGS,Organizacion Social,f
+OTRO,Otra,f
+PPNE,Persona pública no estatal,f
+PUB,Organismo público o ente estatal,f
+SA,Sociedad anónima,f
+SAS,Sociedad por acciones simplificada,f
+SC,Sociedad colectiva,f
+SCS,Sociedad en comandita,f
+SH,Sociedad de hecho,f
+SOCAC,Sociedad Por Acciones,f
+SOCARL,S.Agr. De Resp.Ltda,f
+SOCCAP,Sociedad De Capital,f
+SOCCIV,Sociedad Civil,f
+SOCCIVP,Sociedad Civil De Produccion,f
+SOCFOM,Sociedad De Fomento,f
+SR,Sociedad Responsabilidad,f
+SRL,Sociedad de responsabilidad limitada,f
+SUCD,Sucesores De,f
+SUCE,Sucursal De Empresa,f
+SUCES,Sucesión,f
+SUCEXT,Sucursal de sociedad extranjera,f
+UNI,Empresa unipersonal,f

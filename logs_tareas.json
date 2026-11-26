@@ -1,0 +1,2887 @@
+[
+  {
+    "insertId": "6b04087f000c272ec19ba20e",
+    "labels": {
+      "instanceId": "00e8a408bd6a42d2c2a84ec773ec0008b680b4fc3bf542e5dfd0bf21f662930874cf951bb13f408b1be3d3ef17b875e4bff66cf46e0097edc0650944ec6a63426c19a763f124191080fec378c25b7933f63d728f07fc46c6a8"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fvarlog%2Fsystem",
+    "receiveTimestamp": "2026-11-23T09:33:52.110264937Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "textPayload": "Default STARTUP TCP probe succeeded after 1 attempt for container \"api-1\" on port 8080.",
+    "timestamp": "2026-11-23T09:33:51.796462Z"
+  },
+  {
+    "insertId": "6b04087f000c25630a3cdfcf",
+    "labels": {
+      "instanceId": "00e8a408bd6a42d2c2a84ec773ec0008b680b4fc3bf542e5dfd0bf21f662930874cf951bb13f408b1be3d3ef17b875e4bff66cf46e0097edc0650944ec6a63426c19a763f124191080fec378c25b7933f63d728f07fc46c6a8"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T09:33:51.856476620Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)",
+    "timestamp": "2026-11-23T09:33:51.796003Z"
+  },
+  {
+    "insertId": "6b04087f000bef9babff5ed0",
+    "labels": {
+      "instanceId": "00e8a408bd6a42d2c2a84ec773ec0008b680b4fc3bf542e5dfd0bf21f662930874cf951bb13f408b1be3d3ef17b875e4bff66cf46e0097edc0650944ec6a63426c19a763f124191080fec378c25b7933f63d728f07fc46c6a8"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T09:33:51.856476620Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Application startup complete.",
+    "timestamp": "2026-11-23T09:33:51.782235Z"
+  },
+  {
+    "insertId": "6b04087f0007e1e9ff31b249",
+    "labels": {
+      "instanceId": "00e8a408bd6a42d2c2a84ec773ec0008b680b4fc3bf542e5dfd0bf21f662930874cf951bb13f408b1be3d3ef17b875e4bff66cf46e0097edc0650944ec6a63426c19a763f124191080fec378c25b7933f63d728f07fc46c6a8"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T09:33:51.856476620Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Waiting for application startup.",
+    "timestamp": "2026-11-23T09:33:51.516585Z"
+  },
+  {
+    "insertId": "6b04087f0007e1a31fe99e63",
+    "labels": {
+      "instanceId": "00e8a408bd6a42d2c2a84ec773ec0008b680b4fc3bf542e5dfd0bf21f662930874cf951bb13f408b1be3d3ef17b875e4bff66cf46e0097edc0650944ec6a63426c19a763f124191080fec378c25b7933f63d728f07fc46c6a8"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T09:33:51.524172502Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Started server process [1]",
+    "timestamp": "2026-11-23T09:33:51.516515Z"
+  },
+  {
+    "insertId": "6b04087a0001a07a422d3326",
+    "labels": {
+      "instanceId": "00e8a408bd6a42d2c2a84ec773ec0008b680b4fc3bf542e5dfd0bf21f662930874cf951bb13f408b1be3d3ef17b875e4bff66cf46e0097edc0650944ec6a63426c19a763f124191080fec378c25b7933f63d728f07fc46c6a8",
+      "scaling_reason": "AUTOSCALING"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fvarlog%2Fsystem",
+    "receiveTimestamp": "2026-11-23T09:33:46.112318735Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "textPayload": "Starting new instance. Reason: AUTOSCALING - Instance started due to configured scaling factors (e.g. CPU utilization, request throughput, etc.) or no existing capacity for current traffic.",
+    "timestamp": "2026-11-23T09:33:46.106618Z"
+  },
+  {
+    "insertId": "6b04038c000dda30f6c8aaf5",
+    "labels": {
+      "instanceId": "00e8a408bd1571a96c7a8f7d8f710ca9a9de6dc27c106eecd49bda1b7aa59e7cf6ae85a94b062f1d668e6fd6af1d8ad1d8f54082a0c1c310e6e097c612a7de5cc76e1269b845e3e1c3509cbb2a5e82136c60de0fc06a60acab"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T09:12:45.146128163Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Waiting for background tasks to complete. (CTRL+C to force quit)",
+    "timestamp": "2026-11-23T09:12:44.907824Z"
+  },
+  {
+    "insertId": "6b04038c000c51ac5f022874",
+    "labels": {
+      "instanceId": "00e8a408bd1571a96c7a8f7d8f710ca9a9de6dc27c106eecd49bda1b7aa59e7cf6ae85a94b062f1d668e6fd6af1d8ad1d8f54082a0c1c310e6e097c612a7de5cc76e1269b845e3e1c3509cbb2a5e82136c60de0fc06a60acab"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T09:12:45.146128163Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Shutting down",
+    "timestamp": "2026-11-23T09:12:44.807340Z"
+  },
+  {
+    "insertId": "6b04038c000c445df80851cc",
+    "labels": {
+      "instanceId": "00e8a408bd1571a96c7a8f7d8f710ca9a9de6dc27c106eecd49bda1b7aa59e7cf6ae85a94b062f1d668e6fd6af1d8ad1d8f54082a0c1c310e6e097c612a7de5cc76e1269b845e3e1c3509cbb2a5e82136c60de0fc06a60acab"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T09:12:44.811855800Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "WARNING:app.main:SIGTERM: las tareas en curso vuelven a la cola",
+    "timestamp": "2026-11-23T09:12:44.803933Z"
+  },
+  {
+    "insertId": "6b03ffff0007eeb6e19afaf8",
+    "labels": {
+      "instanceId": "00e8a408bd1571a96c7a8f7d8f710ca9a9de6dc27c106eecd49bda1b7aa59e7cf6ae85a94b062f1d668e6fd6af1d8ad1d8f54082a0c1c310e6e097c612a7de5cc76e1269b845e3e1c3509cbb2a5e82136c60de0fc06a60acab"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T08:57:35.528318452Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:38504 - \"POST /api/tareas/28/ejecutar HTTP/1.1\" 503 Service Unavailable",
+    "timestamp": "2026-11-23T08:57:35.519862Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.014710280s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "35.187.132.206",
+      "requestMethod": "POST",
+      "requestSize": "656",
+      "requestUrl": "https://empresas-tareas-rbg3vwvhaq-uc.a.run.app/api/tareas/28/ejecutar",
+      "responseSize": "176",
+      "serverIp": "34.143.73.2",
+      "status": 503,
+      "userAgent": "Google-Cloud-Tasks"
+    },
+    "insertId": "6b03ffff0007f1d00844e2ab",
+    "labels": {
+      "instanceId": "00e8a408bd1571a96c7a8f7d8f710ca9a9de6dc27c106eecd49bda1b7aa59e7cf6ae85a94b062f1d668e6fd6af1d8ad1d8f54082a0c1c310e6e097c612a7de5cc76e1269b845e3e1c3509cbb2a5e82136c60de0fc06a60acab"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-23T08:57:35.527320617Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "74acf75bf9aa7c14",
+    "timestamp": "2026-11-23T08:57:35.494589Z",
+    "trace": "projects/equipos-base-empresas/traces/94004647bf16240ccbd45b3c909d6660",
+    "traceSampled": true
+  },
+  {
+    "insertId": "6b03ff0f00071c607943aba4",
+    "labels": {
+      "instanceId": "00e8a408bd1571a96c7a8f7d8f710ca9a9de6dc27c106eecd49bda1b7aa59e7cf6ae85a94b062f1d668e6fd6af1d8ad1d8f54082a0c1c310e6e097c612a7de5cc76e1269b845e3e1c3509cbb2a5e82136c60de0fc06a60acab"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T08:53:35.473059356Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:59146 - \"POST /api/tareas/28/ejecutar HTTP/1.1\" 503 Service Unavailable",
+    "timestamp": "2026-11-23T08:53:35.466016Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.015330876s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "107.178.194.232",
+      "requestMethod": "POST",
+      "requestSize": "656",
+      "requestUrl": "https://empresas-tareas-rbg3vwvhaq-uc.a.run.app/api/tareas/28/ejecutar",
+      "responseSize": "176",
+      "serverIp": "34.143.79.2",
+      "status": 503,
+      "userAgent": "Google-Cloud-Tasks"
+    },
+    "insertId": "6b03ff0f00071f28a317d4e5",
+    "labels": {
+      "instanceId": "00e8a408bd1571a96c7a8f7d8f710ca9a9de6dc27c106eecd49bda1b7aa59e7cf6ae85a94b062f1d668e6fd6af1d8ad1d8f54082a0c1c310e6e097c612a7de5cc76e1269b845e3e1c3509cbb2a5e82136c60de0fc06a60acab"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-23T08:53:35.472243668Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "a93c6214b46b77b2",
+    "timestamp": "2026-11-23T08:53:35.440895Z",
+    "trace": "projects/equipos-base-empresas/traces/b794fb8c32324d158ca91965a1ccd7f1",
+    "traceSampled": true
+  },
+  {
+    "insertId": "6b03fe97000661c4698c4ab7",
+    "labels": {
+      "instanceId": "00e8a408bd1571a96c7a8f7d8f710ca9a9de6dc27c106eecd49bda1b7aa59e7cf6ae85a94b062f1d668e6fd6af1d8ad1d8f54082a0c1c310e6e097c612a7de5cc76e1269b845e3e1c3509cbb2a5e82136c60de0fc06a60acab"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T08:51:35.425573375Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:64720 - \"POST /api/tareas/28/ejecutar HTTP/1.1\" 503 Service Unavailable",
+    "timestamp": "2026-11-23T08:51:35.418244Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.013763690s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "35.243.23.197",
+      "requestMethod": "POST",
+      "requestSize": "656",
+      "requestUrl": "https://empresas-tareas-rbg3vwvhaq-uc.a.run.app/api/tareas/28/ejecutar",
+      "responseSize": "176",
+      "serverIp": "34.143.76.2",
+      "status": 503,
+      "userAgent": "Google-Cloud-Tasks"
+    },
+    "insertId": "6b03fe97000664293008e58a",
+    "labels": {
+      "instanceId": "00e8a408bd1571a96c7a8f7d8f710ca9a9de6dc27c106eecd49bda1b7aa59e7cf6ae85a94b062f1d668e6fd6af1d8ad1d8f54082a0c1c310e6e097c612a7de5cc76e1269b845e3e1c3509cbb2a5e82136c60de0fc06a60acab"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-23T08:51:35.425433546Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "572f29a9790ad5b1",
+    "timestamp": "2026-11-23T08:51:35.395508Z",
+    "trace": "projects/equipos-base-empresas/traces/543eac56355d9f122656599858055d4d",
+    "traceSampled": true
+  },
+  {
+    "insertId": "6b03fe5b000597ae5edbe0e5",
+    "labels": {
+      "instanceId": "00e8a408bd1571a96c7a8f7d8f710ca9a9de6dc27c106eecd49bda1b7aa59e7cf6ae85a94b062f1d668e6fd6af1d8ad1d8f54082a0c1c310e6e097c612a7de5cc76e1269b845e3e1c3509cbb2a5e82136c60de0fc06a60acab"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T08:50:35.375328079Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:50734 - \"POST /api/tareas/28/ejecutar HTTP/1.1\" 503 Service Unavailable",
+    "timestamp": "2026-11-23T08:50:35.366510Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.059800899s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "107.178.194.169",
+      "requestMethod": "POST",
+      "requestSize": "653",
+      "requestUrl": "https://empresas-tareas-rbg3vwvhaq-uc.a.run.app/api/tareas/28/ejecutar",
+      "responseSize": "176",
+      "serverIp": "34.143.79.2",
+      "status": 503,
+      "userAgent": "Google-Cloud-Tasks"
+    },
+    "insertId": "6b03fe5b00059ae92f73de8b",
+    "labels": {
+      "instanceId": "00e8a408bd1571a96c7a8f7d8f710ca9a9de6dc27c106eecd49bda1b7aa59e7cf6ae85a94b062f1d668e6fd6af1d8ad1d8f54082a0c1c310e6e097c612a7de5cc76e1269b845e3e1c3509cbb2a5e82136c60de0fc06a60acab"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-23T08:50:35.374853809Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "4e9828768e12d9da",
+    "timestamp": "2026-11-23T08:50:35.295531Z",
+    "trace": "projects/equipos-base-empresas/traces/bb4f4f6431113eb01f34135041a07588",
+    "traceSampled": true
+  },
+  {
+    "insertId": "6b03f73b00043816a16d0824",
+    "labels": {
+      "instanceId": "00e8a408bd1571a96c7a8f7d8f710ca9a9de6dc27c106eecd49bda1b7aa59e7cf6ae85a94b062f1d668e6fd6af1d8ad1d8f54082a0c1c310e6e097c612a7de5cc76e1269b845e3e1c3509cbb2a5e82136c60de0fc06a60acab"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fvarlog%2Fsystem",
+    "receiveTimestamp": "2026-11-23T08:20:11.317602935Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "textPayload": "Default STARTUP TCP probe succeeded after 1 attempt for container \"api-1\" on port 8080.",
+    "timestamp": "2026-11-23T08:20:11.276502Z"
+  },
+  {
+    "insertId": "6b03f73b0004365f60cd95d2",
+    "labels": {
+      "instanceId": "00e8a408bd1571a96c7a8f7d8f710ca9a9de6dc27c106eecd49bda1b7aa59e7cf6ae85a94b062f1d668e6fd6af1d8ad1d8f54082a0c1c310e6e097c612a7de5cc76e1269b845e3e1c3509cbb2a5e82136c60de0fc06a60acab"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T08:20:11.547279356Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)",
+    "timestamp": "2026-11-23T08:20:11.276063Z"
+  },
+  {
+    "insertId": "6b03f73b0004013442bfaeef",
+    "labels": {
+      "instanceId": "00e8a408bd1571a96c7a8f7d8f710ca9a9de6dc27c106eecd49bda1b7aa59e7cf6ae85a94b062f1d668e6fd6af1d8ad1d8f54082a0c1c310e6e097c612a7de5cc76e1269b845e3e1c3509cbb2a5e82136c60de0fc06a60acab"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T08:20:11.547279356Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Application startup complete.",
+    "timestamp": "2026-11-23T08:20:11.262452Z"
+  },
+  {
+    "insertId": "6b03f73a000d4e5dd0b7b82c",
+    "labels": {
+      "instanceId": "00e8a408bd1571a96c7a8f7d8f710ca9a9de6dc27c106eecd49bda1b7aa59e7cf6ae85a94b062f1d668e6fd6af1d8ad1d8f54082a0c1c310e6e097c612a7de5cc76e1269b845e3e1c3509cbb2a5e82136c60de0fc06a60acab"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T08:20:10.879608162Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Waiting for application startup.",
+    "timestamp": "2026-11-23T08:20:10.872029Z"
+  },
+  {
+    "insertId": "6b03f73a000d4e214ba3da5a",
+    "labels": {
+      "instanceId": "00e8a408bd1571a96c7a8f7d8f710ca9a9de6dc27c106eecd49bda1b7aa59e7cf6ae85a94b062f1d668e6fd6af1d8ad1d8f54082a0c1c310e6e097c612a7de5cc76e1269b845e3e1c3509cbb2a5e82136c60de0fc06a60acab"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T08:20:10.879608162Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Started server process [1]",
+    "timestamp": "2026-11-23T08:20:10.871969Z"
+  },
+  {
+    "insertId": "6b03f7350004d4cadb41a707",
+    "labels": {
+      "instanceId": "00e8a408bd1571a96c7a8f7d8f710ca9a9de6dc27c106eecd49bda1b7aa59e7cf6ae85a94b062f1d668e6fd6af1d8ad1d8f54082a0c1c310e6e097c612a7de5cc76e1269b845e3e1c3509cbb2a5e82136c60de0fc06a60acab",
+      "scaling_reason": "AUTOSCALING"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fvarlog%2Fsystem",
+    "receiveTimestamp": "2026-11-23T08:20:05.324791162Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "textPayload": "Starting new instance. Reason: AUTOSCALING - Instance started due to configured scaling factors (e.g. CPU utilization, request throughput, etc.) or no existing capacity for current traffic.",
+    "timestamp": "2026-11-23T08:20:05.316618Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "1800.000005869s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "35.187.132.204",
+      "requestMethod": "POST",
+      "requestSize": "583",
+      "requestUrl": "https://empresas-tareas-rbg3vwvhaq-uc.a.run.app/api/tareas/28/ejecutar",
+      "responseSize": "72",
+      "serverIp": "34.143.79.2",
+      "status": 504,
+      "userAgent": "Google-Cloud-Tasks"
+    },
+    "insertId": "6b03fe3d0009371da09bcae2",
+    "labels": {
+      "instanceId": "00e8a408bd1571a96c7a8f7d8f710ca9a9de6dc27c106eecd49bda1b7aa59e7cf6ae85a94b062f1d668e6fd6af1d8ad1d8f54082a0c1c310e6e097c612a7de5cc76e1269b845e3e1c3509cbb2a5e82136c60de0fc06a60acab"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-23T08:50:05.612651331Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "ce336d7645ae78ad",
+    "textPayload": "The request has been terminated because it has reached the maximum request timeout. To change this limit, see https://cloud.google.com/run/docs/configuring/request-timeout",
+    "timestamp": "2026-11-23T08:20:05.263825Z",
+    "trace": "projects/equipos-base-empresas/traces/11c9944356a3efbe3f14a3b649976604",
+    "traceSampled": true
+  },
+  {
+    "insertId": "6b03bf7300077e15e641a8b6",
+    "labels": {
+      "instanceId": "00e8a408bd23f8e6632ccf12be335f75952acafc87b883d84e920a53559e2bda17a6fb9905af97e0ba6914d2ffc1b2815ad93f3c18efe0d719363b32ed7b7a1fcf4281d93e5e82aa0f8e9b9ae16fe0c8b368ab1303f43b1abc"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T04:22:11.730015627Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Waiting for background tasks to complete. (CTRL+C to force quit)",
+    "timestamp": "2026-11-23T04:22:11.491029Z"
+  },
+  {
+    "insertId": "6b03bf730005f7280a742aba",
+    "labels": {
+      "instanceId": "00e8a408bd23f8e6632ccf12be335f75952acafc87b883d84e920a53559e2bda17a6fb9905af97e0ba6914d2ffc1b2815ad93f3c18efe0d719363b32ed7b7a1fcf4281d93e5e82aa0f8e9b9ae16fe0c8b368ab1303f43b1abc"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T04:22:11.730015627Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Shutting down",
+    "timestamp": "2026-11-23T04:22:11.390952Z"
+  },
+  {
+    "insertId": "6b03bf730005f64b35551e8c",
+    "labels": {
+      "instanceId": "00e8a408bd23f8e6632ccf12be335f75952acafc87b883d84e920a53559e2bda17a6fb9905af97e0ba6914d2ffc1b2815ad93f3c18efe0d719363b32ed7b7a1fcf4281d93e5e82aa0f8e9b9ae16fe0c8b368ab1303f43b1abc"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T04:22:11.396774483Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "WARNING:app.main:SIGTERM: las tareas en curso vuelven a la cola",
+    "timestamp": "2026-11-23T04:22:11.390731Z"
+  },
+  {
+    "insertId": "6b03bf44000e4bb721abdb04",
+    "labels": {
+      "instanceId": "00e8a408bd2fe37983472409c70585887853666d38c7c019b3c9b10df812c0321099d2bbaf095a7fac835e6ba432b1580d4d0ffc0202cdf7c5287f214b5fb02d26c46dc389605118a1b811fc7f6e41e85e339518fdcfdfa172"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T04:21:25.116061586Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Finished server process [1]",
+    "timestamp": "2026-11-23T04:21:24.936887Z"
+  },
+  {
+    "insertId": "6b03bf44000e4a42ef3b20c8",
+    "labels": {
+      "instanceId": "00e8a408bd2fe37983472409c70585887853666d38c7c019b3c9b10df812c0321099d2bbaf095a7fac835e6ba432b1580d4d0ffc0202cdf7c5287f214b5fb02d26c46dc389605118a1b811fc7f6e41e85e339518fdcfdfa172"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T04:21:25.116061586Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Application shutdown complete.",
+    "timestamp": "2026-11-23T04:21:24.936514Z"
+  },
+  {
+    "insertId": "6b03bf44000e451a2354c88f",
+    "labels": {
+      "instanceId": "00e8a408bd2fe37983472409c70585887853666d38c7c019b3c9b10df812c0321099d2bbaf095a7fac835e6ba432b1580d4d0ffc0202cdf7c5287f214b5fb02d26c46dc389605118a1b811fc7f6e41e85e339518fdcfdfa172"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T04:21:25.116061586Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Waiting for application shutdown.",
+    "timestamp": "2026-11-23T04:21:24.935194Z"
+  },
+  {
+    "insertId": "6b03bf44000cb8e9025a3166",
+    "labels": {
+      "instanceId": "00e8a408bd2fe37983472409c70585887853666d38c7c019b3c9b10df812c0321099d2bbaf095a7fac835e6ba432b1580d4d0ffc0202cdf7c5287f214b5fb02d26c46dc389605118a1b811fc7f6e41e85e339518fdcfdfa172"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T04:21:25.116061586Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Shutting down",
+    "timestamp": "2026-11-23T04:21:24.833769Z"
+  },
+  {
+    "insertId": "6b03bf44000bdd2891d271a8",
+    "labels": {
+      "instanceId": "00e8a408bd2fe37983472409c70585887853666d38c7c019b3c9b10df812c0321099d2bbaf095a7fac835e6ba432b1580d4d0ffc0202cdf7c5287f214b5fb02d26c46dc389605118a1b811fc7f6e41e85e339518fdcfdfa172"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T04:21:24.788103149Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "WARNING:app.main:SIGTERM: las tareas en curso vuelven a la cola",
+    "timestamp": "2026-11-23T04:21:24.777512Z"
+  },
+  {
+    "insertId": "6b03bca7000cde1f7ecc1b16",
+    "labels": {
+      "instanceId": "00e8a408bd23f8e6632ccf12be335f75952acafc87b883d84e920a53559e2bda17a6fb9905af97e0ba6914d2ffc1b2815ad93f3c18efe0d719363b32ed7b7a1fcf4281d93e5e82aa0f8e9b9ae16fe0c8b368ab1303f43b1abc"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T04:10:15.850635069Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:64158 - \"POST /api/tareas/28/ejecutar HTTP/1.1\" 503 Service Unavailable",
+    "timestamp": "2026-11-23T04:10:15.843295Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.021109849s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "34.98.143.69",
+      "requestMethod": "POST",
+      "requestSize": "657",
+      "requestUrl": "https://empresas-tareas-rbg3vwvhaq-uc.a.run.app/api/tareas/28/ejecutar",
+      "responseSize": "176",
+      "serverIp": "34.143.76.2",
+      "status": 503,
+      "userAgent": "Google-Cloud-Tasks"
+    },
+    "insertId": "6b03bca7000ce3d787c5cdce",
+    "labels": {
+      "instanceId": "00e8a408bd23f8e6632ccf12be335f75952acafc87b883d84e920a53559e2bda17a6fb9905af97e0ba6914d2ffc1b2815ad93f3c18efe0d719363b32ed7b7a1fcf4281d93e5e82aa0f8e9b9ae16fe0c8b368ab1303f43b1abc"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-23T04:10:15.851781482Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "0122829d4b8cafab",
+    "timestamp": "2026-11-23T04:10:15.813269Z",
+    "trace": "projects/equipos-base-empresas/traces/e6afcaec5a539180fbb4c982118bfc67",
+    "traceSampled": true
+  },
+  {
+    "insertId": "6b03bbb7000c0a0400d0ff07",
+    "labels": {
+      "instanceId": "00e8a408bd2fe37983472409c70585887853666d38c7c019b3c9b10df812c0321099d2bbaf095a7fac835e6ba432b1580d4d0ffc0202cdf7c5287f214b5fb02d26c46dc389605118a1b811fc7f6e41e85e339518fdcfdfa172"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T04:06:15.794382658Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:20626 - \"POST /api/tareas/28/ejecutar HTTP/1.1\" 503 Service Unavailable",
+    "timestamp": "2026-11-23T04:06:15.788996Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.012447031s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "35.187.132.165",
+      "requestMethod": "POST",
+      "requestSize": "656",
+      "requestUrl": "https://empresas-tareas-rbg3vwvhaq-uc.a.run.app/api/tareas/28/ejecutar",
+      "responseSize": "176",
+      "serverIp": "34.143.77.2",
+      "status": 503,
+      "userAgent": "Google-Cloud-Tasks"
+    },
+    "insertId": "6b03bbb7000c0c523ff80fe7",
+    "labels": {
+      "instanceId": "00e8a408bd2fe37983472409c70585887853666d38c7c019b3c9b10df812c0321099d2bbaf095a7fac835e6ba432b1580d4d0ffc0202cdf7c5287f214b5fb02d26c46dc389605118a1b811fc7f6e41e85e339518fdcfdfa172"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-23T04:06:15.795738655Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "f79560c75a60b35f",
+    "timestamp": "2026-11-23T04:06:15.768490Z",
+    "trace": "projects/equipos-base-empresas/traces/b8e35f356d1b66a8b8d02dd07eb6a237",
+    "traceSampled": true
+  },
+  {
+    "insertId": "6b03bb3f000b3f1192a05197",
+    "labels": {
+      "instanceId": "00e8a408bd2fe37983472409c70585887853666d38c7c019b3c9b10df812c0321099d2bbaf095a7fac835e6ba432b1580d4d0ffc0202cdf7c5287f214b5fb02d26c46dc389605118a1b811fc7f6e41e85e339518fdcfdfa172"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T04:04:15.743452888Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:52978 - \"POST /api/tareas/28/ejecutar HTTP/1.1\" 503 Service Unavailable",
+    "timestamp": "2026-11-23T04:04:15.737041Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.202753985s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "107.178.194.99",
+      "requestMethod": "POST",
+      "requestSize": "656",
+      "requestUrl": "https://empresas-tareas-rbg3vwvhaq-uc.a.run.app/api/tareas/28/ejecutar",
+      "responseSize": "176",
+      "serverIp": "34.143.73.2",
+      "status": 503,
+      "userAgent": "Google-Cloud-Tasks"
+    },
+    "insertId": "6b03bb3f000b4219e9c1567f",
+    "labels": {
+      "instanceId": "00e8a408bd2fe37983472409c70585887853666d38c7c019b3c9b10df812c0321099d2bbaf095a7fac835e6ba432b1580d4d0ffc0202cdf7c5287f214b5fb02d26c46dc389605118a1b811fc7f6e41e85e339518fdcfdfa172"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-23T04:04:15.745745683Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "1bb42a082d2a4489",
+    "timestamp": "2026-11-23T04:04:15.526770Z",
+    "trace": "projects/equipos-base-empresas/traces/742fe3ea1f208790efa5159250b194d1",
+    "traceSampled": true
+  },
+  {
+    "insertId": "6b03bb030007901725d88318",
+    "labels": {
+      "instanceId": "00e8a408bd23f8e6632ccf12be335f75952acafc87b883d84e920a53559e2bda17a6fb9905af97e0ba6914d2ffc1b2815ad93f3c18efe0d719363b32ed7b7a1fcf4281d93e5e82aa0f8e9b9ae16fe0c8b368ab1303f43b1abc"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T04:03:15.503330112Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:14224 - \"POST /api/tareas/28/ejecutar HTTP/1.1\" 503 Service Unavailable",
+    "timestamp": "2026-11-23T04:03:15.495639Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.031479328s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "34.116.39.66",
+      "requestMethod": "POST",
+      "requestSize": "653",
+      "requestUrl": "https://empresas-tareas-rbg3vwvhaq-uc.a.run.app/api/tareas/28/ejecutar",
+      "responseSize": "176",
+      "serverIp": "34.143.74.2",
+      "status": 503,
+      "userAgent": "Google-Cloud-Tasks"
+    },
+    "insertId": "6b03bb03000792d1b859d9a6",
+    "labels": {
+      "instanceId": "00e8a408bd23f8e6632ccf12be335f75952acafc87b883d84e920a53559e2bda17a6fb9905af97e0ba6914d2ffc1b2815ad93f3c18efe0d719363b32ed7b7a1fcf4281d93e5e82aa0f8e9b9ae16fe0c8b368ab1303f43b1abc"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-23T04:03:15.504603154Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "72d4b3ee4964437a",
+    "timestamp": "2026-11-23T04:03:15.453689Z",
+    "trace": "projects/equipos-base-empresas/traces/cda3e842d4aff737395206321c8f7a10",
+    "traceSampled": true
+  },
+  {
+    "httpRequest": {
+      "latency": "1800.000748064s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "107.178.194.142",
+      "requestMethod": "POST",
+      "requestSize": "585",
+      "requestUrl": "https://empresas-tareas-rbg3vwvhaq-uc.a.run.app/api/tareas/28/ejecutar",
+      "responseSize": "72",
+      "serverIp": "34.143.77.2",
+      "status": 504,
+      "userAgent": "Google-Cloud-Tasks"
+    },
+    "insertId": "6b03bae50006814d01b0fda0",
+    "labels": {
+      "instanceId": "00e8a408bd23f8e6632ccf12be335f75952acafc87b883d84e920a53559e2bda17a6fb9905af97e0ba6914d2ffc1b2815ad93f3c18efe0d719363b32ed7b7a1fcf4281d93e5e82aa0f8e9b9ae16fe0c8b368ab1303f43b1abc"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-23T04:02:45.432933548Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "7a04a8cb02a3f128",
+    "textPayload": "The request has been terminated because it has reached the maximum request timeout. To change this limit, see https://cloud.google.com/run/docs/configuring/request-timeout",
+    "timestamp": "2026-11-23T03:32:45.423953Z",
+    "trace": "projects/equipos-base-empresas/traces/a3c261a4676ee295f290e86b5798cc9f",
+    "traceSampled": true
+  },
+  {
+    "insertId": "6b03b3dd000626a31183fdd7",
+    "labels": {
+      "instanceId": "00e8a408bd23f8e6632ccf12be335f75952acafc87b883d84e920a53559e2bda17a6fb9905af97e0ba6914d2ffc1b2815ad93f3c18efe0d719363b32ed7b7a1fcf4281d93e5e82aa0f8e9b9ae16fe0c8b368ab1303f43b1abc"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T03:32:45.409191133Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:1674 - \"POST /api/tareas/28/ejecutar HTTP/1.1\" 200 OK",
+    "timestamp": "2026-11-23T03:32:45.403107Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "11.071923607s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "107.178.194.4",
+      "requestMethod": "POST",
+      "requestSize": "584",
+      "requestUrl": "https://empresas-tareas-rbg3vwvhaq-uc.a.run.app/api/tareas/28/ejecutar",
+      "responseSize": "118",
+      "serverIp": "34.143.79.2",
+      "status": 200,
+      "userAgent": "Google-Cloud-Tasks"
+    },
+    "insertId": "6b03b3dd00062a30b6f0c610",
+    "labels": {
+      "instanceId": "00e8a408bd23f8e6632ccf12be335f75952acafc87b883d84e920a53559e2bda17a6fb9905af97e0ba6914d2ffc1b2815ad93f3c18efe0d719363b32ed7b7a1fcf4281d93e5e82aa0f8e9b9ae16fe0c8b368ab1303f43b1abc"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-23T03:32:45.412595629Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "5d1468b75a69e236",
+    "timestamp": "2026-11-23T03:32:34.321778Z",
+    "trace": "projects/equipos-base-empresas/traces/8aba0ded4c0396c746012e50922ea575",
+    "traceSampled": true
+  },
+  {
+    "insertId": "6b03b2f80001d6bd1991c328",
+    "labels": {
+      "instanceId": "00e8a408bd23f8e6632ccf12be335f75952acafc87b883d84e920a53559e2bda17a6fb9905af97e0ba6914d2ffc1b2815ad93f3c18efe0d719363b32ed7b7a1fcf4281d93e5e82aa0f8e9b9ae16fe0c8b368ab1303f43b1abc"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fvarlog%2Fsystem",
+    "receiveTimestamp": "2026-11-23T03:28:56.412917261Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "textPayload": "Default STARTUP TCP probe succeeded after 1 attempt for container \"api-1\" on port 8080.",
+    "timestamp": "2026-11-23T03:28:56.120509Z"
+  },
+  {
+    "insertId": "6b03b2f80001d4a01b0caf2f",
+    "labels": {
+      "instanceId": "00e8a408bd23f8e6632ccf12be335f75952acafc87b883d84e920a53559e2bda17a6fb9905af97e0ba6914d2ffc1b2815ad93f3c18efe0d719363b32ed7b7a1fcf4281d93e5e82aa0f8e9b9ae16fe0c8b368ab1303f43b1abc"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T03:28:56.279627230Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)",
+    "timestamp": "2026-11-23T03:28:56.119968Z"
+  },
+  {
+    "insertId": "6b03b2f800018789f6928723",
+    "labels": {
+      "instanceId": "00e8a408bd23f8e6632ccf12be335f75952acafc87b883d84e920a53559e2bda17a6fb9905af97e0ba6914d2ffc1b2815ad93f3c18efe0d719363b32ed7b7a1fcf4281d93e5e82aa0f8e9b9ae16fe0c8b368ab1303f43b1abc"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T03:28:56.279627230Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Application startup complete.",
+    "timestamp": "2026-11-23T03:28:56.100233Z"
+  },
+  {
+    "insertId": "6b03b2f7000946f86f88a0ac",
+    "labels": {
+      "instanceId": "00e8a408bd23f8e6632ccf12be335f75952acafc87b883d84e920a53559e2bda17a6fb9905af97e0ba6914d2ffc1b2815ad93f3c18efe0d719363b32ed7b7a1fcf4281d93e5e82aa0f8e9b9ae16fe0c8b368ab1303f43b1abc"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T03:28:55.949130331Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Waiting for application startup.",
+    "timestamp": "2026-11-23T03:28:55.607992Z"
+  },
+  {
+    "insertId": "6b03b2f70009467fbac9cdbf",
+    "labels": {
+      "instanceId": "00e8a408bd23f8e6632ccf12be335f75952acafc87b883d84e920a53559e2bda17a6fb9905af97e0ba6914d2ffc1b2815ad93f3c18efe0d719363b32ed7b7a1fcf4281d93e5e82aa0f8e9b9ae16fe0c8b368ab1303f43b1abc"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T03:28:55.615701188Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Started server process [1]",
+    "timestamp": "2026-11-23T03:28:55.607871Z"
+  },
+  {
+    "insertId": "6b03b2f2000645a22b5ed5b5",
+    "labels": {
+      "instanceId": "00e8a408bd23f8e6632ccf12be335f75952acafc87b883d84e920a53559e2bda17a6fb9905af97e0ba6914d2ffc1b2815ad93f3c18efe0d719363b32ed7b7a1fcf4281d93e5e82aa0f8e9b9ae16fe0c8b368ab1303f43b1abc",
+      "scaling_reason": "AUTOSCALING"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fvarlog%2Fsystem",
+    "receiveTimestamp": "2026-11-23T03:28:50.419711993Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "textPayload": "Starting new instance. Reason: AUTOSCALING - Instance started due to configured scaling factors (e.g. CPU utilization, request throughput, etc.) or no existing capacity for current traffic.",
+    "timestamp": "2026-11-23T03:28:50.411042Z"
+  },
+  {
+    "insertId": "6b03b2f1000bfa80ff0df895",
+    "labels": {
+      "instanceId": "00e8a408bd2fe37983472409c70585887853666d38c7c019b3c9b10df812c0321099d2bbaf095a7fac835e6ba432b1580d4d0ffc0202cdf7c5287f214b5fb02d26c46dc389605118a1b811fc7f6e41e85e339518fdcfdfa172"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-11-23T03:28:49.789787603Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:29816 - \"POST /api/tareas/27/ejecutar HTTP/1.1\" 200 OK",
+    "timestamp": "2026-11-23T03:28:49.785024Z"
+  },
+  {
+    "insertId": "6b03b2f10004f27841ef33fe",
+    "labels": {
+      "instanceId": "00e8a408bd2fe37983472409c70585887853666d38c7c019b3c9b10df812c0321099d2bbaf095a7fac835e6ba432b1580d4d0ffc0202cdf7c5287f214b5fb02d26c46dc389605118a1b811fc7f6e41e85e339518fdcfdfa172"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T03:28:49.331213632Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:app.cargas:archivo 17 parseado: 193556 filas en 63.9 s (rss_mb=161)",
+    "timestamp": "2026-11-23T03:28:49.324216Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "66.991157514s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "34.98.143.2",
+      "requestMethod": "POST",
+      "requestSize": "584",
+      "requestUrl": "https://empresas-tareas-rbg3vwvhaq-uc.a.run.app/api/tareas/27/ejecutar",
+      "responseSize": "13978",
+      "serverIp": "34.143.79.2",
+      "status": 200,
+      "userAgent": "Google-Cloud-Tasks"
+    },
+    "insertId": "6b03b2f1000c0006b36eb5c9",
+    "labels": {
+      "instanceId": "00e8a408bd2fe37983472409c70585887853666d38c7c019b3c9b10df812c0321099d2bbaf095a7fac835e6ba432b1580d4d0ffc0202cdf7c5287f214b5fb02d26c46dc389605118a1b811fc7f6e41e85e339518fdcfdfa172"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-11-23T03:28:49.793376518Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "43b720ff7af951e6",
+    "timestamp": "2026-11-23T03:27:42.786563Z",
+    "trace": "projects/equipos-base-empresas/traces/c98f9e4ff864eda8813062c3c972cf88",
+    "traceSampled": true
+  },
+  {
+    "insertId": "6b03b1ca000a4e6336bcf968",
+    "labels": {
+      "instanceId": "00e8a408bdd98ba1803d008cff7ac1933365f3fee6b076c6a0b51e8b61b20d1d8adfd65dd21cc07336b2a5c6c5cc9cb101d5a9d5628355dff170f648739b67883fbf784c3410adf066e4adc022f17b2c3687afc2f83085a4"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T03:23:54.867956505Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00001-57q",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Finished server process [1]",
+    "timestamp": "2026-11-23T03:23:54.675427Z"
+  },
+  {
+    "insertId": "6b03b1ca000a4df4fb219f8b",
+    "labels": {
+      "instanceId": "00e8a408bdd98ba1803d008cff7ac1933365f3fee6b076c6a0b51e8b61b20d1d8adfd65dd21cc07336b2a5c6c5cc9cb101d5a9d5628355dff170f648739b67883fbf784c3410adf066e4adc022f17b2c3687afc2f83085a4"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T03:23:54.867956505Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00001-57q",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Application shutdown complete.",
+    "timestamp": "2026-11-23T03:23:54.675316Z"
+  },
+  {
+    "insertId": "6b03b1ca000a446c2828c323",
+    "labels": {
+      "instanceId": "00e8a408bdd98ba1803d008cff7ac1933365f3fee6b076c6a0b51e8b61b20d1d8adfd65dd21cc07336b2a5c6c5cc9cb101d5a9d5628355dff170f648739b67883fbf784c3410adf066e4adc022f17b2c3687afc2f83085a4"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T03:23:54.867956505Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00001-57q",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Waiting for application shutdown.",
+    "timestamp": "2026-11-23T03:23:54.672876Z"
+  },
+  {
+    "insertId": "6b03b1ca0008b8d3777bcb9f",
+    "labels": {
+      "instanceId": "00e8a408bdd98ba1803d008cff7ac1933365f3fee6b076c6a0b51e8b61b20d1d8adfd65dd21cc07336b2a5c6c5cc9cb101d5a9d5628355dff170f648739b67883fbf784c3410adf066e4adc022f17b2c3687afc2f83085a4"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T03:23:54.867956505Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00001-57q",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Shutting down",
+    "timestamp": "2026-11-23T03:23:54.571603Z"
+  },
+  {
+    "insertId": "6b03b1ca00080732faca9461",
+    "labels": {
+      "instanceId": "00e8a408bdd98ba1803d008cff7ac1933365f3fee6b076c6a0b51e8b61b20d1d8adfd65dd21cc07336b2a5c6c5cc9cb101d5a9d5628355dff170f648739b67883fbf784c3410adf066e4adc022f17b2c3687afc2f83085a4"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T03:23:54.533686128Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00001-57q",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "WARNING:app.main:SIGTERM: las tareas en curso vuelven a la cola",
+    "timestamp": "2026-11-23T03:23:54.526130Z"
+  },
+  {
+    "insertId": "-hfjceidyfqa",
+    "logName": "projects/equipos-base-empresas/logs/cloudaudit.googleapis.com%2Fsystem_event",
+    "protoPayload": {
+      "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+      "methodName": "/Services.ReplaceService",
+      "resourceName": "namespaces/equipos-base-empresas/services/empresas-tareas",
+      "response": {
+        "@type": "type.googleapis.com/google.cloud.run.v1.Service",
+        "apiVersion": "serving.knative.dev/v1",
+        "kind": "Service",
+        "metadata": {
+          "annotations": {
+            "run.googleapis.com/client-name": "gcloud",
+            "run.googleapis.com/client-version": "583.0.0",
+            "run.googleapis.com/ingress": "all",
+            "run.googleapis.com/ingress-status": "all",
+            "run.googleapis.com/maxScale": "20",
+            "run.googleapis.com/operation-id": "553cb5d1-f8be-4eb3-89b2-49d38dc6a026",
+            "run.googleapis.com/urls": "[\"https://empresas-tareas-1097579860263.us-central1.run.app\",\"https://empresas-tareas-rbg3vwvhaq-uc.a.run.app\"]",
+            "serving.knative.dev/creator": "garaujo@equipos.com.uy",
+            "serving.knative.dev/lastModifier": "garaujo@equipos.com.uy"
+          },
+          "creationTimestamp": "2026-11-23T03:18:43.021018Z",
+          "generation": 2,
+          "labels": {
+            "cloud.googleapis.com/location": "us-central1"
+          },
+          "name": "empresas-tareas",
+          "namespace": "1097579860263",
+          "resourceVersion": "AAZg6Q6Sbug",
+          "selfLink": "/apis/serving.knative.dev/v1/namespaces/1097579860263/services/empresas-tareas",
+          "uid": "664a0cd4-bbf6-43db-ba38-aa7dff330390"
+        },
+        "spec": {
+          "template": {
+            "metadata": {
+              "annotations": {
+                "autoscaling.knative.dev/maxScale": "2",
+                "run.googleapis.com/client-name": "gcloud",
+                "run.googleapis.com/client-version": "583.0.0",
+                "run.googleapis.com/cloudsql-instances": "equipos-base-empresas:us-central1:empresas-pg",
+                "run.googleapis.com/startup-cpu-boost": "true"
+              },
+              "labels": {
+                "client.knative.dev/nonce": "evurqkklff",
+                "run.googleapis.com/startupProbeType": "Default"
+              }
+            },
+            "spec": {
+              "containerConcurrency": 1,
+              "containers": [
+                {
+                  "env": [
+                    {
+                      "name": "AUTH_MODE",
+                      "value": "firebase"
+                    },
+                    {
+                      "name": "FIREBASE_PROJECT_ID",
+                      "value": "equipos-base-empresas"
+                    },
+                    {
+                      "name": "TASKS_MODE",
+                      "value": "cloudtasks"
+                    },
+                    {
+                      "name": "TASKS_QUEUE",
+                      "value": "projects/equipos-base-empresas/locations/us-central1/queues/empresas-tareas"
+                    },
+                    {
+                      "name": "STORAGE_BUCKET",
+                      "value": "equipos-base-empresas-empresas-archivos"
+                    },
+                    {
+                      "name": "BQ_TABLA_AUDITORIA",
+                      "value": "equipos-base-empresas.empresas_auditoria.auditoria"
+                    },
+                    {
+                      "name": "ADMIN_EMAILS",
+                      "value": "garaujo@equipos.com.uy"
+                    },
+                    {
+                      "name": "API_URL",
+                      "value": "https://empresas-api-rbg3vwvhaq-uc.a.run.app"
+                    },
+                    {
+                      "name": "TAREAS_URL",
+                      "value": "https://empresas-tareas-rbg3vwvhaq-uc.a.run.app"
+                    },
+                    {
+                      "name": "APP_URL",
+                      "value": "https://equipos-base-empresas.web.app"
+                    },
+                    {
+                      "name": "SMTP_USUARIO",
+                      "value": "notificaciones@equipos.com.uy"
+                    },
+                    {
+                      "name": "SMTP_HOST",
+                      "value": "smtp.gmail.com"
+                    },
+                    {
+                      "name": "SMTP_PORT",
+                      "value": "587"
+                    },
+                    {
+                      "name": "GCP_PROYECTO",
+                      "value": "equipos-base-empresas"
+                    },
+                    {
+                      "name": "GCP_REGION",
+                      "value": "us-central1"
+                    },
+                    {
+                      "name": "CDR_JOB",
+                      "value": "empresas-cdr"
+                    },
+                    {
+                      "name": "CDR_SECRETO",
+                      "value": "empresas-cdr-mysql-password"
+                    },
+                    {
+                      "name": "DB_POOL_MAX",
+                      "value": "3"
+                    },
+                    {
+                      "name": "WORKERS",
+                      "value": "1"
+                    },
+                    {
+                      "name": "MEMORIA_LIMITE_MB",
+                      "value": "2048"
+                    },
+                    {
+                      "name": "DATABASE_URL",
+                      "valueFrom": {
+                        "secretKeyRef": {
+                          "key": "latest",
+                          "name": "empresas-database-url"
+                        }
+                      }
+                    },
+                    {
+                      "name": "JOB_TOKEN",
+                      "valueFrom": {
+                        "secretKeyRef": {
+                          "key": "latest",
+                          "name": "empresas-job-token"
+                        }
+                      }
+                    },
+                    {
+                      "name": "TAREA_TOKEN",
+                      "valueFrom": {
+                        "secretKeyRef": {
+                          "key": "latest",
+                          "name": "empresas-tarea-token"
+                        }
+                      }
+                    },
+                    {
+                      "name": "SMTP_PASSWORD",
+                      "valueFrom": {
+                        "secretKeyRef": {
+                          "key": "latest",
+                          "name": "empresas-smtp-password"
+                        }
+                      }
+                    }
+                  ],
+                  "image": "us-central1-docker.pkg.dev/equipos-base-empresas/empresas/api:666cb2a",
+                  "ports": [
+                    {
+                      "containerPort": 8080,
+                      "name": "http1"
+                    }
+                  ],
+                  "resources": {
+                    "limits": {
+                      "cpu": "1",
+                      "memory": "2Gi"
+                    }
+                  },
+                  "startupProbe": {
+                    "failureThreshold": 1,
+                    "periodSeconds": 240,
+                    "tcpSocket": {
+                      "port": 8080
+                    },
+                    "timeoutSeconds": 240
+                  }
+                }
+              ],
+              "sandboxes": {},
+              "serviceAccountName": "empresas-api@equipos-base-empresas.iam.gserviceaccount.com",
+              "timeoutSeconds": 1800
+            }
+          },
+          "traffic": [
+            {
+              "latestRevision": true,
+              "percent": 100
+            }
+          ]
+        },
+        "status": {
+          "address": {
+            "url": "https://empresas-tareas-rbg3vwvhaq-uc.a.run.app"
+          },
+          "conditions": [
+            {
+              "lastTransitionTime": "2026-11-23T03:19:08.387261Z",
+              "status": "True",
+              "type": "Ready"
+            },
+            {
+              "lastTransitionTime": "2026-11-23T03:19:00.707263Z",
+              "status": "True",
+              "type": "ConfigurationsReady"
+            },
+            {
+              "lastTransitionTime": "2026-11-23T03:19:08.348645Z",
+              "status": "True",
+              "type": "RoutesReady"
+            }
+          ],
+          "latestCreatedRevisionName": "empresas-tareas-00002-2sv",
+          "latestReadyRevisionName": "empresas-tareas-00002-2sv",
+          "observedGeneration": 2,
+          "traffic": [
+            {
+              "latestRevision": true,
+              "percent": 100,
+              "revisionName": "empresas-tareas-00002-2sv"
+            }
+          ],
+          "url": "https://empresas-tareas-rbg3vwvhaq-uc.a.run.app"
+        }
+      },
+      "serviceName": "run.googleapis.com",
+      "status": {
+        "message": "Ready condition status changed to True for Service empresas-tareas."
+      }
+    },
+    "receiveTimestamp": "2026-11-23T03:19:08.787202483Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "timestamp": "2026-11-23T03:19:08.400903Z"
+  },
+  {
+    "insertId": "-aix0xxdady8",
+    "logName": "projects/equipos-base-empresas/logs/cloudaudit.googleapis.com%2Fsystem_event",
+    "protoPayload": {
+      "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+      "methodName": "/Services.ReplaceService",
+      "resourceName": "namespaces/equipos-base-empresas/revisions/empresas-tareas-00002-2sv",
+      "response": {
+        "@type": "type.googleapis.com/google.cloud.run.v1.Revision",
+        "apiVersion": "serving.knative.dev/v1",
+        "kind": "Revision",
+        "metadata": {
+          "annotations": {
+            "autoscaling.knative.dev/maxScale": "2",
+            "run.googleapis.com/client-name": "gcloud",
+            "run.googleapis.com/client-version": "583.0.0",
+            "run.googleapis.com/cloudsql-instances": "equipos-base-empresas:us-central1:empresas-pg",
+            "run.googleapis.com/operation-id": "553cb5d1-f8be-4eb3-89b2-49d38dc6a026",
+            "run.googleapis.com/startup-cpu-boost": "true",
+            "serving.knative.dev/creator": "garaujo@equipos.com.uy"
+          },
+          "creationTimestamp": "2026-11-23T03:18:59.864146Z",
+          "generation": 1,
+          "labels": {
+            "client.knative.dev/nonce": "evurqkklff",
+            "cloud.googleapis.com/location": "us-central1",
+            "run.googleapis.com/startupProbeType": "Default",
+            "serving.knative.dev/configuration": "empresas-tareas",
+            "serving.knative.dev/configurationGeneration": "2",
+            "serving.knative.dev/route": "empresas-tareas",
+            "serving.knative.dev/service": "empresas-tareas",
+            "serving.knative.dev/serviceUid": "664a0cd4-bbf6-43db-ba38-aa7dff330390"
+          },
+          "name": "empresas-tareas-00002-2sv",
+          "namespace": "1097579860263",
+          "ownerReferences": [
+            {
+              "apiVersion": "serving.knative.dev/v1",
+              "blockOwnerDeletion": true,
+              "controller": true,
+              "kind": "Configuration",
+              "name": "empresas-tareas",
+              "uid": "1086ba0a-37d6-4d60-b02e-c7d6ae74aaf2"
+            }
+          ],
+          "resourceVersion": "AAZg6Q57YrE",
+          "selfLink": "/apis/serving.knative.dev/v1/namespaces/1097579860263/revisions/empresas-tareas-00002-2sv",
+          "uid": "679e5708-b8dc-4545-809a-f5a878f4637d"
+        },
+        "spec": {
+          "containerConcurrency": 1,
+          "containers": [
+            {
+              "env": [
+                {
+                  "name": "AUTH_MODE",
+                  "value": "firebase"
+                },
+                {
+                  "name": "FIREBASE_PROJECT_ID",
+                  "value": "equipos-base-empresas"
+                },
+                {
+                  "name": "TASKS_MODE",
+                  "value": "cloudtasks"
+                },
+                {
+                  "name": "TASKS_QUEUE",
+                  "value": "projects/equipos-base-empresas/locations/us-central1/queues/empresas-tareas"
+                },
+                {
+                  "name": "STORAGE_BUCKET",
+                  "value": "equipos-base-empresas-empresas-archivos"
+                },
+                {
+                  "name": "BQ_TABLA_AUDITORIA",
+                  "value": "equipos-base-empresas.empresas_auditoria.auditoria"
+                },
+                {
+                  "name": "ADMIN_EMAILS",
+                  "value": "garaujo@equipos.com.uy"
+                },
+                {
+                  "name": "API_URL",
+                  "value": "https://empresas-api-rbg3vwvhaq-uc.a.run.app"
+                },
+                {
+                  "name": "TAREAS_URL",
+                  "value": "https://empresas-tareas-rbg3vwvhaq-uc.a.run.app"
+                },
+                {
+                  "name": "APP_URL",
+                  "value": "https://equipos-base-empresas.web.app"
+                },
+                {
+                  "name": "SMTP_USUARIO",
+                  "value": "notificaciones@equipos.com.uy"
+                },
+                {
+                  "name": "SMTP_HOST",
+                  "value": "smtp.gmail.com"
+                },
+                {
+                  "name": "SMTP_PORT",
+                  "value": "587"
+                },
+                {
+                  "name": "GCP_PROYECTO",
+                  "value": "equipos-base-empresas"
+                },
+                {
+                  "name": "GCP_REGION",
+                  "value": "us-central1"
+                },
+                {
+                  "name": "CDR_JOB",
+                  "value": "empresas-cdr"
+                },
+                {
+                  "name": "CDR_SECRETO",
+                  "value": "empresas-cdr-mysql-password"
+                },
+                {
+                  "name": "DB_POOL_MAX",
+                  "value": "3"
+                },
+                {
+                  "name": "WORKERS",
+                  "value": "1"
+                },
+                {
+                  "name": "MEMORIA_LIMITE_MB",
+                  "value": "2048"
+                },
+                {
+                  "name": "DATABASE_URL",
+                  "valueFrom": {
+                    "secretKeyRef": {
+                      "key": "latest",
+                      "name": "empresas-database-url"
+                    }
+                  }
+                },
+                {
+                  "name": "JOB_TOKEN",
+                  "valueFrom": {
+                    "secretKeyRef": {
+                      "key": "latest",
+                      "name": "empresas-job-token"
+                    }
+                  }
+                },
+                {
+                  "name": "TAREA_TOKEN",
+                  "valueFrom": {
+                    "secretKeyRef": {
+                      "key": "latest",
+                      "name": "empresas-tarea-token"
+                    }
+                  }
+                },
+                {
+                  "name": "SMTP_PASSWORD",
+                  "valueFrom": {
+                    "secretKeyRef": {
+                      "key": "latest",
+                      "name": "empresas-smtp-password"
+                    }
+                  }
+                }
+              ],
+              "image": "us-central1-docker.pkg.dev/equipos-base-empresas/empresas/api@sha256:707ece041303785f8d001785d71c3706f85c51a017a7751d4225dfce0870198b",
+              "name": "api-1",
+              "ports": [
+                {
+                  "containerPort": 8080,
+                  "name": "http1"
+                }
+              ],
+              "resources": {
+                "limits": {
+                  "cpu": "1",
+                  "memory": "2Gi"
+                }
+              },
+              "startupProbe": {
+                "failureThreshold": 1,
+                "periodSeconds": 240,
+                "tcpSocket": {
+                  "port": 8080
+                },
+                "timeoutSeconds": 240
+              }
+            }
+          ],
+          "sandboxes": {},
+          "serviceAccountName": "empresas-api@equipos-base-empresas.iam.gserviceaccount.com",
+          "timeoutSeconds": 1800
+        },
+        "status": {
+          "conditions": [
+            {
+              "lastTransitionTime": "2026-11-23T03:19:06.876425Z",
+              "message": "Deploying revision succeeded in 7.01s.",
+              "status": "True",
+              "type": "Ready"
+            },
+            {
+              "lastTransitionTime": "2026-11-23T03:19:06.799124Z",
+              "message": "Containers became healthy in 4.29s.",
+              "status": "True",
+              "type": "ContainerHealthy"
+            },
+            {
+              "lastTransitionTime": "2026-11-23T03:19:00.600448Z",
+              "message": "Container image import completed.",
+              "status": "True",
+              "type": "ContainerReady"
+            },
+            {
+              "lastTransitionTime": "2026-11-23T03:19:02.161857Z",
+              "message": "Provisioning imported containers completed in 1.56s. Checking container health. This will wait for up to 4m for the configured startup probe, including an initial delay of 0s.",
+              "status": "True",
+              "type": "ResourcesAvailable"
+            }
+          ],
+          "containerStatuses": [
+            {
+              "imageDigest": "us-central1-docker.pkg.dev/equipos-base-empresas/empresas/api@sha256:707ece041303785f8d001785d71c3706f85c51a017a7751d4225dfce0870198b",
+              "name": "api-1"
+            }
+          ],
+          "imageDigest": "us-central1-docker.pkg.dev/equipos-base-empresas/empresas/api@sha256:707ece041303785f8d001785d71c3706f85c51a017a7751d4225dfce0870198b",
+          "logUrl": "https://console.cloud.google.com/logs/viewer?project=equipos-base-empresas&resource=cloud_run_revision/service_name/empresas-tareas/revision_name/empresas-tareas-00002-2sv&advancedFilter=resource.type%3D%22cloud_run_revision%22%0Aresource.labels.service_name%3D%22empresas-tareas%22%0Aresource.labels.revision_name%3D%22empresas-tareas-00002-2sv%22",
+          "observedGeneration": 1
+        }
+      },
+      "serviceName": "run.googleapis.com",
+      "status": {
+        "message": "Ready condition status changed to True for Revision empresas-tareas-00002-2sv with message: Deploying revision succeeded in 7.01s."
+      }
+    },
+    "receiveTimestamp": "2026-11-23T03:19:07.558869079Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "timestamp": "2026-11-23T03:19:06.891385Z"
+  },
+  {
+    "insertId": "6b03b0aa000c036dd9c82e79",
+    "labels": {
+      "instanceId": "00e8a408bd2fe37983472409c70585887853666d38c7c019b3c9b10df812c0321099d2bbaf095a7fac835e6ba432b1580d4d0ffc0202cdf7c5287f214b5fb02d26c46dc389605118a1b811fc7f6e41e85e339518fdcfdfa172"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fvarlog%2Fsystem",
+    "receiveTimestamp": "2026-11-23T03:19:06.932911154Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "textPayload": "Default STARTUP TCP probe succeeded after 1 attempt for container \"api-1\" on port 8080.",
+    "timestamp": "2026-11-23T03:19:06.787309Z"
+  },
+  {
+    "insertId": "6b03b0aa000c0116ca284ac1",
+    "labels": {
+      "instanceId": "00e8a408bd2fe37983472409c70585887853666d38c7c019b3c9b10df812c0321099d2bbaf095a7fac835e6ba432b1580d4d0ffc0202cdf7c5287f214b5fb02d26c46dc389605118a1b811fc7f6e41e85e339518fdcfdfa172"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T03:19:06.806691971Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)",
+    "timestamp": "2026-11-23T03:19:06.786710Z"
+  },
+  {
+    "insertId": "6b03b0aa000bc0e144fdc9be",
+    "labels": {
+      "instanceId": "00e8a408bd2fe37983472409c70585887853666d38c7c019b3c9b10df812c0321099d2bbaf095a7fac835e6ba432b1580d4d0ffc0202cdf7c5287f214b5fb02d26c46dc389605118a1b811fc7f6e41e85e339518fdcfdfa172"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T03:19:06.806691971Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Application startup complete.",
+    "timestamp": "2026-11-23T03:19:06.770273Z"
+  },
+  {
+    "insertId": "6b03b0aa000723d0e339cb56",
+    "labels": {
+      "instanceId": "00e8a408bd2fe37983472409c70585887853666d38c7c019b3c9b10df812c0321099d2bbaf095a7fac835e6ba432b1580d4d0ffc0202cdf7c5287f214b5fb02d26c46dc389605118a1b811fc7f6e41e85e339518fdcfdfa172"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T03:19:06.806691971Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Waiting for application startup.",
+    "timestamp": "2026-11-23T03:19:06.467920Z"
+  },
+  {
+    "insertId": "6b03b0aa00072396ea38a0b5",
+    "labels": {
+      "instanceId": "00e8a408bd2fe37983472409c70585887853666d38c7c019b3c9b10df812c0321099d2bbaf095a7fac835e6ba432b1580d4d0ffc0202cdf7c5287f214b5fb02d26c46dc389605118a1b811fc7f6e41e85e339518fdcfdfa172"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T03:19:06.477342205Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Started server process [1]",
+    "timestamp": "2026-11-23T03:19:06.467862Z"
+  },
+  {
+    "insertId": "6b03b0a6000405cedcf5df75",
+    "labels": {
+      "instanceId": "00e8a408bd2fe37983472409c70585887853666d38c7c019b3c9b10df812c0321099d2bbaf095a7fac835e6ba432b1580d4d0ffc0202cdf7c5287f214b5fb02d26c46dc389605118a1b811fc7f6e41e85e339518fdcfdfa172",
+      "scaling_reason": "DEPLOYMENT_ROLLOUT"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fvarlog%2Fsystem",
+    "receiveTimestamp": "2026-11-23T03:19:02.269556332Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00002-2sv",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "textPayload": "Starting new instance. Reason: DEPLOYMENT_ROLLOUT - Instance started due to traffic shifting between revisions due to deployment, traffic split adjustment, or deployment health check.",
+    "timestamp": "2026-11-23T03:19:02.263630Z"
+  },
+  {
+    "insertId": "1o8p19d57lr",
+    "logName": "projects/equipos-base-empresas/logs/cloudaudit.googleapis.com%2Factivity",
+    "protoPayload": {
+      "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+      "authenticationInfo": {
+        "oauthInfo": {
+          "oauthClientId": "32555940559.apps.googleusercontent.com"
+        },
+        "principalEmail": "garaujo@equipos.com.uy",
+        "principalSubject": "user:garaujo@equipos.com.uy"
+      },
+      "authorizationInfo": [
+        {
+          "granted": true,
+          "permission": "run.services.update",
+          "permissionType": "ADMIN_WRITE",
+          "resource": "namespaces/equipos-base-empresas/services/empresas-tareas",
+          "resourceAttributes": {}
+        },
+        {
+          "granted": true,
+          "permission": "run.services.update",
+          "permissionType": "ADMIN_WRITE",
+          "resource": "namespaces/equipos-base-empresas/services/empresas-tareas",
+          "resourceAttributes": {
+            "name": "namespaces/equipos-base-empresas/services/empresas-tareas",
+            "service": "run.googleapis.com/",
+            "type": "run.googleapis.com/Service"
+          }
+        }
+      ],
+      "methodName": "google.cloud.run.v1.Services.ReplaceService",
+      "request": {
+        "@type": "type.googleapis.com/google.cloud.run.v1.ReplaceServiceRequest",
+        "name": "namespaces/equipos-base-empresas/services/empresas-tareas",
+        "service": {
+          "apiVersion": "serving.knative.dev/v1",
+          "kind": "Service",
+          "metadata": {
+            "annotations": {
+              "run.googleapis.com/client-name": "gcloud",
+              "run.googleapis.com/client-version": "583.0.0",
+              "run.googleapis.com/ingress": "all",
+              "run.googleapis.com/ingress-status": "all",
+              "run.googleapis.com/maxScale": "20",
+              "run.googleapis.com/operation-id": "a08f391a-0224-41ef-8839-eba0ccbe365f",
+              "run.googleapis.com/urls": "[\"https://empresas-tareas-1097579860263.us-central1.run.app\",\"https://empresas-tareas-rbg3vwvhaq-uc.a.run.app\"]",
+              "serving.knative.dev/creator": "garaujo@equipos.com.uy",
+              "serving.knative.dev/lastModifier": "garaujo@equipos.com.uy"
+            },
+            "creationTimestamp": "2026-11-23T03:18:43.021018Z",
+            "generation": 1,
+            "labels": {
+              "cloud.googleapis.com/location": "us-central1"
+            },
+            "name": "empresas-tareas",
+            "namespace": "1097579860263",
+            "resourceVersion": "AAZg6Q2gWPo",
+            "selfLink": "/apis/serving.knative.dev/v1/namespaces/1097579860263/services/empresas-tareas",
+            "uid": "664a0cd4-bbf6-43db-ba38-aa7dff330390"
+          },
+          "spec": {
+            "template": {
+              "metadata": {
+                "annotations": {
+                  "autoscaling.knative.dev/maxScale": "2",
+                  "run.googleapis.com/client-name": "gcloud",
+                  "run.googleapis.com/client-version": "583.0.0",
+                  "run.googleapis.com/cloudsql-instances": "equipos-base-empresas:us-central1:empresas-pg",
+                  "run.googleapis.com/startup-cpu-boost": "true"
+                },
+                "labels": {
+                  "client.knative.dev/nonce": "evurqkklff",
+                  "run.googleapis.com/startupProbeType": "Default"
+                }
+              },
+              "spec": {
+                "containerConcurrency": 1,
+                "containers": [
+                  {
+                    "image": "us-central1-docker.pkg.dev/equipos-base-empresas/empresas/api:666cb2a",
+                    "resources": {
+                      "limits": {
+                        "cpu": "1",
+                        "memory": "2Gi"
+                      }
+                    }
+                  }
+                ],
+                "serviceAccountName": "empresas-api@equipos-base-empresas.iam.gserviceaccount.com",
+                "timeoutSeconds": 1800
+              }
+            },
+            "traffic": [
+              {
+                "latestRevision": true,
+                "percent": 100
+              }
+            ]
+          },
+          "status": {
+            "conditions": [
+              {
+                "lastTransitionTime": "2026-11-23T03:18:52.521777Z",
+                "status": "True",
+                "type": "Ready"
+              },
+              {
+                "lastTransitionTime": "2026-11-23T03:18:44.022505Z",
+                "status": "True",
+                "type": "ConfigurationsReady"
+              },
+              {
+                "lastTransitionTime": "2026-11-23T03:18:52.477304Z",
+                "status": "True",
+                "type": "RoutesReady"
+              }
+            ],
+            "latestCreatedRevisionName": "empresas-tareas-00001-57q",
+            "latestReadyRevisionName": "empresas-tareas-00001-57q",
+            "observedGeneration": 1,
+            "traffic": [
+              {
+                "latestRevision": true,
+                "percent": 100,
+                "revisionName": "empresas-tareas-00001-57q"
+              }
+            ],
+            "url": "https://empresas-tareas-rbg3vwvhaq-uc.a.run.app"
+          }
+        }
+      },
+      "requestMetadata": {
+        "callerIp": "2800:810:440:1b5:51ac:a414:d89a:3656",
+        "callerSuppliedUserAgent": "google-cloud-sdk gcloud/583.0.0 command/gcloud.run.services.update invocation-id/39e97258281d42b9a88c5722ac534247 environment/None environment-version/None client-os/MACOSX client-os-ver/27.2.0 client-pltf-arch/arm interactive/True from-script/True python/3.14.4 term/xterm-256color  (Macintosh; Intel Mac OS X 27.2.0),gzip(gfe)",
+        "destinationAttributes": {},
+        "requestAttributes": {
+          "auth": {},
+          "time": "2026-11-23T03:18:59.807576Z"
+        }
+      },
+      "resourceLocation": {
+        "currentLocations": [
+          "us-central1"
+        ]
+      },
+      "resourceName": "namespaces/equipos-base-empresas/services/empresas-tareas",
+      "serviceName": "run.googleapis.com",
+      "status": {}
+    },
+    "receiveTimestamp": "2026-11-23T03:19:00.316903282Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "NOTICE",
+    "timestamp": "2026-11-23T03:18:59.626901Z"
+  },
+  {
+    "insertId": "-1ng6p8d963o",
+    "logName": "projects/equipos-base-empresas/logs/cloudaudit.googleapis.com%2Fsystem_event",
+    "protoPayload": {
+      "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+      "methodName": "/Services.CreateService",
+      "resourceName": "namespaces/equipos-base-empresas/services/empresas-tareas",
+      "response": {
+        "@type": "type.googleapis.com/google.cloud.run.v1.Service",
+        "apiVersion": "serving.knative.dev/v1",
+        "kind": "Service",
+        "metadata": {
+          "annotations": {
+            "run.googleapis.com/client-name": "gcloud",
+            "run.googleapis.com/client-version": "583.0.0",
+            "run.googleapis.com/ingress": "all",
+            "run.googleapis.com/ingress-status": "all",
+            "run.googleapis.com/maxScale": "20",
+            "run.googleapis.com/operation-id": "a08f391a-0224-41ef-8839-eba0ccbe365f",
+            "run.googleapis.com/urls": "[\"https://empresas-tareas-1097579860263.us-central1.run.app\",\"https://empresas-tareas-rbg3vwvhaq-uc.a.run.app\"]",
+            "serving.knative.dev/creator": "garaujo@equipos.com.uy",
+            "serving.knative.dev/lastModifier": "garaujo@equipos.com.uy"
+          },
+          "creationTimestamp": "2026-11-23T03:18:43.021018Z",
+          "generation": 1,
+          "labels": {
+            "cloud.googleapis.com/location": "us-central1"
+          },
+          "name": "empresas-tareas",
+          "namespace": "1097579860263",
+          "resourceVersion": "AAZg6Q2gWPo",
+          "selfLink": "/apis/serving.knative.dev/v1/namespaces/1097579860263/services/empresas-tareas",
+          "uid": "664a0cd4-bbf6-43db-ba38-aa7dff330390"
+        },
+        "spec": {
+          "template": {
+            "metadata": {
+              "annotations": {
+                "autoscaling.knative.dev/maxScale": "2",
+                "run.googleapis.com/client-name": "gcloud",
+                "run.googleapis.com/client-version": "583.0.0",
+                "run.googleapis.com/cloudsql-instances": "equipos-base-empresas:us-central1:empresas-pg",
+                "run.googleapis.com/startup-cpu-boost": "true"
+              },
+              "labels": {
+                "client.knative.dev/nonce": "exjvnbguxw",
+                "run.googleapis.com/startupProbeType": "Default"
+              }
+            },
+            "spec": {
+              "containerConcurrency": 1,
+              "containers": [
+                {
+                  "env": [
+                    {
+                      "name": "AUTH_MODE",
+                      "value": "firebase"
+                    },
+                    {
+                      "name": "FIREBASE_PROJECT_ID",
+                      "value": "equipos-base-empresas"
+                    },
+                    {
+                      "name": "TASKS_MODE",
+                      "value": "cloudtasks"
+                    },
+                    {
+                      "name": "TASKS_QUEUE",
+                      "value": "projects/equipos-base-empresas/locations/us-central1/queues/empresas-tareas"
+                    },
+                    {
+                      "name": "STORAGE_BUCKET",
+                      "value": "equipos-base-empresas-empresas-archivos"
+                    },
+                    {
+                      "name": "BQ_TABLA_AUDITORIA",
+                      "value": "equipos-base-empresas.empresas_auditoria.auditoria"
+                    },
+                    {
+                      "name": "ADMIN_EMAILS",
+                      "value": "garaujo@equipos.com.uy"
+                    },
+                    {
+                      "name": "API_URL",
+                      "value": "https://empresas-api-rbg3vwvhaq-uc.a.run.app"
+                    },
+                    {
+                      "name": "TAREAS_URL"
+                    },
+                    {
+                      "name": "APP_URL",
+                      "value": "https://equipos-base-empresas.web.app"
+                    },
+                    {
+                      "name": "SMTP_USUARIO",
+                      "value": "notificaciones@equipos.com.uy"
+                    },
+                    {
+                      "name": "SMTP_HOST",
+                      "value": "smtp.gmail.com"
+                    },
+                    {
+                      "name": "SMTP_PORT",
+                      "value": "587"
+                    },
+                    {
+                      "name": "GCP_PROYECTO",
+                      "value": "equipos-base-empresas"
+                    },
+                    {
+                      "name": "GCP_REGION",
+                      "value": "us-central1"
+                    },
+                    {
+                      "name": "CDR_JOB",
+                      "value": "empresas-cdr"
+                    },
+                    {
+                      "name": "CDR_SECRETO",
+                      "value": "empresas-cdr-mysql-password"
+                    },
+                    {
+                      "name": "DB_POOL_MAX",
+                      "value": "3"
+                    },
+                    {
+                      "name": "WORKERS",
+                      "value": "1"
+                    },
+                    {
+                      "name": "MEMORIA_LIMITE_MB",
+                      "value": "2048"
+                    },
+                    {
+                      "name": "DATABASE_URL",
+                      "valueFrom": {
+                        "secretKeyRef": {
+                          "key": "latest",
+                          "name": "empresas-database-url"
+                        }
+                      }
+                    },
+                    {
+                      "name": "JOB_TOKEN",
+                      "valueFrom": {
+                        "secretKeyRef": {
+                          "key": "latest",
+                          "name": "empresas-job-token"
+                        }
+                      }
+                    },
+                    {
+                      "name": "TAREA_TOKEN",
+                      "valueFrom": {
+                        "secretKeyRef": {
+                          "key": "latest",
+                          "name": "empresas-tarea-token"
+                        }
+                      }
+                    },
+                    {
+                      "name": "SMTP_PASSWORD",
+                      "valueFrom": {
+                        "secretKeyRef": {
+                          "key": "latest",
+                          "name": "empresas-smtp-password"
+                        }
+                      }
+                    }
+                  ],
+                  "image": "us-central1-docker.pkg.dev/equipos-base-empresas/empresas/api:666cb2a",
+                  "ports": [
+                    {
+                      "containerPort": 8080,
+                      "name": "http1"
+                    }
+                  ],
+                  "resources": {
+                    "limits": {
+                      "cpu": "1",
+                      "memory": "2Gi"
+                    }
+                  },
+                  "startupProbe": {
+                    "failureThreshold": 1,
+                    "periodSeconds": 240,
+                    "tcpSocket": {
+                      "port": 8080
+                    },
+                    "timeoutSeconds": 240
+                  }
+                }
+              ],
+              "sandboxes": {},
+              "serviceAccountName": "empresas-api@equipos-base-empresas.iam.gserviceaccount.com",
+              "timeoutSeconds": 1800
+            }
+          },
+          "traffic": [
+            {
+              "latestRevision": true,
+              "percent": 100
+            }
+          ]
+        },
+        "status": {
+          "address": {
+            "url": "https://empresas-tareas-rbg3vwvhaq-uc.a.run.app"
+          },
+          "conditions": [
+            {
+              "lastTransitionTime": "2026-11-23T03:18:52.521777Z",
+              "status": "True",
+              "type": "Ready"
+            },
+            {
+              "lastTransitionTime": "2026-11-23T03:18:44.022505Z",
+              "status": "True",
+              "type": "ConfigurationsReady"
+            },
+            {
+              "lastTransitionTime": "2026-11-23T03:18:52.477304Z",
+              "status": "True",
+              "type": "RoutesReady"
+            }
+          ],
+          "latestCreatedRevisionName": "empresas-tareas-00001-57q",
+          "latestReadyRevisionName": "empresas-tareas-00001-57q",
+          "observedGeneration": 1,
+          "traffic": [
+            {
+              "latestRevision": true,
+              "percent": 100,
+              "revisionName": "empresas-tareas-00001-57q"
+            }
+          ],
+          "url": "https://empresas-tareas-rbg3vwvhaq-uc.a.run.app"
+        }
+      },
+      "serviceName": "run.googleapis.com",
+      "status": {
+        "message": "Ready condition status changed to True for Service empresas-tareas."
+      }
+    },
+    "receiveTimestamp": "2026-11-23T03:18:52.839065226Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "timestamp": "2026-11-23T03:18:52.539630Z"
+  },
+  {
+    "insertId": "xb1jntd154c",
+    "logName": "projects/equipos-base-empresas/logs/cloudaudit.googleapis.com%2Fsystem_event",
+    "protoPayload": {
+      "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+      "methodName": "/Services.CreateService",
+      "resourceName": "namespaces/equipos-base-empresas/revisions/empresas-tareas-00001-57q",
+      "response": {
+        "@type": "type.googleapis.com/google.cloud.run.v1.Revision",
+        "apiVersion": "serving.knative.dev/v1",
+        "kind": "Revision",
+        "metadata": {
+          "annotations": {
+            "autoscaling.knative.dev/maxScale": "2",
+            "run.googleapis.com/client-name": "gcloud",
+            "run.googleapis.com/client-version": "583.0.0",
+            "run.googleapis.com/cloudsql-instances": "equipos-base-empresas:us-central1:empresas-pg",
+            "run.googleapis.com/operation-id": "a08f391a-0224-41ef-8839-eba0ccbe365f",
+            "run.googleapis.com/startup-cpu-boost": "true",
+            "serving.knative.dev/creator": "garaujo@equipos.com.uy"
+          },
+          "creationTimestamp": "2026-11-23T03:18:43.136816Z",
+          "generation": 1,
+          "labels": {
+            "client.knative.dev/nonce": "exjvnbguxw",
+            "cloud.googleapis.com/location": "us-central1",
+            "run.googleapis.com/startupProbeType": "Default",
+            "serving.knative.dev/configuration": "empresas-tareas",
+            "serving.knative.dev/configurationGeneration": "1",
+            "serving.knative.dev/route": "empresas-tareas",
+            "serving.knative.dev/service": "empresas-tareas",
+            "serving.knative.dev/serviceUid": "664a0cd4-bbf6-43db-ba38-aa7dff330390"
+          },
+          "name": "empresas-tareas-00001-57q",
+          "namespace": "1097579860263",
+          "ownerReferences": [
+            {
+              "apiVersion": "serving.knative.dev/v1",
+              "blockOwnerDeletion": true,
+              "controller": true,
+              "kind": "Configuration",
+              "name": "empresas-tareas",
+              "uid": "1086ba0a-37d6-4d60-b02e-c7d6ae74aaf2"
+            }
+          ],
+          "resourceVersion": "AAZg6Q2IHWo",
+          "selfLink": "/apis/serving.knative.dev/v1/namespaces/1097579860263/revisions/empresas-tareas-00001-57q",
+          "uid": "7c193cac-f60d-4781-9b70-67a110197e49"
+        },
+        "spec": {
+          "containerConcurrency": 1,
+          "containers": [
+            {
+              "env": [
+                {
+                  "name": "AUTH_MODE",
+                  "value": "firebase"
+                },
+                {
+                  "name": "FIREBASE_PROJECT_ID",
+                  "value": "equipos-base-empresas"
+                },
+                {
+                  "name": "TASKS_MODE",
+                  "value": "cloudtasks"
+                },
+                {
+                  "name": "TASKS_QUEUE",
+                  "value": "projects/equipos-base-empresas/locations/us-central1/queues/empresas-tareas"
+                },
+                {
+                  "name": "STORAGE_BUCKET",
+                  "value": "equipos-base-empresas-empresas-archivos"
+                },
+                {
+                  "name": "BQ_TABLA_AUDITORIA",
+                  "value": "equipos-base-empresas.empresas_auditoria.auditoria"
+                },
+                {
+                  "name": "ADMIN_EMAILS",
+                  "value": "garaujo@equipos.com.uy"
+                },
+                {
+                  "name": "API_URL",
+                  "value": "https://empresas-api-rbg3vwvhaq-uc.a.run.app"
+                },
+                {
+                  "name": "TAREAS_URL"
+                },
+                {
+                  "name": "APP_URL",
+                  "value": "https://equipos-base-empresas.web.app"
+                },
+                {
+                  "name": "SMTP_USUARIO",
+                  "value": "notificaciones@equipos.com.uy"
+                },
+                {
+                  "name": "SMTP_HOST",
+                  "value": "smtp.gmail.com"
+                },
+                {
+                  "name": "SMTP_PORT",
+                  "value": "587"
+                },
+                {
+                  "name": "GCP_PROYECTO",
+                  "value": "equipos-base-empresas"
+                },
+                {
+                  "name": "GCP_REGION",
+                  "value": "us-central1"
+                },
+                {
+                  "name": "CDR_JOB",
+                  "value": "empresas-cdr"
+                },
+                {
+                  "name": "CDR_SECRETO",
+                  "value": "empresas-cdr-mysql-password"
+                },
+                {
+                  "name": "DB_POOL_MAX",
+                  "value": "3"
+                },
+                {
+                  "name": "WORKERS",
+                  "value": "1"
+                },
+                {
+                  "name": "MEMORIA_LIMITE_MB",
+                  "value": "2048"
+                },
+                {
+                  "name": "DATABASE_URL",
+                  "valueFrom": {
+                    "secretKeyRef": {
+                      "key": "latest",
+                      "name": "empresas-database-url"
+                    }
+                  }
+                },
+                {
+                  "name": "JOB_TOKEN",
+                  "valueFrom": {
+                    "secretKeyRef": {
+                      "key": "latest",
+                      "name": "empresas-job-token"
+                    }
+                  }
+                },
+                {
+                  "name": "TAREA_TOKEN",
+                  "valueFrom": {
+                    "secretKeyRef": {
+                      "key": "latest",
+                      "name": "empresas-tarea-token"
+                    }
+                  }
+                },
+                {
+                  "name": "SMTP_PASSWORD",
+                  "valueFrom": {
+                    "secretKeyRef": {
+                      "key": "latest",
+                      "name": "empresas-smtp-password"
+                    }
+                  }
+                }
+              ],
+              "image": "us-central1-docker.pkg.dev/equipos-base-empresas/empresas/api@sha256:707ece041303785f8d001785d71c3706f85c51a017a7751d4225dfce0870198b",
+              "name": "api-1",
+              "ports": [
+                {
+                  "containerPort": 8080,
+                  "name": "http1"
+                }
+              ],
+              "resources": {
+                "limits": {
+                  "cpu": "1",
+                  "memory": "2Gi"
+                }
+              },
+              "startupProbe": {
+                "failureThreshold": 1,
+                "periodSeconds": 240,
+                "tcpSocket": {
+                  "port": 8080
+                },
+                "timeoutSeconds": 240
+              }
+            }
+          ],
+          "sandboxes": {},
+          "serviceAccountName": "empresas-api@equipos-base-empresas.iam.gserviceaccount.com",
+          "timeoutSeconds": 1800
+        },
+        "status": {
+          "conditions": [
+            {
+              "lastTransitionTime": "2026-11-23T03:18:50.932290Z",
+              "message": "Deploying revision succeeded in 7.8s.",
+              "status": "True",
+              "type": "Ready"
+            },
+            {
+              "lastTransitionTime": "2026-11-23T03:18:50.870671Z",
+              "message": "Containers became healthy in 5.01s.",
+              "status": "True",
+              "type": "ContainerHealthy"
+            },
+            {
+              "lastTransitionTime": "2026-11-23T03:18:43.921670Z",
+              "message": "Container image import completed.",
+              "status": "True",
+              "type": "ContainerReady"
+            },
+            {
+              "lastTransitionTime": "2026-11-23T03:18:45.409477Z",
+              "message": "Provisioning imported containers completed in 1.49s. Checking container health. This will wait for up to 4m for the configured startup probe, including an initial delay of 0s.",
+              "status": "True",
+              "type": "ResourcesAvailable"
+            }
+          ],
+          "containerStatuses": [
+            {
+              "imageDigest": "us-central1-docker.pkg.dev/equipos-base-empresas/empresas/api@sha256:707ece041303785f8d001785d71c3706f85c51a017a7751d4225dfce0870198b",
+              "name": "api-1"
+            }
+          ],
+          "imageDigest": "us-central1-docker.pkg.dev/equipos-base-empresas/empresas/api@sha256:707ece041303785f8d001785d71c3706f85c51a017a7751d4225dfce0870198b",
+          "logUrl": "https://console.cloud.google.com/logs/viewer?project=equipos-base-empresas&resource=cloud_run_revision/service_name/empresas-tareas/revision_name/empresas-tareas-00001-57q&advancedFilter=resource.type%3D%22cloud_run_revision%22%0Aresource.labels.service_name%3D%22empresas-tareas%22%0Aresource.labels.revision_name%3D%22empresas-tareas-00001-57q%22",
+          "observedGeneration": 1
+        }
+      },
+      "serviceName": "run.googleapis.com",
+      "status": {
+        "message": "Ready condition status changed to True for Revision empresas-tareas-00001-57q with message: Deploying revision succeeded in 7.8s."
+      }
+    },
+    "receiveTimestamp": "2026-11-23T03:18:51.435228932Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00001-57q",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "timestamp": "2026-11-23T03:18:50.949279Z"
+  },
+  {
+    "insertId": "6b03b09a000cfe523b392b0a",
+    "labels": {
+      "instanceId": "00e8a408bdd98ba1803d008cff7ac1933365f3fee6b076c6a0b51e8b61b20d1d8adfd65dd21cc07336b2a5c6c5cc9cb101d5a9d5628355dff170f648739b67883fbf784c3410adf066e4adc022f17b2c3687afc2f83085a4"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fvarlog%2Fsystem",
+    "receiveTimestamp": "2026-11-23T03:18:51.187525311Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00001-57q",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "textPayload": "Default STARTUP TCP probe succeeded after 1 attempt for container \"api-1\" on port 8080.",
+    "timestamp": "2026-11-23T03:18:50.851538Z"
+  },
+  {
+    "insertId": "6b03b09a000cfd06021a65fe",
+    "labels": {
+      "instanceId": "00e8a408bdd98ba1803d008cff7ac1933365f3fee6b076c6a0b51e8b61b20d1d8adfd65dd21cc07336b2a5c6c5cc9cb101d5a9d5628355dff170f648739b67883fbf784c3410adf066e4adc022f17b2c3687afc2f83085a4"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T03:18:51.125308238Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00001-57q",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)",
+    "timestamp": "2026-11-23T03:18:50.851206Z"
+  },
+  {
+    "insertId": "6b03b09a000cac34c79b53dc",
+    "labels": {
+      "instanceId": "00e8a408bdd98ba1803d008cff7ac1933365f3fee6b076c6a0b51e8b61b20d1d8adfd65dd21cc07336b2a5c6c5cc9cb101d5a9d5628355dff170f648739b67883fbf784c3410adf066e4adc022f17b2c3687afc2f83085a4"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T03:18:51.125308238Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00001-57q",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Application startup complete.",
+    "timestamp": "2026-11-23T03:18:50.830516Z"
+  },
+  {
+    "insertId": "6b03b09a0006df991d67c534",
+    "labels": {
+      "instanceId": "00e8a408bdd98ba1803d008cff7ac1933365f3fee6b076c6a0b51e8b61b20d1d8adfd65dd21cc07336b2a5c6c5cc9cb101d5a9d5628355dff170f648739b67883fbf784c3410adf066e4adc022f17b2c3687afc2f83085a4"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T03:18:50.456388510Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00001-57q",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Waiting for application startup.",
+    "timestamp": "2026-11-23T03:18:50.450457Z"
+  },
+  {
+    "insertId": "6b03b09a0006df6f64d8b1db",
+    "labels": {
+      "instanceId": "00e8a408bdd98ba1803d008cff7ac1933365f3fee6b076c6a0b51e8b61b20d1d8adfd65dd21cc07336b2a5c6c5cc9cb101d5a9d5628355dff170f648739b67883fbf784c3410adf066e4adc022f17b2c3687afc2f83085a4"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-11-23T03:18:50.456388510Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00001-57q",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     Started server process [1]",
+    "timestamp": "2026-11-23T03:18:50.450415Z"
+  },
+  {
+    "insertId": "6b03b0950007f3059ae0239e",
+    "labels": {
+      "instanceId": "00e8a408bdd98ba1803d008cff7ac1933365f3fee6b076c6a0b51e8b61b20d1d8adfd65dd21cc07336b2a5c6c5cc9cb101d5a9d5628355dff170f648739b67883fbf784c3410adf066e4adc022f17b2c3687afc2f83085a4",
+      "scaling_reason": "DEPLOYMENT_ROLLOUT"
+    },
+    "logName": "projects/equipos-base-empresas/logs/run.googleapis.com%2Fvarlog%2Fsystem",
+    "receiveTimestamp": "2026-11-23T03:18:45.527592547Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "empresas-tareas",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "empresas-tareas-00001-57q",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "textPayload": "Starting new instance. Reason: DEPLOYMENT_ROLLOUT - Instance started due to traffic shifting between revisions due to deployment, traffic split adjustment, or deployment health check.",
+    "timestamp": "2026-11-23T03:18:45.520965Z"
+  },
+  {
+    "insertId": "eq0d0rd6rx1",
+    "logName": "projects/equipos-base-empresas/logs/cloudaudit.googleapis.com%2Factivity",
+    "protoPayload": {
+      "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+      "authenticationInfo": {
+        "oauthInfo": {
+          "oauthClientId": "32555940559.apps.googleusercontent.com"
+        },
+        "principalEmail": "garaujo@equipos.com.uy",
+        "principalSubject": "user:garaujo@equipos.com.uy"
+      },
+      "authorizationInfo": [
+        {
+          "granted": true,
+          "permission": "run.services.create",
+          "permissionType": "ADMIN_WRITE",
+          "resource": "namespaces/equipos-base-empresas/services/empresas-tareas",
+          "resourceAttributes": {}
+        },
+        {
+          "granted": true,
+          "permission": "run.services.create",
+          "permissionType": "ADMIN_WRITE",
+          "resource": "namespaces/equipos-base-empresas/services/empresas-tareas",
+          "resourceAttributes": {
+            "name": "namespaces/equipos-base-empresas/services/empresas-tareas",
+            "service": "run.googleapis.com/",
+            "type": "run.googleapis.com/Service"
+          }
+        }
+      ],
+      "methodName": "google.cloud.run.v1.Services.CreateService",
+      "request": {
+        "@type": "type.googleapis.com/google.cloud.run.v1.CreateServiceRequest",
+        "parent": "namespaces/equipos-base-empresas",
+        "service": {
+          "apiVersion": "serving.knative.dev/v1",
+          "kind": "Service",
+          "metadata": {
+            "annotations": {
+              "run.googleapis.com/client-name": "gcloud",
+              "run.googleapis.com/client-version": "583.0.0"
+            },
+            "name": "empresas-tareas",
+            "namespace": "equipos-base-empresas"
+          },
+          "spec": {
+            "template": {
+              "metadata": {
+                "annotations": {
+                  "autoscaling.knative.dev/maxScale": "2",
+                  "run.googleapis.com/client-name": "gcloud",
+                  "run.googleapis.com/client-version": "583.0.0",
+                  "run.googleapis.com/cloudsql-instances": "equipos-base-empresas:us-central1:empresas-pg",
+                  "run.googleapis.com/startup-cpu-boost": "True"
+                },
+                "labels": {
+                  "client.knative.dev/nonce": "exjvnbguxw"
+                }
+              },
+              "spec": {
+                "containerConcurrency": 1,
+                "containers": [
+                  {
+                    "image": "us-central1-docker.pkg.dev/equipos-base-empresas/empresas/api:666cb2a",
+                    "name": "",
+                    "resources": {
+                      "limits": {
+                        "cpu": "1",
+                        "memory": "2Gi"
+                      }
+                    }
+                  }
+                ],
+                "serviceAccountName": "empresas-api@equipos-base-empresas.iam.gserviceaccount.com",
+                "timeoutSeconds": 1800
+              }
+            }
+          },
+          "status": {}
+        }
+      },
+      "requestMetadata": {
+        "callerIp": "2800:810:440:1b5:51ac:a414:d89a:3656",
+        "callerSuppliedUserAgent": "google-cloud-sdk gcloud/583.0.0 command/gcloud.run.deploy invocation-id/3ecdcc60718f4f1986dcf5ee773492a8 environment/None environment-version/None client-os/MACOSX client-os-ver/27.2.0 client-pltf-arch/arm interactive/True from-script/True python/3.14.4 term/xterm-256color  (Macintosh; Intel Mac OS X 27.2.0),gzip(gfe)",
+        "destinationAttributes": {},
+        "requestAttributes": {
+          "auth": {},
+          "time": "2026-11-23T03:18:43.078071Z"
+        }
+      },
+      "resourceLocation": {
+        "currentLocations": [
+          "us-central1"
+        ]
+      },
+      "resourceName": "namespaces/equipos-base-empresas/services/empresas-tareas",
+      "serviceName": "run.googleapis.com",
+      "status": {}
+    },
+    "receiveTimestamp": "2026-11-23T03:18:43.168245029Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "",
+        "location": "us-central1",
+        "project_id": "equipos-base-empresas",
+        "revision_name": "",
+        "service_name": "empresas-tareas"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "NOTICE",
+    "timestamp": "2026-11-23T03:18:42.902407Z"
+  }
+]
