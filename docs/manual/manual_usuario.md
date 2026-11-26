@@ -310,7 +310,7 @@ La tarjeta **Enriquecimiento** muestra el gasto del mes contra el tope mensual, 
 
 ### Enriquecer empresas
 
-El enriquecimiento busca, para empresas sin teléfono, un **teléfono**, el **sitio web**, la **dirección** y un **email institucional** (info@, contacto@…), en este orden y de lo más barato a lo más caro: lo que ya hay en la base (gratis), **Google Places**, una **búsqueda web** (solo si falta el sitio) y la **lectura del sitio con Claude** (solo si todavía falta el teléfono). Por defecto se corta apenas consigue un teléfono.
+El enriquecimiento busca, para empresas sin teléfono, un **teléfono**, el **sitio web**, la **dirección** y un **email institucional** (info@, contacto@…), en este orden y de lo más barato a lo más caro: lo que ya hay en la base (gratis), **Google Places**, una **búsqueda web** (solo si falta el sitio), la **lectura del sitio con Claude** (solo si todavía falta el teléfono) y, si está activada en Configuración, la **búsqueda web con Claude** como último intento (ver más abajo). Por defecto se corta apenas consigue un teléfono.
 
 Se lanza desde:
 
@@ -326,14 +326,30 @@ La corrida avanza empresa por empresa y se puede **Cancelar**. Antes de cada lla
 
 ![Una corrida de enriquecimiento](img/58-corrida.png)
 
+**Cuando un paso da error**, debajo de su fila en **Pasos** se ve el motivo que devolvió el proveedor y cuántas veces pasó (por ejemplo, «Google Places respondió 400: API key not valid… × 1»). Si hubo más de un motivo, el resto aparece al pasar el mouse. Las empresas que quedaron sin teléfono por un error tienen el resultado **error**, en la pestaña **Con error**, y el motivo aparece al pasar el mouse sobre el chip. Los mensajes nunca muestran la clave.
+
+![Motivo del error debajo de cada paso](img/76-pasos-motivo-error.png)
+
+![Empresas con error en una corrida](img/77-empresas-con-error.png)
+
+**Búsqueda web con Claude (paso 5).** Es el último intento, solo para las empresas que siguen sin teléfono después de Places, la búsqueda web y la lectura del sitio. Claude busca en la web (hasta 3 búsquedas por empresa) y propone teléfonos, cada uno con la página donde lo encontró. **Solo entran los que se pueden comprobar:** el sistema abre esa página y el número tiene que estar escrito ahí. En un directorio (guías, páginas amarillas), además, tiene que estar junto al nombre de la empresa. Los que no se comprueban se descartan y quedan contados como «no verificados». En **Pasos**, la fila **Búsqueda web (Claude)** dice cuántos teléfonos propuso, cuántos se verificaron y cuántas búsquedas hizo. Viene apagada: se activa en Configuración → Enriquecimiento.
+
+![El paso 5 en una corrida](img/78-pasos-busqueda-web.png)
+
+Con el paso 5 activado, la estimación lo muestra aparte: «Búsqueda web (Claude): hasta US$X», con lo que se espera gastar (solo para la parte de las empresas que los pasos anteriores no resuelven).
+
+![La estimación con la búsqueda web](img/81-estimacion-busqueda-web.png)
+
 **Qué pasa con lo encontrado:**
 
-- Los teléfonos entran **sin verificar**, con origen **Google Places** o **Sitio web**. Salen en el CSV como cualquier teléfono discable (en el orden de prioridad de su origen) y los verifica la sala con el .sav. En la ficha, la pestaña Teléfonos dice de qué corrida salió cada uno.
+- Los teléfonos entran **sin verificar**, con origen **Google Places**, **Sitio web** o **Búsqueda web (Claude)**. Salen en el CSV como cualquier teléfono discable (en el orden de prioridad de su origen) y los verifica la sala con el .sav. En la ficha, la pestaña Teléfonos dice de qué corrida salió cada uno; los de la búsqueda web tienen además el enlace **página fuente**, a la página donde aparece el número.
 - El sitio, la dirección y el email entran con **confianza 30**: nunca reemplazan un dato de una carga (50) ni de la sala (80).
 - Si el sitio es de un **estudio contable o jurídico**, sus teléfonos quedan como **intermediario sospechoso** y van a la bandeja de Intermediarios, con el motivo.
 - Nunca se guardan datos personales: ni nombres ni celulares ni emails de personas que aparezcan en el sitio.
 - **Deshacer** (en la corrida) quita lo que trajo, salvo los teléfonos que la sala ya verificó.
-- En **Actividad → Rendimiento por origen**, Google Places y Sitio web se miden como cualquier origen.
+- En **Actividad → Rendimiento por origen**, Google Places, Sitio web y Búsqueda web (Claude) se miden como cualquier origen.
+
+![La página fuente en la ficha](img/80-ficha-pagina-fuente.png)
 
 ### Posibles duplicados y grupos económicos
 
@@ -695,11 +711,14 @@ La tarjeta **Enriquecimiento** de Configuración tiene:
 - **Precios** de cada paso (los usa la estimación; se actualizan a mano si el proveedor cambia precios): Places por llamada y llamadas gratis por mes, Brave por búsqueda, y el modelo de Claude con sus precios por millón de tokens.
 - **Topes:** mensual duro (US$100 al empezar), por corrida (US$20) y máximo de empresas por corrida (2.000).
 - **Confianza** de los datos enriquecidos (30), días antes de volver a enriquecer una empresa (90) y **dónde se corta la cascada**: apenas consigue un teléfono (lo más barato) o cuando tiene teléfono y sitio web.
+- **Búsqueda web con Claude** (apagada al empezar): el último paso de la cascada, con la misma clave de Claude. Se elige cuántas **búsquedas máximas por empresa** (3) y el **precio por búsqueda** (US$0,01, o sea US$10 cada 1.000). Los tokens se cobran con los precios de Claude. Antes de cada empresa se reserva lo máximo que puede costar (las búsquedas más unos 30.000 tokens de lectura y 2.000 de respuesta); se cobra lo que realmente usó.
 - **Dominios genéricos** que no cuentan como «mismo sitio» en los posibles duplicados (gmail.com, facebook.com…).
 
 Todo, salvo las claves, se guarda con **Guardar nueva versión** y queda en el historial y en Auditoría.
 
 ![Configuración del enriquecimiento](img/61-config-enriquecimiento.png)
+
+![La búsqueda web con Claude en Configuración](img/79-config-busqueda-web.png)
 
 ### Atributos de empresa y de contacto
 
@@ -786,6 +805,8 @@ Registro inalterable de cargas, fusiones, exclusiones, sorteos, exportaciones, i
 
 **Subí el .sav y quedaron filas sin asociar.** Revisá el motivo en los conteos. Lo más común es que la encuesta no tenga la URL variable `EC_ID_ITEM`; en ese caso el sistema intenta por RUT y teléfono usado. Lo que no se resuelve va a Conciliación.
 
+**Un paso del enriquecimiento dio «error».** Abrí la corrida: debajo de la fila del paso está el motivo que devolvió el proveedor. «rechazó la clave» quiere decir que hay que cargar una clave nueva en Configuración → Enriquecimiento (el proveedor queda apagado hasta entonces). Un «respondió 422» es un parámetro que el proveedor no acepta: pasale el motivo a quien mantiene el sistema. «no respondió» suele ser un corte de red: volvé a enriquecer esas empresas (pestaña **Con error**) más tarde.
+
 **Una carga grande quedó «interrumpida».** Abrí su detalle: dice cuántos lotes se aplicaron y por qué se cortó. **Reanudar** sigue desde ahí sin repetir nada. Si preferís sacarla, **Deshacer carga** quita lo aplicado. Ver «Cargas grandes».
 
 **Arriba de la aplicación hay una franja roja «Faltan migraciones».** Solo la ven los administradores: se publicó una versión sin actualizar la base. Corré `./infra/desplegar.sh migrar` (ver la guía de despliegue); la franja desaparece en un minuto.
@@ -828,5 +849,6 @@ Registro inalterable de cargas, fusiones, exclusiones, sorteos, exportaciones, i
 | Conciliación | Asociación manual de una respuesta o una llamada que el sistema no pudo asociar solo |
 | CDR | Registro de llamadas de uContact |
 | Enriquecimiento | Búsqueda de teléfono, sitio, dirección y email de una empresa en Google Places, la web y su sitio, con costo estimado y tope |
+| Búsqueda web (Claude) | Último paso del enriquecimiento: Claude busca en la web y solo entran los teléfonos que aparecen en la página que cita |
 | Grupo económico | Empresas con RUT distinto relacionadas entre sí (no fusionadas); el sorteo puede tomar como máximo una por grupo |
 | Descubrimiento | Búsqueda de empresas nuevas por rubro y zona en Google Places; las nuevas entran a la base provisoria |

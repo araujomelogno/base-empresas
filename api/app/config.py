@@ -148,6 +148,12 @@ class ConfigEnriquecimiento(BaseModel):
     precio_claude_salida: float = Field(0.50, ge=0, le=1000)
     tokens_entrada_estimados: int = Field(6000, ge=100, le=200_000)
     tokens_salida_estimados: int = Field(400, ge=10, le=20_000)
+    # D57 (B4): búsqueda web con Claude, último paso de la cascada. Desactivada por defecto; usa la clave de Claude
+    claude_web_activo: bool = False
+    claude_web_busquedas: int = Field(3, ge=1, le=10)            # búsquedas máximas por empresa (max_uses)
+    precio_busqueda_web: float = Field(0.01, ge=0, le=10)        # US$ por búsqueda (US$10 cada 1.000)
+    tokens_web_entrada_estimados: int = Field(30000, ge=1000, le=500_000)   # los resultados entran como tokens
+    tokens_web_salida_estimados: int = Field(2000, ge=100, le=20_000)
     # Topes
     tope_mensual: float = Field(100.0, ge=0, le=100_000)
     tope_corrida: float = Field(20.0, ge=0, le=100_000)

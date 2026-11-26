@@ -285,7 +285,8 @@ export async function ficha(ctx, rut, params) {
       { t: 'Último intento', f: t => fechaHora(t.ultimo_intento) },
       { t: 'Origen', f: t => (t.origenes || []).map(o => `<div class="small" title="${esc(o.fuente_tipo)}${o.fuente_id ? ' #' + o.fuente_id : ''} · ${esc(fecha(o.fecha))}">${esc(o.nombre)}${
         o.fuente_tipo === 'enriquecimiento' && o.fuente_id ? ` · <a class="link" href="#/enriquecimiento/${o.fuente_id}">enriquecimiento #${o.fuente_id}</a>, ${esc(fecha(o.fecha))}`
-        : o.fuente_tipo === 'descubrimiento' && o.fuente_id ? ` · <a class="link" href="#/descubrimiento/${o.fuente_id}">descubrimiento #${o.fuente_id}</a>, ${esc(fecha(o.fecha))}` : ''}</div>`).join('') || '—' },
+        : o.fuente_tipo === 'descubrimiento' && o.fuente_id ? ` · <a class="link" href="#/descubrimiento/${o.fuente_id}">descubrimiento #${o.fuente_id}</a>, ${esc(fecha(o.fecha))}` : ''}${
+        o.url && /^https?:\/\//i.test(o.url) ? ` · <a class="link" href="${esc(o.url)}" target="_blank" rel="noopener noreferrer">página fuente</a>` : ''}</div>`).join('') || '—' },
       { t: 'Contacto', k: 'contacto' },
     ], e.telefonos, 'Sin teléfonos'), ctx.puede('steward') ? `<button class="btn btn-orange btn-sm" id="t-agregar">+ Teléfono</button>` : '', true);
     $$('[data-vinc]').forEach(s => s.onchange = async () => {

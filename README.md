@@ -30,6 +30,7 @@ Registro maestro de empresas por RUT del que salen muestras aleatorias y auditab
 | Despliegue de los lotes de carga rápidos (por tandas, planes de consulta correctos y medición por lote) | [`docs/despliegue_lotes_rapidos.md`](docs/despliegue_lotes_rapidos.md) |
 | Despliegue de RUT sin control de largo (identificadores de 6 a 11 dígitos como «RUT no verificado») | [`docs/despliegue_rut_no_verificado.md`](docs/despliegue_rut_no_verificado.md) |
 | Despliegue del armado de muestras (marco con sorteables y no sorteables, Excel de tamaños y sorteo sistemático por CIIU) | [`docs/despliegue_muestras_sistematico.md`](docs/despliegue_muestras_sistematico.md) |
+| Despliegue del enriquecimiento con Brave sin país, el motivo de cada error en la pantalla y la búsqueda web con Claude | [`docs/despliegue_brave_claude_web.md`](docs/despliegue_brave_claude_web.md) |
 | Despliegue del rendimiento con una base grande (disponibilidad guardada, resumen precalculado, total estimado, ANALYZE automático y 503 claros) | [`docs/despliegue_rendimiento.md`](docs/despliegue_rendimiento.md) |
 
 ## Estructura
