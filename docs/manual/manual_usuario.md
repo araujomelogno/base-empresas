@@ -373,6 +373,26 @@ Cada resultado se compara con la base y queda en uno de tres casos: **nueva** (s
 
 ![Buscar empresas nuevas](img/60-descubrimiento.png)
 
+**Qué aporta cada coincidencia.** Para cada resultado que coincide con una empresa, la columna **Qué aporta** dice, dato por dato, qué agregaría «Completar la empresa»:
+
+| Chip | Quiere decir |
+| --- | --- |
+| Verde: **Teléfono nuevo**, **Sitio nuevo**, **Dirección nueva** | La empresa no tiene ese dato: se agrega |
+| Naranja: **Sitio distinto: reemplaza** (o dirección) | Tiene otro, y el de Google Places pasaría a ser el vigente. Al pasar el mouse se ven los dos |
+| Gris: **Dirección distinta: solo historia** (o sitio) | Tiene otro, y se queda: el de Google Places queda solo en la historia. Al pasar el mouse dice por qué (por ejemplo, «el vigente viene de la sala») |
+| Texto tenue: **ya lo tiene** | Es el mismo dato (el mismo dominio, o una dirección casi igual) |
+| **No aporta nada** | Completarla no cambia nada |
+
+Las que no aportan nada quedan en **No guardar** aunque la coincidencia sea segura. Arriba, la tarjeta **coinciden y aportan** dice cuántas valen la pena. El filtro (Todas · Nuevas · Coinciden y aportan · Coinciden sin aporte · Ya guardadas) ayuda a revisarlas por grupos, y **Omitir las que no aportan** pone «No guardar» en todas esas de una vez. **Descargar CSV** baja la lista con «Qué aporta», para revisarla fuera de la aplicación.
+
+![Qué aporta cada coincidencia](img/83-descubrimiento-que-aporta.png)
+
+![Coinciden sin aporte, después de «Omitir las que no aportan»](img/84-descubrimiento-sin-aporte.png)
+
+**Después de confirmar**, la columna se llama **Qué se agregó** y muestra lo que pasó de verdad en cada empresa: «Teléfono nuevo» o «ya lo tenía», «Sitio nuevo», «Sitio: reemplazó al vigente», «Dirección: solo historia»… o **Sin cambios**. El aviso de arriba suma cuántas empresas se completaron sin cambios. En la ficha, el sitio o la dirección que vino de un lote enlaza a ese lote.
+
+![Qué se agregó, después de confirmar](img/86-descubrimiento-que-se-agrego.png)
+
 ## Jefe de proyecto
 
 ### Estudios y partes
@@ -849,6 +869,7 @@ Registro inalterable de cargas, fusiones, exclusiones, sorteos, exportaciones, i
 | Conciliación | Asociación manual de una respuesta o una llamada que el sistema no pudo asociar solo |
 | CDR | Registro de llamadas de uContact |
 | Enriquecimiento | Búsqueda de teléfono, sitio, dirección y email de una empresa en Google Places, la web y su sitio, con costo estimado y tope |
+| Qué aporta | En un lote de «Buscar empresas nuevas», lo que agregaría completar una empresa que coincide: dato nuevo, que reemplaza al vigente, que queda solo en la historia o que ya tiene |
 | Búsqueda web (Claude) | Último paso del enriquecimiento: Claude busca en la web y solo entran los teléfonos que aparecen en la página que cita |
 | Grupo económico | Empresas con RUT distinto relacionadas entre sí (no fusionadas); el sorteo puede tomar como máximo una por grupo |
 | Descubrimiento | Búsqueda de empresas nuevas por rubro y zona en Google Places; las nuevas entran a la base provisoria |
