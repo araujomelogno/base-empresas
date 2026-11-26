@@ -1,11 +1,14 @@
 """Estudios, partes, muestras y CSV para uContact (R1.5, R1.6, R1.7)."""
+import csv as csvmod
 import datetime as dt
+import io
+import json
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from .. import borrado, config, criterios as crit, exportacion, muestras, tareas, templates
+from .. import borrado, config, criterios as crit, exportacion, muestras, tamanos_excel, tareas, templates
 from ..auth import Usuario, requiere, usuario_actual
 from ..db import conexion, get_conn
 
@@ -239,8 +242,103 @@ def template_desde_muestra(muestra_id: int, body: DesdeMuestra, conn=Depends(get
 
 @router.post("/muestras/marco")
 def marco(criterios: dict, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
-    """Previsualiza el marco (disponibles por estrato y exclusiones por regla) sin sortear."""
+    """Previsualiza el marco sin sortear: por estrato, total, sorteables, no sorteables y motivos (D56)."""
     return muestras.previsualizar_marco(conn, criterios)
+
+
+# ── D56 · Excel de tamaños, no sorteables y reemplazo de un titular ──
+
+class PedidoExcel(BaseModel):
+    criterios: dict
+    estudio_id: int | None = None
+    muestra_id: int | None = None
+    nombre: str | None = None        # nombre de la muestra (o del template) para el archivo
+
+
+def _excel(conn, criterios: dict, estratos: list[dict], estudio: str | None, nombre: str | None, meta: dict) -> Response:
+    defs = crit.definiciones(conn)
+    r = templates.resumen(criterios, defs)
+    lineas = [f"Filtros: {', '.join(r['filtros']) or 'ninguno (toda la base)'}",
+              f"Estratos: {' × '.join(r['estratos']) or 'un único estrato «Total»'}",
+              "Incluye la base provisoria" if criterios.get("incluir_provisoria") else "Solo la base definitiva",
+              "Como máximo una empresa por grupo económico" if criterios.get("una_por_grupo") else ""]
+    tam = {e["estrato"]: (int(e.get("n", 0)), int(e.get("reemplazos", 0))) for e in criterios.get("estratos") or []}
+    if not tam and criterios.get("n_por_estrato") is not None:
+        tam = {e["estrato"]: (int(criterios["n_por_estrato"]), int(criterios.get("reemplazos_por_estrato") or 0))
+               for e in estratos}
+    contenido = tamanos_excel.armar(estratos, criterios, tam, meta, [x for x in lineas if x])
+    return Response(content=contenido,
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="{tamanos_excel.nombre_archivo(estudio, nombre)}"'})
+
+
+@router.post("/muestras/marco/tamanos.xlsx")
+def tamanos_xlsx(body: PedidoExcel, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+    """R2: el Excel del paso 3, con los criterios del asistente (aunque la muestra todavía no exista)."""
+    prev = muestras.previsualizar_marco(conn, body.criterios)
+    criterios = {**prev["criterios"], **{k: body.criterios[k] for k in ("estratos", "n_por_estrato", "reemplazos_por_estrato")
+                                          if k in body.criterios}}
+    estudio = None
+    if body.estudio_id:
+        e = conn.execute("SELECT nombre FROM estudio WHERE id = %s", (body.estudio_id,)).fetchone()
+        estudio = e["nombre"] if e else None
+    return _excel(conn, criterios, prev["estratos"], estudio, body.nombre,
+                  {"estudio_id": body.estudio_id, "muestra_id": body.muestra_id})
+
+
+@router.get("/muestras/{muestra_id}/tamanos.xlsx")
+def tamanos_xlsx_muestra(muestra_id: int, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+    """El Excel de una muestra (solo lectura una vez sorteada: los números son los del momento del sorteo)."""
+    m = conn.execute("SELECT m.*, e.nombre AS estudio FROM muestra m JOIN estudio e ON e.id = m.estudio_id"
+                     " WHERE m.id = %s", (muestra_id,)).fetchone()
+    if m is None:
+        raise HTTPException(404, "Muestra inexistente")
+    if m["resultado"]:
+        estratos = [{"estrato": x["estrato"], "total": x.get("total", x.get("disponibles", 0)),
+                     "sorteables": x.get("disponibles", 0)} for x in m["resultado"].get("estratos") or []]
+    else:
+        estratos = muestras.previsualizar_marco(conn, m["criterios"])["estratos"]
+    return _excel(conn, m["criterios"], estratos, m["estudio"], m["nombre"],
+                  {"estudio_id": m["estudio_id"], "muestra_id": muestra_id})
+
+
+@router.post("/muestras/tamanos/importar")
+def tamanos_importar(archivo: UploadFile = File(...), criterios: str = Form(...), conn=Depends(get_conn),
+                     u: Usuario = Depends(usuario_actual)):
+    """R2: lee el Excel y devuelve los tamaños para la pantalla. No guarda nada."""
+    try:
+        c = json.loads(criterios)
+    except ValueError as e:
+        raise HTTPException(422, "Criterios inválidos") from e
+    prev = muestras.previsualizar_marco(conn, c)
+    return tamanos_excel.importar(archivo.file.read(), {**prev["criterios"], "metodo": c.get("metodo")}, prev["estratos"])
+
+
+@router.post("/muestras/marco/no-sorteables.csv")
+def no_sorteables_csv(criterios: dict, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)):
+    """R3: las empresas del marco que no se pueden sortear, con su estrato y su motivo."""
+    motivo = lambda x: muestras.MOTIVOS.get(x, x.replace("_", " "))  # noqa: E731
+    filas = muestras.no_sorteables(conn, criterios)
+    salida = io.StringIO()
+    w = csvmod.writer(salida, delimiter=";")
+    w.writerow(["rut", "razon_social", "departamento", "ciiu", "estrato", "motivo"])
+    for f in filas:
+        w.writerow([f["rut"], f["razon_social"], f["departamento"], f["ciiu"], f["estrato"],
+                    ", ".join(motivo(x) for x in f["motivos"])])
+    return Response(content=salida.getvalue().encode("utf-8-sig"), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="no_sorteables_{dt.date.today():%Y%m%d}.csv"',
+                             "X-Renglones": str(len(filas)), "Access-Control-Expose-Headers": "X-Renglones"})
+
+
+class LiberarVecino(BaseModel):
+    item_id: int
+    motivo: str
+
+
+@router.post("/muestras/{muestra_id}/liberar-vecino")
+def liberar_vecino(muestra_id: int, body: LiberarVecino, conn=Depends(get_conn), u: Usuario = Depends(requiere("jefe"))):
+    """P1 (D56): libera el reemplazo asignado a un titular (sorteo sistemático)."""
+    return muestras.liberar_vecino(conn, muestra_id, body.item_id, body.motivo, u.email)
 
 
 @router.get("/muestras")

@@ -90,9 +90,11 @@ export async function upload(path, file, fields = {}) {
   return manejar(await fetch(BASE + path, { method: 'POST', headers: await headers(), body: fd }));
 }
 
-export async function descargar(path, params) {
+export async function descargar(path, params, body) {
   const q = params ? '?' + new URLSearchParams(params) : '';
-  const r = await manejar(await fetch(BASE + path + q, { headers: await headers() }));
+  const opciones = body === undefined ? { headers: await headers() }
+    : { method: 'POST', headers: await headers({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) };
+  const r = await manejar(await fetch(BASE + path + q, opciones));
   const blob = await r.blob();
   const cd = r.headers.get('content-disposition') || '';
   const nombre = (cd.match(/filename="([^"]+)"/) || [])[1] || 'descarga';

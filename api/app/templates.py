@@ -12,9 +12,10 @@ from psycopg.types.json import Jsonb
 
 from . import auditoria, criterios as crit
 
+# incluir_sin_telefono ya no existe (D56): se lee para avisar y se descarta al guardar
 CLAVES_PASOS = ("filtros", "campos", "atributos", "origenes", "incluir_provisoria", "incluir_sin_telefono", "una_por_grupo",
                 "estratificar_por", "estratos_def", "estratos", "n_por_estrato", "reemplazos_por_estrato",
-                "estratos_descartados")
+                "estratos_descartados", "metodo", "orden_sistematico")
 
 
 def _solo_pasos(c: dict) -> dict:
@@ -51,8 +52,6 @@ def resumen(c: dict, defs: dict) -> dict:
         filtros.append("origen de los teléfonos")
     if c.get("incluir_provisoria"):
         filtros.append("incluye la base provisoria")
-    if c.get("incluir_sin_telefono"):
-        filtros.append("incluye empresas sin teléfono")
     if c.get("estratos"):
         total = sum(int(e.get("n", 0)) for e in c["estratos"])
         tamano = f"{total} titulares en {len(c['estratos'])} estratos"
@@ -60,7 +59,8 @@ def resumen(c: dict, defs: dict) -> dict:
         tamano = f"{c['n_por_estrato']} por estrato"
     else:
         tamano = "sin tamaños"
-    return {"filtros": filtros, "estratos": [nombre(k) for k in c.get("estratificar_por") or []], "tamano": tamano}
+    return {"filtros": filtros, "estratos": [nombre(k) for k in c.get("estratificar_por") or []], "tamano": tamano,
+            "metodo": crit.METODOS.get(c.get("metodo") or "aleatorio", "Aleatorio simple")}
 
 
 def listar(conn, activos: bool | None = None) -> list[dict]:

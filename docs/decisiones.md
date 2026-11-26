@@ -63,6 +63,7 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 | D53 | Lotes rápidos: cada lote se procesa por tandas de 500 filas con unas pocas consultas por tanda (precarga, decisión en memoria con la misma regla de supervivencia y escritura en bloque), planes de consulta correctos y medición por lote | Vigente (23/11/2026) |
 | D54 | Identificadores de 6 a 11 dígitos aceptados como «RUT no verificado» (empresa.rut varchar(12) y rut_verificado), con interruptor en Configuración; un RUT de 12 dígitos se sigue validando | Vigente (23/11/2026) |
 | D55 | Rendimiento con una base grande: disponibilidad guardada con triggers, resumen precalculado, lista de Empresas por clave con total estimado, ANALYZE al terminar cada operación grande, 15 s por consulta y 503 claros | Vigente (24/11/2026) |
+| D56 | Armado de muestras: aviso de espera, Excel de tamaños, marco con total, sorteables y no sorteables por estrato, sin «Incluir empresas sin teléfono» y sorteo sistemático por CIIU con reemplazo vecino | Vigente (26/11/2026) |
 
 ## D01 — Cloud SQL Postgres como núcleo
 
@@ -720,6 +721,87 @@ La configuración inicial usa 6 meses de enfriamiento desde el último contacto 
 **Riesgos aceptados.** Durante una carga grande la disponibilidad guardada de las empresas que la carga va tocando queda vieja hasta que termina (el mantenimiento espera a que no haya cargas pesadas); los listados lo toleran y el sorteo no depende de ella. Un resumen calculado justo mientras otra transacción todavía no confirmó un cambio puede quedar marcado «al día» sin ese cambio hasta el próximo cambio, el job diario o el botón. Los totales «≈» pueden diferir del exacto en unos puntos porcentuales.
 
 **Descartado.** Una vista materializada (se refresca entera: minutos en la f1-micro y bloquea o duplica disco). Recalcular la disponibilidad dentro de cada lote (alarga los lotes). Contar el total exacto siempre (es lo que hacía lenta la lista). Agrandar Cloud SQL (sección 9 del spec): queda como paso siguiente si con esto no se llega a los objetivos.
+
+## D56 — Armado de muestras: marco completo, Excel de tamaños y sorteo sistemático por CIIU
+
+**Contexto.** Con la base grande, «Ver marco disponible» y aplicar un template tardaban varios segundos sin ninguna señal, y los usuarios volvían a hacer clic (pares de consultas en los logs). Los tamaños de una muestra con muchos estratos se tipeaban de a uno. El marco mostraba por estrato solo las empresas sorteables, sin decir cuántas se perdían ni por qué. Y había un solo método de sorteo, aleatorio simple. Ver `specs/SPEC_muestras_marco_excel_sistematico.md`, que reemplaza el requisito R3 de `SPEC_templates_sorteo_sin_telefono_formatos_csv.md`.
+
+**Decisiones de Germán Araújo (24–25/11/2026).**
+
+1. Se elimina la opción «Incluir empresas sin teléfono discable». Las empresas sin teléfono aparecen en el marco como **no sorteables** y nunca se sortean.
+2. En el sorteo sistemático, el reemplazo de cada titular es **su vecino en la lista**.
+3. La lista del sistemático se ordena por **CIIU completo**.
+
+**Decisión.**
+
+1. **Aviso de espera (R1).** `conEspera(control, texto, fn)` en `ui.js`:
+   - deshabilita el control con un spinner y abre un modal que bloquea la pantalla, con un contador de segundos (a los 20 s agrega «La base es grande; puede tardar hasta 2 minutos»);
+   - mientras está abierto, no deja lanzar otra consulta del armado;
+   - si falla, muestra el mensaje del servidor (incluidos los 503 de D55) con «Cerrar».
+
+   Lo usan:
+   - «Ver marco disponible», en el asistente y en una muestra en borrador;
+   - elegir un template (que ya trae el marco en la misma respuesta);
+   - «Crear y sortear» y «Sortear»;
+   - el Excel y los no sorteables.
+
+   Si cambia un filtro o un estrato después de ver el marco, el resultado queda marcado «Volvé a consultar el marco» y no se puede sortear ni bajar el Excel hasta reconsultarlo.
+2. **Marco completo (R3).**
+   - **Cálculo.** `calcular_marco` calcula los estratos sobre **todo el universo**: las empresas que cumplen los filtros, sorteables o no. Por estrato devuelve `total`, `sorteables`, `no_sorteables` y `motivos`. Una empresa con dos motivos cuenta en los dos, pero una sola vez en no sorteables.
+   - **Compatibilidad.** `disponibles` queda como sinónimo de `sorteables`.
+   - **Sorteo.** El sorteo usa el mismo cálculo y congela en el snapshot solo las sorteables.
+   - **Las etiquetas se calculan sobre el universo.** Es un cambio para los sorteos nuevos: con «Agrupar en Otros los de menos de N» o «los N más frecuentes» cuenta el total del estrato, no solo sus sorteables. Las muestras ya sorteadas no cambian, porque «Verificar reproducibilidad» usa las etiquetas congeladas.
+   - **No sorteables.** «Descargar no sorteables» (`POST /muestras/marco/no-sorteables.csv`) lista esas empresas con su estrato y su motivo. El motivo «sin teléfono del origen elegido» es el filtro de origen.
+3. **Sin «Incluir empresas sin teléfono».**
+   - `criterios.validar` descarta `incluir_sin_telefono`. Si venía, avisa («La opción "Incluir empresas sin teléfono" ya no existe: las empresas sin teléfono no se sortean») al aplicar un template y al ver el marco.
+   - Un template la pierde al guardarse.
+   - Una muestra en borrador la muestra como aviso en su detalle y se sortea sin ella.
+   - Las muestras ya sorteadas no se tocan: el detalle sigue diciendo cuántas empresas sin teléfono entraron, y la verificación usa el snapshot.
+   - La regla de Configuración «Excluir empresas sin teléfono discable» es la única que decide.
+   - Consecuencia: «Enriquecer las sin teléfono de una muestra» ya no encuentra empresas salvo con esa regla apagada. La salida prevista es el CSV de no sorteables; la pregunta abierta de la spec (un botón «Enriquecer las sin teléfono de este marco») queda para otra spec.
+4. **Excel de tamaños (R2, con `openpyxl`).**
+   - **Endpoints.**
+     - `POST /muestras/marco/tamanos.xlsx` arma el Excel con los criterios del asistente, aunque la muestra todavía no exista.
+     - `GET /muestras/{id}/tamanos.xlsx` lo arma para una muestra; si está sorteada, con los números del sorteo y solo de lectura.
+     - `POST /muestras/tamanos/importar` **no guarda**: devuelve `{tamanos, avisos, errores, importados}` y la pantalla los vuelca en la tabla.
+   - **Hoja «Tamaños».**
+     - Columnas: Estrato, Total, Sorteables y No sorteables (fórmula).
+     - Titulares y Reemplazos editables; son las únicas celdas desbloqueadas.
+     - «¿Alcanza?» y, como P1, «Tamaño proporcional sugerido», las dos con fórmulas.
+     - Una fila de totales.
+     - Protegida **sin contraseña**.
+     - `fullCalcOnLoad`, para que Excel y LibreOffice calculen al abrir (verificado con LibreOffice).
+   - **Otras hojas.** «Instrucciones» con los criterios resumidos, y «_meta» oculta con estudio, muestra, versión, método y un hash de los filtros y estratos.
+   - **Lectura.** La importación lee por nombre de columna. Reglas:
+     - estrato que no está en el marco: se ignora, con aviso;
+     - estrato del marco que no está en el Excel: queda con el valor de la pantalla, con aviso;
+     - celda vacía: 0;
+     - negativo, decimal o texto: error solo en esa fila;
+     - no alcanza: se importa, con aviso;
+     - hash distinto: aviso;
+     - sin la hoja o sin la columna Estrato: se rechaza.
+
+     Se aceptan números escritos como texto si son solo dígitos.
+5. **Sorteo sistemático por CIIU (R4).** `criterios.metodo` puede ser `aleatorio` o `sistematico_ciiu`. Solo se guarda si es sistemático, así los criterios de las muestras viejas no cambian; va junto con `orden_sistematico = ["ciiu"]` (P2). `sortear_snapshot` despacha a `sortear_aleatorio` (el de siempre, sin cambios) o a `sortear_sistematico`, una función pura que trabaja estrato por estrato:
+   1. **Orden.** Por CIIU completo; las empresas sin CIIU al final; los empates, por `sha256(semilla:empresa_id)`.
+   2. **Titulares.** Con `n < N`, arranque `a = sha256(semilla:estrato:arranque) mod N` y posiciones `floor((a + i·N) / n)`, en aritmética entera, sin flotantes. Con `n ≥ N`, todas son titulares.
+   3. **Reemplazos.** El de cada titular es la siguiente empresa libre de la lista, en círculo. Los titulares toman reemplazo en el orden `sha256(semilla:titular_id)`, así liberar «los próximos M» no favorece los CIIU bajos. Con `r > n` se da otra vuelta.
+   4. **Una por grupo económico.** Si en una posición hay una empresa de un grupo ya usado, se toma la siguiente libre de otro grupo. Primero los titulares de todos los estratos y después los reemplazos.
+   5. **Salida.** Titulares `1…n` en el orden de la lista; reemplazos `n+1…`.
+   - **Vecino.** `muestra_item.reemplaza_a` guarda la empresa del titular; la lista de ítems muestra «Vecino de …».
+   - **Liberación.** Se sigue liberando por estrato y en orden. Además, como P1, **Liberar su reemplazo** sobre un titular (`POST /muestras/{id}/liberar-vecino`).
+   - **Snapshot.** Todos los sorteos nuevos, con los dos métodos, congelan el CIIU (`marco_snapshot_item.ciiu`, y `marco_snapshot.ciiu_congelado = true`). `verificar` usa el método guardado y el CIIU congelado; un sistemático sin CIIU congelado da `no_verificable`.
+   - **Validación.** Con sistemático, un estrato con 0 titulares no puede tener reemplazos (422).
+6. **Migración `0022`.** Columnas nuevas y nulas (`marco_snapshot_item.ciiu`, `marco_snapshot.ciiu_congelado`, `muestra_item.reemplaza_a`), sin reescribir datos.
+
+**Riesgos aceptados.**
+- El sistemático con pocas empresas por estrato da un intervalo chico y los reemplazos quedan pegados a los titulares; es lo que se pidió («vecino»).
+- El cálculo de etiquetas sobre todo el universo puede tardar más en la base grande. Medido con 200.000 empresas sintéticas en Postgres local: «Ver marco disponible» tarda entre 1,4 y 2,2 s, y el Excel 1,4 s. Las rutas del marco tienen 120 s como límite (D55). Si en la `db-f1-micro` igual se pasa, se cuenta por estrato en SQL con la disponibilidad guardada.
+
+**Descartado.**
+- Otras variables de orden (P2).
+- Asignar tamaños dentro de la pantalla (proporcional o Neyman): el Excel trae una sugerencia proporcional como ayuda.
+- Botón de cancelar en el aviso de espera: la consulta sigue en el servidor igual.
 
 ## Preguntas abiertas que heredan del PRD
 

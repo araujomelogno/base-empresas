@@ -1,9 +1,9 @@
 // Estudios, partes, muestras, reemplazos y CSV para uContact (R1.5, R1.6, R1.7)
 import * as api from '../api.js';
-import { asistente, criteriosTexto } from './sorteo.js';
+import { asistente, criteriosTexto, METODOS, motivoTexto } from './sorteo.js';
 import { enriquecer } from './fase2.js';
 import { $, $$, esc, main, toast, num, pct, fecha, fechaHora, rutFmt, est, estDe, etiqueta, pageHeader, stats, tabla, card, modal,
-  confirmar, confirmarEscrito, seguirTarea, chips, activarChips, chipsSel } from '../ui.js';
+  confirmar, confirmarEscrito, seguirTarea, chips, activarChips, chipsSel, conEspera, pedirTexto } from '../ui.js';
 
 const pl = (n, uno, varios) => `${num(n)} ${n === 1 ? uno : varios}`;
 
@@ -165,7 +165,9 @@ export async function muestra(ctx, id) {
   const r = m.resultado || {};
   const tot = (k) => m.avance.reduce((a, x) => a + (x[k] || 0), 0);
   main().innerHTML = pageHeader(m.nombre, '', `<a class="link" href="#/estudios/${m.estudio_id}">${esc(m.estudio_nombre)}</a> · ${estDe('muestra', m.estado)} · semilla <span class="mono">${m.semilla ?? '—'}</span> · configuración v${m.config_version ?? '—'} · snapshot #${m.snapshot_id ?? '—'}`,
-    `<button class="btn btn-outline" id="mu-verificar">Verificar reproducibilidad</button>` +
+    (m.estado === 'borrador' && ctx.puede('jefe') ? `<button class="btn btn-outline" id="mu-marco">Ver marco disponible</button><button class="btn btn-orange" id="mu-sortear">Sortear</button>` : '') +
+    (m.estado !== 'borrador' ? `<button class="btn btn-outline" id="mu-verificar">Verificar reproducibilidad</button>` : '') +
+    `<button class="btn btn-outline" id="mu-excel" title="Estratos, total, sorteables y tamaños pedidos">Excel de tamaños</button>` +
     (ctx.puede('jefe') ? `<button class="btn btn-outline" id="mu-template">Guardar configuración como template</button>` : '') +
     (m.estado === 'activa' && ctx.puede('steward', 'jefe') ? `<button class="btn btn-outline" id="mu-enriquecer">✨ Enriquecer</button>` : '') +
     (m.estado === 'activa' && ctx.puede('jefe') ? `<button class="btn btn-outline btn-del" id="mu-cerrar">Cerrar muestra</button>` : '') +
@@ -176,12 +178,15 @@ export async function muestra(ctx, id) {
     (m.estado === 'activa' && !m.avance.length ? `<div class="alert alert-warn"><span><strong>Activa, sin empresas:</strong> se borraron todas sus empresas. Cerrala o borrala para que deje de contar como activa.</span></div>` : '') +
     (m.n_items_borrados ? `<div class="alert alert-warn"><span><strong>${num(m.n_items_borrados)} empresa${m.n_items_borrados > 1 ? 's' : ''}
       borrada${m.n_items_borrados > 1 ? 's' : ''} después del sorteo.</strong> El marco congelado no cambia: «Verificar reproducibilidad» las tiene en cuenta.</span></div>` : '') +
+    ((m.avisos || []).length ? `<div class="alert alert-warn"><span>${m.avisos.map(esc).join('<br>')}</span></div>` : '') +
+    `<div id="mu-marco-res"></div>` +
     (r.avisos && r.avisos.length ? `<div class="alert alert-warn"><div><strong>Avisos del sorteo</strong><ul class="aviso-lista">${r.avisos.map(a => `<li>${esc(a)}</li>`).join('')}</ul></div></div>` : '') +
     stats([[tot('titulares'), 'Titulares', 's-total'], [tot('liberados'), 'Liberados', 's-free'], [tot('llamados'), 'Con llamadas', ''],
       [tot('completas'), 'Con alguna completa', 's-ok'], [tot('rechazos'), 'Rechazos', 's-bad'], [r.marco, 'Marco congelado', '']]) +
     `<div id="mu-enr"></div>` +
-    `<div class="grid-2">${card('Exclusiones al sortear', tabla([{ t: 'Regla', f: x => esc(etiqueta(x[0])) }, { t: 'Empresas', cls: 'num', f: x => num(x[1]) }],
-      Object.entries(r.exclusiones || {}).sort((a, b) => b[1] - a[1]), 'Ninguna') + `<div class="card-body small muted">Universo que cumplía los filtros: <strong>${num(r.universo)}</strong> · marco disponible: <strong>${num(r.marco)}</strong><br>Criterios: ${criteriosTexto(m.criterios || {}, ds.datos, origenes)}
+    `<div class="grid-2">${card('No sorteables al sortear', tabla([{ t: 'Motivo', f: x => esc(x[0] === 'total_excluidas' ? 'Total de no sorteables' : motivoTexto(x[0])) }, { t: 'Empresas', cls: 'num', f: x => num(x[1]) }],
+      Object.entries(r.exclusiones || {}).sort((a, b) => b[1] - a[1]), 'Ninguna') + `<div class="card-body small muted">Universo que cumplía los filtros: <strong>${num(r.universo)}</strong> · sorteables: <strong>${num(r.marco)}</strong>
+      · método: <strong>${esc(METODOS[(m.criterios || {}).metodo || 'aleatorio'])}</strong><br>Criterios: ${criteriosTexto(m.criterios || {}, ds.datos, origenes)}
       ${r.incluir_sin_telefono ? `<br>Entraron <strong>${num(r.sin_telefono || 0)}</strong> empresas sin teléfono discable (la muestra las incluye).` : ''}
       ${m.template_id ? `<br>Armada desde un template (#${m.template_id}); guarda su propia copia de los criterios.` : ''}
       ${r.una_por_grupo ? `<br>Como máximo una empresa por grupo económico (${num(r.en_grupos || 0)} empresas del marco están en algún grupo).` : ''}</div>`, '', true)}
@@ -211,7 +216,13 @@ export async function muestra(ctx, id) {
       <p class="field-hint mt"><span id="mu-formato-ayuda"></span> Nunca incluye intermediarios, inexistentes, «no corresponde» ni no llamar.${ctx.me.exportar_contactos ? '' : ' Tu usuario no tiene permiso para exportar contactos personales: no salen en el archivo.'}</p>`
       : '<div class="muted small">Solo se exporta una muestra activa, con rol coordinador o jefe de proyecto.</div>')}</div>` +
     card('Avance por estrato', tabla([
-      { t: 'Estrato', f: x => `<span class="td-strong">${esc(x.estrato)}</span>` }, { t: 'Titulares', cls: 'num', k: 'titulares' },
+      { t: 'Estrato', f: x => `<span class="td-strong">${esc(x.estrato)}</span>` },
+      ...((r.estratos || []).some(e => e.total !== undefined) ? [{ t: 'Marco (total / sorteables)', cls: 'num', f: x => {
+        const e = (r.estratos || []).find(y => y.estrato === x.estrato) || {};
+        const mot = Object.entries(e.motivos || {}).map(([k, n]) => `${motivoTexto(k)}: ${num(n)}`).join(' · ');
+        return e.total === undefined ? '—' : `<span title="${esc(mot ? 'No sorteables: ' + mot : 'Todas sorteables')}">${num(e.total)} / ${num(e.disponibles)}</span>`;
+      } }] : []),
+      { t: 'Titulares', cls: 'num', k: 'titulares' },
       { t: 'Reemplazos (lib./total)', cls: 'num', f: x => `${x.reemplazos_liberados} / ${x.reemplazos}` }, { t: 'Llamados', cls: 'num', k: 'llamados' },
       { t: 'Contactabilidad', cls: 'num', f: x => pct(x.contactados, x.liberados) }, { t: 'Completas', cls: 'num', k: 'completas' },
       { t: 'Tasa de respuesta', cls: 'num', f: x => pct(x.completas, x.liberados) }, { t: 'Rechazos', cls: 'num', k: 'rechazos' },
@@ -245,11 +256,20 @@ export async function muestra(ctx, id) {
     $('#mu-sig').onclick = () => { pagina++; items(); };
     $('#mu-items').innerHTML = tabla([
       { t: 'EC_ID_ITEM', cls: 'num', k: 'id' }, { t: 'Estrato', k: 'estrato' }, { t: 'Orden', cls: 'num', k: 'orden' }, { t: 'Rol', f: i => est(i.rol) },
-      { t: 'Empresa', f: i => `<a class="link" href="#/empresas/${i.rut}">${esc(i.razon_social || i.rut)}</a>${i.sin_telefono ? ` ${est('sospechoso', 'sin teléfono')}` : ''}` },
+      { t: 'Empresa', f: i => `<a class="link" href="#/empresas/${i.rut}">${esc(i.razon_social || i.rut)}</a>${i.sin_telefono ? ` ${est('sospechoso', 'sin teléfono')}` : ''}`
+        + (i.vecino_de ? `<div class="small muted">Vecino de ${esc(i.vecino_de)}</div>` : '')
+        + (i.reemplazo_libre && m.estado === 'activa' && ctx.puede('jefe') ? ` <button class="btn btn-outline btn-sm" data-vecino="${i.id}">Liberar su reemplazo</button>` : '') },
       { t: 'Liberado', f: i => i.liberado ? `sí <span class="small muted">${esc(i.liberado_motivo || '')}</span>` : 'no' },
       { t: 'Intentos', cls: 'num', k: 'intentos' },
       { t: 'Estado por parte', f: i => Object.entries(i.estados || {}).map(([p, s]) => `<span class="small muted">${esc(p)}:</span> ${est(s)}`).join(' ') || '—' },
     ], lista, 'Ninguna empresa con esos filtros');
+    // P1 (D56): sistemático, liberar el reemplazo (vecino) de un titular puntual
+    $$('[data-vecino]').forEach(b => b.onclick = async () => {
+      const motivo = await pedirTexto('Liberar su reemplazo', 'Motivo', { placeholder: 'p. ej. rechazó la encuesta' });
+      if (!motivo) return;
+      try { await api.post(`/muestras/${id}/liberar-vecino`, { item_id: +b.dataset.vecino, motivo }); toast('Reemplazo liberado', 'ok'); recargar(); }
+      catch (e) { toast(e.message, 'err'); }
+    });
   };
   const filtrar = () => { pagina = 1; items(); };  // los filtros se mantienen al cambiar de página
   ['#mu-estrato', '#mu-rol', '#mu-liberado', '#mu-sintel', '#mu-eparte', '#mu-estado'].forEach(sel => { $(sel).onchange = filtrar; });
@@ -278,7 +298,21 @@ export async function muestra(ctx, id) {
         nombre: $('#t-nombre', b).value, descripcion: $('#t-desc', b).value || null }) }] });
     if (r) toast(r.avisos && r.avisos.length ? `Template guardado. Se quitó lo que ya no existe: ${r.avisos.join('; ')}` : 'Template guardado', 'ok');
   };
-  $('#mu-verificar').onclick = async () => {
+  $('#mu-excel').onclick = (ev) => conEspera(ev.target, 'Armando el Excel…', () => api.descargar(`/muestras/${id}/tamanos.xlsx`));
+  if ($('#mu-marco')) $('#mu-marco').onclick = async (ev) => {
+    const x = await conEspera(ev.target, 'Recuperando el marco disponible…', () => api.post('/muestras/marco', m.criterios));
+    if (!x) return;
+    $('#mu-marco-res').innerHTML = card('Marco disponible', stats([[x.universo, 'Cumplen filtros', 's-total'], [x.marco, 'Sorteables', 's-ok'],
+      [x.universo - x.marco, 'No sorteables', 's-bad']]) + tabla([{ t: 'Estrato', k: 'estrato' }, { t: 'Total', cls: 'num', f: e => num(e.total) },
+      { t: 'Sorteables', cls: 'num', f: e => num(e.sorteables) },
+      { t: 'No sorteables', cls: 'num', f: e => `<span title="${esc(Object.entries(e.motivos || {}).map(([k, n]) => `${motivoTexto(k)}: ${num(n)}`).join(' · '))}">${num(e.no_sorteables)}</span>` }], x.estratos));
+  };
+  if ($('#mu-sortear')) $('#mu-sortear').onclick = async (ev) => {
+    if (!await confirmar('Sortear muestra', 'Se sortea con los criterios guardados de la muestra. Las empresas sorteadas quedan bloqueadas para otras muestras mientras esta esté activa.', 'Sortear')) return;
+    const ok = await conEspera(ev.target, 'Sorteando…', () => api.post(`/muestras/${id}/sortear`, {}));
+    if (ok) { toast('Muestra sorteada', 'ok'); recargar(); }
+  };
+  if ($('#mu-verificar')) $('#mu-verificar').onclick = async () => {
     const v = await api.post(`/muestras/${id}/verificar`);
     if (v.resultado === 'reproducible') {
       toast(`Reproducible ✓: el re-sorteo con la semilla ${v.semilla} y el snapshot #${v.snapshot_id} da los mismos ${v.items} ítems en el mismo orden`, 'ok');
@@ -292,7 +326,8 @@ export async function muestra(ctx, id) {
           { t: 'Borrado', f: b => `${b.accion === 'empresa.borrar' ? 'empresa borrada' : `carga #${esc(b.carga_id || '—')} borrada`}<div class="small muted">${fechaHora(b.fecha)} · ${esc(b.borrado_por)}</div>` },
         ], v.items_borrados), acciones: [{ t: 'Cerrar', cls: 'btn-orange' }] });
     } else if (v.resultado === 'no_verificable') {
-      toast('No verificable: se borraron empresas de esta muestra antes de que el sistema guardara los borrados (versión anterior). Ver Auditoría.', 'err');
+      toast(v.snapshot_incompleto ? 'No verificable: se borraron empresas de esta muestra antes de que el sistema guardara los borrados (versión anterior). Ver Auditoría.'
+        : 'No verificable: el sorteo es sistemático y el marco congelado no guardó el CIIU de las empresas.', 'err');
     } else {
       toast('¡El re-sorteo no coincide! Revisar auditoría', 'err');
     }

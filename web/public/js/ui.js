@@ -119,6 +119,50 @@ export function modal({ titulo, cuerpo, acciones = [], ancho }) {
   });
 }
 
+// D56 (R1): una consulta larga del armado de muestras. Deshabilita el control (con spinner), abre un modal que
+// bloquea la pantalla con un contador de segundos y no deja lanzar otra consulta hasta que termine. Si falla, el
+// modal muestra el mensaje del servidor con «Cerrar». Devuelve el resultado, o undefined si falló o si ya había
+// otra consulta en curso.
+let _enEspera = false;
+export function hayEspera() { return _enEspera; }
+export async function conEspera(control, texto, fn) {
+  if (_enEspera) return undefined;
+  _enEspera = true;
+  const boton = control && control.tagName === 'BUTTON' ? control : null;
+  const antes = boton ? boton.innerHTML : null;
+  if (control) control.disabled = true;
+  if (boton) boton.innerHTML = `<span class="spinner spinner-sm"></span>${esc(boton.textContent)}`;
+  const b = document.createElement('div');
+  b.className = 'modal-backdrop espera';
+  b.innerHTML = `<div class="modal-box" style="max-width:460px" role="alertdialog" aria-live="polite"><div class="modal-body">
+    <div class="gap" style="justify-content:flex-start;gap:0.75rem"><span class="spinner" style="margin:0;flex:none"></span><strong>${esc(texto)}</strong></div>
+    <div class="small muted mt"><span data-seg>0</span> s</div><div class="small mt" data-largo></div></div></div>`;
+  document.body.appendChild(b);
+  const t0 = Date.now();
+  const reloj = setInterval(() => {
+    const s = Math.floor((Date.now() - t0) / 1000);
+    b.querySelector('[data-seg]').textContent = s;
+    if (s >= 20) b.querySelector('[data-largo]').textContent = 'La base es grande; puede tardar hasta 2 minutos.';
+  }, 500);
+  try {
+    const r = await fn();
+    clearInterval(reloj);
+    b.remove();
+    return r;
+  } catch (e) {
+    clearInterval(reloj);
+    b.querySelector('.modal-box').innerHTML = `<div class="modal-head"><div class="modal-title">No se pudo completar</div></div>
+      <div class="modal-body"><div class="alert alert-error"><span>${esc(e.message || String(e))}</span></div></div>
+      <div class="modal-foot"><button class="btn btn-orange" data-cerrar>Cerrar</button></div>`;
+    await new Promise(ok => { b.querySelector('[data-cerrar]').onclick = () => { b.remove(); ok(); }; });
+    return undefined;
+  } finally {
+    _enEspera = false;
+    if (control) control.disabled = false;
+    if (boton) boton.innerHTML = antes;
+  }
+}
+
 // Confirmación de un borrado definitivo: hay que escribir una palabra (BORRAR, el nombre, el RUT).
 // normalizar: cómo se compara lo escrito (por defecto, sin espacios en los extremos y sin mayúsculas).
 export async function confirmarEscrito({ titulo, cuerpo, palabra, ayuda, normalizar = (s) => s.trim().toUpperCase() }) {

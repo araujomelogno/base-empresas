@@ -1,9 +1,11 @@
 """Estudios, partes, sorteo de muestras y reemplazos (R1.5, R1.6).
 
 El sorteo es reproducible: al sortear se congela un snapshot del marco (empresas
-disponibles con su estrato) y se guarda la semilla y la versión de configuración. El
+disponibles con su estrato y su CIIU) y se guarda la semilla y la versión de configuración. El
 orden dentro de cada estrato es el de sha256("semilla:empresa_id"), que no depende del
 orden en que la base devuelve las filas ni de la versión de Postgres o de Python.
+
+Dos métodos (D56): aleatorio simple (el de siempre) y sistemático por CIIU (sortear_sistematico).
 """
 import hashlib
 import secrets
@@ -117,9 +119,122 @@ def estrato_de(fila: dict, por: list[str]) -> str:
     return " | ".join(partes)
 
 
+METODOS = ("aleatorio", "sistematico_ciiu")
+
+
 def sortear_snapshot(marco: list[tuple[int, str]], semilla: int, definicion: dict[str, tuple[int, int]],
-                     grupos: dict[int, int] | None = None):
-    """Función pura del sorteo. marco: [(empresa_id, estrato)].
+                     grupos: dict[int, int] | None = None, metodo: str = "aleatorio", ciiu: dict | None = None,
+                     vecinos: dict | None = None):
+    """Despacha según el método (D56). Sistemático: ciiu {empresa_id: ciiu} y, si se pasa, vecinos se llena con
+    {reemplazo_id: titular_id}. Aleatorio: el sorteo de siempre."""
+    if metodo == "sistematico_ciiu":
+        return sortear_sistematico(marco, semilla, definicion, ciiu or {}, grupos, vecinos)
+    return sortear_aleatorio(marco, semilla, definicion, grupos)
+
+
+def arranque(semilla: int, estrato: str, n_marco: int) -> int:
+    """Arranque del sistemático, en [0, N): con p_i = (a + i·N) // n equivale a un arranque al azar en [0, N/n)."""
+    return int(hashlib.sha256(f"{semilla}:{estrato}:arranque".encode()).hexdigest(), 16) % n_marco
+
+
+def posiciones_sistematicas(a: int, n_marco: int, n: int) -> list[int]:
+    """Posiciones de los n titulares en una lista de N, con aritmética entera: p_i = floor((a + i·N) / n)."""
+    return [(a + i * n_marco) // n for i in range(n)]
+
+
+def sortear_sistematico(marco: list[tuple[int, str]], semilla: int, definicion: dict[str, tuple[int, int]],
+                        ciiu: dict[int, str | None], grupos: dict[int, int] | None = None,
+                        vecinos: dict | None = None):
+    """Sorteo sistemático por CIIU (D56), independiente en cada estrato. Función pura.
+
+    1. La lista del estrato se ordena por CIIU completo (texto); las sin CIIU al final; los empates, por
+       sha256(semilla:empresa_id) como el aleatorio.
+    2. Con N empresas y n titulares (n < N), arranque a = sha256(semilla:estrato:arranque) mod N y titulares en las
+       posiciones floor((a + i·N) / n). Si n ≥ N, todas son titulares.
+    3. El reemplazo de un titular es su vecino: la siguiente empresa de la lista (circular) que no esté elegida. Los
+       titulares toman reemplazo en el orden sha256(semilla:titular_id) (así liberar «los próximos M» no favorece los
+       CIIU bajos); con más reemplazos que titulares, se da otra vuelta.
+    4. Con grupos (una por grupo económico): si en una posición hay una empresa de un grupo ya usado, se toma la
+       siguiente de la lista que no esté elegida y cuyo grupo esté libre. Primero los titulares de todos los
+       estratos y después los reemplazos, como en el aleatorio.
+    Devuelve [(empresa_id, estrato, rol, orden)]: titulares 1…n en el orden de la lista, reemplazos n+1…"""
+    por_estrato = defaultdict(list)
+    for empresa_id, estrato in marco:
+        por_estrato[estrato].append(empresa_id)
+    listas = {est: sorted(por_estrato.get(est, []), key=lambda eid: (ciiu.get(eid) is None, ciiu.get(eid) or "",
+                                                                     clave_orden(semilla, eid), eid))
+              for est in definicion}
+    usados: set = set()
+    elegidas: dict[str, set[int]] = {est: set() for est in definicion}   # posiciones tomadas en cada lista
+    titulares: dict[str, list[int]] = {est: [] for est in definicion}    # posiciones de los titulares
+    reemplazos: dict[str, list[tuple[int, int]]] = {est: [] for est in definicion}   # (posición, posición del titular)
+
+    def libre(est, j):
+        if j in elegidas[est]:
+            return False
+        g = (grupos or {}).get(listas[est][j])
+        return g is None or g not in usados
+
+    def tomar(est, j):
+        elegidas[est].add(j)
+        g = (grupos or {}).get(listas[est][j])
+        if g is not None:
+            usados.add(g)
+
+    def siguiente_libre(est, desde):
+        """Desde la posición «desde» (incluida), la primera libre, en círculo. None si no queda ninguna."""
+        n_marco = len(listas[est])
+        for d in range(n_marco):
+            j = (desde + d) % n_marco
+            if libre(est, j):
+                return j
+        return None
+
+    for est in sorted(definicion):
+        n, _ = definicion[est]
+        n_marco = len(listas[est])
+        if not n_marco or n <= 0:
+            continue
+        objetivo = range(n_marco) if n >= n_marco else posiciones_sistematicas(arranque(semilla, est, n_marco), n_marco, n)
+        for p in objetivo:
+            j = siguiente_libre(est, p)
+            if j is None:
+                break
+            tomar(est, j)
+            titulares[est].append(j)
+    for est in sorted(definicion):
+        _, r = definicion[est]
+        if r <= 0 or not titulares[est]:
+            continue
+        orden_t = sorted(titulares[est], key=lambda j: (clave_orden(semilla, listas[est][j]), listas[est][j]))
+        while len(reemplazos[est]) < r:
+            antes = len(reemplazos[est])
+            for t in orden_t:
+                if len(reemplazos[est]) >= r:
+                    break
+                j = siguiente_libre(est, (t + 1) % len(listas[est]))
+                if j is None:
+                    break
+                tomar(est, j)
+                reemplazos[est].append((j, t))
+            if len(reemplazos[est]) == antes:   # ya no queda ninguna libre
+                break
+    salida = []
+    for est in sorted(definicion):
+        lista = listas[est]
+        tits = sorted(titulares[est])
+        for k, j in enumerate(tits):
+            salida.append((lista[j], est, "titular", k + 1))
+        for k, (j, t) in enumerate(reemplazos[est]):
+            salida.append((lista[j], est, "reemplazo", len(tits) + k + 1))
+            if vecinos is not None:
+                vecinos[lista[j]] = lista[t]
+    return salida
+
+
+def sortear_aleatorio(marco: list[tuple[int, str]], semilla: int, definicion: dict[str, tuple[int, int]],
+                      grupos: dict[int, int] | None = None):
+    """Función pura del sorteo aleatorio simple. marco: [(empresa_id, estrato)].
     definicion: {estrato: (n_titulares, n_reemplazos)}. Devuelve [(empresa_id, estrato, rol, orden)].
     grupos ({empresa_id: grupo_id}, B4): como máximo una empresa por grupo económico en toda la muestra. Si sale
     una empresa de un grupo que ya tiene otra, se saltea y sigue la siguiente del orden. Primero se completan los
@@ -217,14 +332,11 @@ def _con_telefono(conn, ids: list[int] | None = None) -> set[int]:
     return {r["empresa_id"] for r in conn.execute("SELECT DISTINCT empresa_id FROM v_vinculo_discable")}
 
 
-def _sin_telefono_permitido(criterios: dict, bloqueos: dict) -> None:
-    """R3: con «Incluir empresas sin teléfono discable» esa regla no se aplica a esta muestra (las demás sí)."""
-    if not criterios.get("incluir_sin_telefono"):
-        return
-    for eid in list(bloqueos):
-        bloqueos[eid].discard("sin_telefono_discable")
-        if not bloqueos[eid]:
-            del bloqueos[eid]
+AVISO_SIN_TELEFONO = crit.AVISO_SIN_TELEFONO
+# Por qué una empresa del marco no se puede sortear (las reglas de bloqueos y el filtro de origen)
+MOTIVOS = {"sin_telefono_discable": "sin teléfono discable", "enfriamiento": "enfriamiento",
+           "muestra_activa": "en muestra activa", "no_llamar": "no llamar", "naturaleza_excluida": "naturaleza excluida",
+           "cerrada": "empresa cerrada", "baja": "dada de baja", "filtro_origen": "sin teléfono del origen elegido"}
 
 
 def _filtro_origen(conn, universo: list[dict], origenes: list[str], bloqueos: dict) -> None:
@@ -239,17 +351,16 @@ def _filtro_origen(conn, universo: list[dict], origenes: list[str], bloqueos: di
             bloqueos[f["id"]].add("filtro_origen")
 
 
-def previsualizar_marco(conn, criterios: dict, avisos: list | None = None) -> dict:
-    """Cuántas empresas quedan en cada estrato y cuántas excluye cada regla, sin sortear.
-    avisos (aplicar un template): lo que ya no existe se saca con aviso en lugar de rechazar."""
-    criterios = _validar_criterios(conn, criterios, avisos, tamanos=False)
-    sin_limite(conn, 120)
-    _, cfg = config.vigente(conn)
-    defs = crit.definiciones(conn)
+def calcular_marco(conn, criterios: dict, cfg: dict, defs: dict, muestra_id: int | None = None,
+                   guardada: bool = False):
+    """R3 (D56): el universo (empresas que cumplen los filtros) con el estrato de cada una, calculado sobre TODO el
+    universo, y las reglas que bloquean a cada una (las no sorteables). Devuelve (universo, etiquetas, bloqueos,
+    con_tel). guardada=True (el armado): la disponibilidad guardada (D55) si está lista; el sorteo la calcula al
+    momento con bloqueos_ids. con_tel es None si no se calculó."""
     universo = _universo(conn, criterios, defs)
     ids = [f["id"] for f in universo]
-    if disponibilidad.asegurar(conn, cfg):
-        # D55: el armado lee la disponibilidad guardada (el sorteo la vuelve a calcular al momento)
+    con_tel = None
+    if guardada and disponibilidad.asegurar(conn, cfg):
         bloqueos, con_tel = defaultdict(set), set()
         for r in conn.execute("SELECT empresa_id, reglas, telefonos_discables FROM empresa_disponibilidad"
                               " WHERE empresa_id = ANY(%s) AND (NOT disponible OR telefonos_discables > 0)", (ids,)):
@@ -258,18 +369,73 @@ def previsualizar_marco(conn, criterios: dict, avisos: list | None = None) -> di
             if r["telefonos_discables"]:
                 con_tel.add(r["empresa_id"])
     else:
-        bloqueos, con_tel = _bloqueos(conn, cfg, None, ids), _con_telefono(conn, ids)
-    _sin_telefono_permitido(criterios, bloqueos)
-    _filtro_origen(conn, universo, criterios["origenes"], bloqueos)
+        bloqueos = _bloqueos(conn, cfg, muestra_id, ids)
+    _filtro_origen(conn, universo, criterios.get("origenes") or [], bloqueos)
+    etiq = crit.etiquetas(universo, criterios, defs)
+    return universo, etiq, bloqueos, con_tel
+
+
+def resumen_estratos(universo: list[dict], etiq: list[str], bloqueos: dict) -> dict[str, dict]:
+    """Por estrato: total, sorteables, no sorteables y motivos ({regla: empresas}; una empresa con dos motivos
+    cuenta en los dos, pero una sola vez en no_sorteables)."""
+    salida: dict[str, dict] = {}
+    for f, e in zip(universo, etiq):
+        x = salida.setdefault(e, {"estrato": e, "total": 0, "sorteables": 0, "no_sorteables": 0, "motivos": Counter()})
+        x["total"] += 1
+        reglas = bloqueos.get(f["id"])
+        if reglas:
+            x["no_sorteables"] += 1
+            x["motivos"].update(reglas)
+        else:
+            x["sorteables"] += 1
+    for x in salida.values():
+        x["motivos"] = dict(sorted(x["motivos"].items(), key=lambda kv: (-kv[1], kv[0])))
+        x["disponibles"] = x["sorteables"]   # nombre anterior, mientras la pantalla se migra
+    return salida
+
+
+def previsualizar_marco(conn, criterios: dict, avisos: list | None = None) -> dict:
+    """Cuántas empresas tiene cada estrato, cuántas se pueden sortear y por qué no las demás, sin sortear (R3, D56).
+    avisos (aplicar un template): lo que ya no existe se saca con aviso en lugar de rechazar."""
+    pedia_sin_tel = bool((criterios or {}).get("incluir_sin_telefono"))
+    criterios = _validar_criterios(conn, criterios, avisos, tamanos=False)
+    sin_limite(conn, 120)
+    _, cfg = config.vigente(conn)
+    defs = crit.definiciones(conn)
+    universo, etiq, bloqueos, con_tel = calcular_marco(conn, criterios, cfg, defs, guardada=True)
+    if con_tel is None:
+        con_tel = _con_telefono(conn, [f["id"] for f in universo])
     excl, marco = _aplicar_bloqueos(universo, bloqueos)
-    etiq = crit.etiquetas(marco, criterios, defs)
-    por_estrato, sin_tel = Counter(etiq), Counter(e for f, e in zip(marco, etiq) if f["id"] not in con_tel)
-    return {"universo": len(universo), "marco": len(marco), "exclusiones": excl,
-            "estratos": [{"estrato": k, "disponibles": por_estrato[k], "sin_telefono": sin_tel.get(k, 0)}
-                         for k in sorted(por_estrato, key=crit.orden_natural)],
-            "sin_telefono": sum(sin_tel.values()), "avisos": crit.avisos_estratos(marco, criterios, defs, len(por_estrato)),
+    por = resumen_estratos(universo, etiq, bloqueos)
+    sin_tel = Counter(e for f, e in zip(universo, etiq) if not bloqueos.get(f["id"]) and f["id"] not in con_tel)
+    for k, x in por.items():
+        x["sin_telefono"] = sin_tel.get(k, 0)   # sorteables sin teléfono: solo con la regla apagada en Configuración
+    estratos = [por[k] for k in sorted(por, key=crit.orden_natural)]
+    av = crit.avisos_estratos(universo, criterios, defs, len(por))
+    if pedia_sin_tel and avisos is None:
+        av.insert(0, AVISO_SIN_TELEFONO)
+    return {"universo": len(universo), "marco": len(marco), "sorteables": len(marco),
+            "no_sorteables": len(universo) - len(marco), "exclusiones": excl, "estratos": estratos,
+            "sin_telefono": sum(sin_tel.values()), "avisos": av,
             "regla_sin_telefono": bool((cfg.get("reglas_disponibilidad") or {}).get("sin_telefono_discable", True)),
             "criterios": criterios}
+
+
+def no_sorteables(conn, criterios: dict) -> list[dict]:
+    """«Descargar no sorteables» (R3): las empresas del marco que no se pueden sortear, con su estrato y su motivo."""
+    criterios = _validar_criterios(conn, criterios, [], tamanos=False)
+    sin_limite(conn, 120)
+    _, cfg = config.vigente(conn)
+    defs = crit.definiciones(conn)
+    universo, etiq, bloqueos, _ = calcular_marco(conn, criterios, cfg, defs, guardada=True)
+    filas = [(f, e, sorted(bloqueos[f["id"]])) for f, e in zip(universo, etiq) if bloqueos.get(f["id"])]
+    if not filas:
+        return []
+    datos = {r["id"]: r for r in conn.execute(
+        "SELECT id, codigo, razon_social, departamento, ciiu FROM empresa WHERE id = ANY(%s)", ([f["id"] for f, _, _ in filas],))}
+    return [{"rut": datos[f["id"]]["codigo"], "razon_social": datos[f["id"]]["razon_social"] or "",
+             "departamento": datos[f["id"]]["departamento"] or "", "ciiu": datos[f["id"]]["ciiu"] or "", "estrato": e,
+             "motivos": reglas} for f, e, reglas in sorted(filas, key=lambda x: (crit.orden_natural(x[1]), x[0]["id"]))]
 
 
 def _bloqueos(conn, cfg, muestra_id, ids: list[int]):
@@ -303,37 +469,43 @@ def sortear(conn, muestra_id: int, actor: str, semilla: int | None = None) -> di
     if m["estado"] != "borrador":
         raise HTTPException(409, "La muestra ya fue sorteada")
     criterios = m["criterios"]
+    metodo = criterios.get("metodo") or "aleatorio"
     sin_limite(conn, 120)
     version, cfg = config.vigente(conn)
     defs = crit.definiciones(conn)
-    universo = _universo(conn, criterios, defs)
-    bloqueos = _bloqueos(conn, cfg, muestra_id, [f["id"] for f in universo])
-    _sin_telefono_permitido(criterios, bloqueos)
-    _filtro_origen(conn, universo, criterios.get("origenes") or [], bloqueos)
-    excl, marco_filas = _aplicar_bloqueos(universo, bloqueos)
-    # El estrato de cada empresa se calcula ahora y se congela en el snapshot (R4: tramos, «Otros», textos)
-    marco = list(zip([f["id"] for f in marco_filas], crit.etiquetas(marco_filas, criterios, defs)))
+    # R3 (D56): los estratos se calculan sobre todo el universo; al sorteo entran solo las sorteables. La opción
+    # «Incluir empresas sin teléfono» ya no existe: si una muestra en borrador la tiene, se ignora.
+    universo, etiq, bloqueos, _ = calcular_marco(conn, criterios, cfg, defs, muestra_id)
+    excl, _ = _aplicar_bloqueos(universo, bloqueos)
+    por = resumen_estratos(universo, etiq, bloqueos)
+    sorteables = [(f, e) for f, e in zip(universo, etiq) if not bloqueos.get(f["id"])]
+    marco = [(f["id"], e) for f, e in sorteables]
+    ciiu = {f["id"]: f["ciiu"] for f, _ in sorteables}   # congelado en el snapshot, con los dos métodos
     # B4: la pertenencia a grupos económicos se congela en el snapshot (Verificar reproducibilidad)
     grupos = {r["id"]: r["grupo_economico_id"] for r in conn.execute(
         "SELECT id, grupo_economico_id FROM empresa WHERE grupo_economico_id IS NOT NULL AND id = ANY(%s)",
         ([eid for eid, _ in marco],))}
 
     snapshot_id = conn.execute(
-        "INSERT INTO marco_snapshot (config_version, criterios, n) VALUES (%s,%s,%s) RETURNING id",
+        "INSERT INTO marco_snapshot (config_version, criterios, n, ciiu_congelado) VALUES (%s,%s,%s,true) RETURNING id",
         (version, Jsonb(criterios), len(marco))).fetchone()["id"]
     with conn.cursor() as cur:
-        cur.executemany("INSERT INTO marco_snapshot_item (snapshot_id, empresa_id, estrato, grupo_id) VALUES (%s,%s,%s,%s)",
-                        [(snapshot_id, eid, est, grupos.get(eid)) for eid, est in marco])
+        cur.executemany("INSERT INTO marco_snapshot_item (snapshot_id, empresa_id, estrato, grupo_id, ciiu)"
+                        " VALUES (%s,%s,%s,%s,%s)",
+                        [(snapshot_id, eid, est, grupos.get(eid), ciiu.get(eid)) for eid, est in marco])
 
     definicion = definicion_estratos(criterios, {e for _, e in marco})
     semilla = semilla if semilla is not None else secrets.randbits(62)
-    sorteados = sortear_snapshot(marco, semilla, definicion, grupos if criterios.get("una_por_grupo") else None)
+    vecinos: dict[int, int] = {}
+    sorteados = sortear_snapshot(marco, semilla, definicion, grupos if criterios.get("una_por_grupo") else None,
+                                 metodo, ciiu, vecinos)
     with conn.cursor() as cur:
         cur.executemany(
-            "INSERT INTO muestra_item (muestra_id, empresa_id, estrato, rol, orden, liberado, liberado_por, liberado_motivo, liberado_fecha)"
-            " VALUES (%s,%s,%s,%s,%s,%s,%s,%s, CASE WHEN %s THEN now() END)",
+            "INSERT INTO muestra_item (muestra_id, empresa_id, estrato, rol, orden, liberado, liberado_por, liberado_motivo,"
+            " liberado_fecha, reemplaza_a) VALUES (%s,%s,%s,%s,%s,%s,%s,%s, CASE WHEN %s THEN now() END, %s)",
             [(muestra_id, eid, est, rol, orden, rol == "titular", actor if rol == "titular" else None,
-              "titular" if rol == "titular" else None, rol == "titular") for eid, est, rol, orden in sorteados])
+              "titular" if rol == "titular" else None, rol == "titular", vecinos.get(eid))
+             for eid, est, rol, orden in sorteados])
     _pendientes_partes(conn, muestra_id)
 
     disponibles = Counter(e for _, e in marco)
@@ -343,17 +515,21 @@ def sortear(conn, muestra_id: int, actor: str, semilla: int | None = None) -> di
     for est in sorted(definicion, key=crit.orden_natural):
         n, r = definicion[est]
         d = disponibles.get(est, 0)
+        x = por.get(est, {})
         por_estrato.append({"estrato": est, "pedido": n, "reemplazos": r, "disponibles": d,
                             "titulares": min(n, d), "reemplazos_sorteados": max(0, min(r, d - n)),
-                            "sin_telefono": sin_tel.get(est, 0)})
+                            "sin_telefono": sin_tel.get(est, 0), "total": x.get("total", 0),
+                            "no_sorteables": x.get("no_sorteables", 0), "motivos": x.get("motivos", {})})
         if d < n:
-            avisos.append(f"El estrato {est} no alcanza: pidió {n} y hay {d} disponibles")
+            avisos.append(f"El estrato {est} no alcanza: pidió {n} y hay {d} sorteables")
         elif d < n + r:
             avisos.append(f"El estrato {est} tiene solo {d - n} reemplazos de {r} pedidos")
     sin_pedir = sorted(set(disponibles) - set(definicion))
-    resultado = {"universo": len(universo), "marco": len(marco), "exclusiones": excl, "estratos": por_estrato,
+    if criterios.get("incluir_sin_telefono"):  # borrador anterior a D56: la opción se ignora, con aviso
+        avisos.insert(0, AVISO_SIN_TELEFONO)
+    resultado = {"universo": len(universo), "marco": len(marco), "no_sorteables": len(universo) - len(marco),
+                 "exclusiones": excl, "estratos": por_estrato, "metodo": metodo,
                  "avisos": avisos, "estratos_no_pedidos": sin_pedir, "sin_telefono": sum(sin_tel.values()),
-                 "incluir_sin_telefono": bool(criterios.get("incluir_sin_telefono")),
                  "una_por_grupo": bool(criterios.get("una_por_grupo")), "en_grupos": len(grupos)}
     conn.execute(
         "UPDATE muestra SET estado = 'activa', semilla = %s, config_version = %s, snapshot_id = %s, resultado = %s,"
@@ -391,13 +567,13 @@ def verificar(conn, muestra_id: int) -> dict:
     quedan más los que se borraron después (muestra_item_borrado). Resultados:
     reproducible · reproducible_con_borrados · no_coincide · no_verificable (el snapshot perdió
     filas con un borrado anterior a que el sistema los registrara)."""
-    m = conn.execute("SELECT m.*, s.n AS snapshot_n FROM muestra m LEFT JOIN marco_snapshot s ON s.id = m.snapshot_id"
-                     " WHERE m.id = %s", (muestra_id,)).fetchone()
+    m = conn.execute("SELECT m.*, s.n AS snapshot_n, s.ciiu_congelado FROM muestra m"
+                     " LEFT JOIN marco_snapshot s ON s.id = m.snapshot_id WHERE m.id = %s", (muestra_id,)).fetchone()
     if m is None:
         raise HTTPException(404, "Muestra inexistente")
     if m["snapshot_id"] is None:
         raise HTTPException(409, "La muestra no está sorteada")
-    filas = conn.execute("SELECT empresa_id, estrato, grupo_id FROM marco_snapshot_item WHERE snapshot_id = %s",
+    filas = conn.execute("SELECT empresa_id, estrato, grupo_id, ciiu FROM marco_snapshot_item WHERE snapshot_id = %s",
                          (m["snapshot_id"],)).fetchall()
     marco = [(r["empresa_id"], r["estrato"]) for r in filas]
     grupos = {r["empresa_id"]: r["grupo_id"] for r in filas if r["grupo_id"] is not None}
@@ -407,11 +583,14 @@ def verificar(conn, muestra_id: int) -> dict:
     guardado = [(r["empresa_id"], r["estrato"], r["rol"], r["orden"]) for r in conn.execute(
         "SELECT empresa_id, estrato, rol, orden FROM muestra_item WHERE muestra_id = %s", (muestra_id,))]
     base["items"] = len(guardado)
-    if base["snapshot_incompleto"]:
+    metodo = m["criterios"].get("metodo") or "aleatorio"
+    base["metodo"] = metodo
+    if base["snapshot_incompleto"] or (metodo == "sistematico_ciiu" and not m["ciiu_congelado"]):
         return {**base, "reproducible": False, "resultado": "no_verificable"}
     definicion = definicion_estratos(m["criterios"], {e for _, e in marco})
-    nuevo = sorted(sortear_snapshot(marco, m["semilla"], definicion, grupos if m["criterios"].get("una_por_grupo") else None),
-                   key=lambda x: (x[1], x[3]))
+    ciiu = {r["empresa_id"]: r["ciiu"] for r in filas}
+    nuevo = sorted(sortear_snapshot(marco, m["semilla"], definicion, grupos if m["criterios"].get("una_por_grupo") else None,
+                                    metodo, ciiu), key=lambda x: (x[1], x[3]))
     completo = sorted(guardado + [(b["empresa_id"], b["estrato"], b["rol"], b["orden"]) for b in borrados],
                       key=lambda x: (x[1], x[3]))
     ok = nuevo == completo
@@ -449,6 +628,30 @@ def liberar(conn, muestra_id: int, estrato: str, cantidad: int, motivo: str, act
     return {"liberados": len(ids), "items": ids, "pedidos": cantidad}
 
 
+def liberar_vecino(conn, muestra_id: int, item_id: int, motivo: str, actor: str) -> dict:
+    """P1 (D56): sobre un titular del sorteo sistemático, libera su reemplazo (el vecino que tiene asignado)."""
+    if not motivo or not motivo.strip():
+        raise HTTPException(422, "Indicá el motivo de la liberación")
+    m = conn.execute("SELECT * FROM muestra WHERE id = %s FOR UPDATE", (muestra_id,)).fetchone()
+    if m is None:
+        raise HTTPException(404, "Muestra inexistente")
+    if m["estado"] != "activa":
+        raise HTTPException(409, "Solo se liberan reemplazos de una muestra activa")
+    t = conn.execute("SELECT * FROM muestra_item WHERE id = %s AND muestra_id = %s", (item_id, muestra_id)).fetchone()
+    if t is None or t["rol"] != "titular":
+        raise HTTPException(404, "El ítem no es un titular de esta muestra")
+    r = conn.execute("SELECT id FROM muestra_item WHERE muestra_id = %s AND reemplaza_a = %s AND NOT liberado"
+                     " ORDER BY orden LIMIT 1", (muestra_id, t["empresa_id"])).fetchone()
+    if r is None:
+        raise HTTPException(409, "Ese titular no tiene un reemplazo sin liberar")
+    conn.execute("UPDATE muestra_item SET liberado = true, liberado_por = %s, liberado_motivo = %s, liberado_fecha = now()"
+                 " WHERE id = %s", (actor, motivo, r["id"]))
+    _pendientes_partes(conn, muestra_id)
+    auditoria.registrar(conn, actor, "muestra.liberar_vecino", "muestra", muestra_id,
+                        {"titular": item_id, "item": r["id"], "motivo": motivo})
+    return {"liberados": 1, "items": [r["id"]]}
+
+
 def cerrar(conn, muestra_id: int, actor: str) -> dict:
     m = conn.execute("UPDATE muestra SET estado = 'cerrada' WHERE id = %s AND estado = 'activa' RETURNING id",
                      (muestra_id,)).fetchone()
@@ -465,6 +668,7 @@ def detalle(conn, muestra_id: int) -> dict:
     if m is None:
         raise HTTPException(404, "Muestra inexistente")
     m["exportacion"] = opciones_exportacion(m)
+    m["avisos"] = [AVISO_SIN_TELEFONO] if m["estado"] == "borrador" and (m["criterios"] or {}).get("incluir_sin_telefono") else []
     m["contactos_por_empresa_csv"] = int(config.vigente(conn)[1].get("contactos_por_empresa_csv", 3))
     m["n_items_borrados"] = conn.execute("SELECT count(*) AS n FROM muestra_item_borrado WHERE muestra_id = %s",
                                          (muestra_id,)).fetchone()["n"]
@@ -584,7 +788,10 @@ def items(conn, muestra_id: int, estrato: str | None = None, rol: str | None = N
     filas = conn.execute(
         f"""
         SELECT i.id, i.estrato, i.rol, i.orden, i.liberado, i.liberado_por, i.liberado_motivo, i.liberado_fecha,
-               e.codigo AS rut, e.base, e.razon_social, e.departamento, e.tamano,
+               e.codigo AS rut, e.base, e.razon_social, e.departamento, e.tamano, e.ciiu, i.reemplaza_a,
+               (SELECT coalesce(t.razon_social, t.codigo) FROM empresa t WHERE t.id = i.reemplaza_a) AS vecino_de,
+               (SELECT r.id FROM muestra_item r WHERE r.muestra_id = i.muestra_id AND r.reemplaza_a = i.empresa_id
+                  AND NOT r.liberado ORDER BY r.orden LIMIT 1) AS reemplazo_libre,
                NOT EXISTS (SELECT 1 FROM v_vinculo_discable d WHERE d.empresa_id = i.empresa_id) AS sin_telefono,
                (SELECT count(*) FROM intento t WHERE t.item_id = i.id) AS intentos,
                (SELECT json_object_agg(p.nombre, ps.estado) FROM item_parte_estado ps JOIN parte p ON p.id = ps.parte_id

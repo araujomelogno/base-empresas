@@ -236,3 +236,19 @@ python docs/build/manual_rendimiento.py docs/Manual_de_usuario_Base_de_Empresas.
 ```bash
 soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
 ```
+
+## Armado de muestras (D56)
+
+`capturas_muestras.js` saca `73-espera-marco` (simula un marco que tarda 2,5 s y verifica que un doble clic haga un solo pedido), `74-paso3-excel-metodo` (método sistemático, Excel bajado, completado con `openpyxl` y vuelto a subir) y `75-vecino-de` (sortea una muestra sistemática de prueba en el estudio `ESTUDIO`). Necesita la demo con un estudio. `manual_muestras.py` actualiza las guías 7 y 25, agrega la guía 32 y dos términos al glosario; se aplica después de `manual_rendimiento.py` y después se regenera el PDF:
+
+```bash
+BASE=http://localhost:8080 ESTUDIO=1 node docs/build/capturas_muestras.js docs/manual/img
+```
+
+```bash
+python docs/build/manual_muestras.py docs/Manual_de_usuario_Base_de_Empresas.docx docs/manual/img
+```
+
+```bash
+soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
+```

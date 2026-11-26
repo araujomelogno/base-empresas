@@ -412,3 +412,10 @@ svg.spark { display: block; }
 .franja-error code { background: rgba(255,255,255,0.18); color: #fff; }
 .franja-aviso { background: #fff4d6; color: #6b4a00; border-bottom: 1px solid #f0d58a; padding: 0.55rem 1.25rem; font-size: 0.88rem;
   position: sticky; top: 0; z-index: 49; }
+
+/* D56: armado de muestras */
+.desactualizado { opacity: 0.45; }
+details.motivos { display: inline-block; text-align: right; }
+details.motivos summary { cursor: pointer; text-decoration: underline dotted; list-style: none; }
+details.motivos summary::-webkit-details-marker { display: none; }
+.modal-backdrop.espera { z-index: 200; }
