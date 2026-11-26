@@ -306,31 +306,84 @@ export async function descubrimiento(ctx) {
   };
 }
 
+// D58: qué aporta cada coincidencia (antes de confirmar) y qué se agregó (después)
+const DATO = { telefono: ['Teléfono', 'nuevo'], web: ['Sitio', 'nuevo'], direccion: ['Dirección', 'nueva'] };
+
+function queAporta(f) {
+  if (f.caso !== 'coincide') return '';
+  if (!f.aporta) return '<span class="muted">—</span>';   // lote anterior a D58
+  const chips = f.aporta.filter(a => DATO[a.dato]).map(a => {
+    const [n, g] = DATO[a.dato], o = g === 'nueva' ? 'a' : 'o';
+    if (a.estado === 'nuevo') return est('ok', `${n} ${g}`);
+    if (a.estado === 'reemplaza') return `<span title="${esc(`Ahora: ${a.actual || '—'}\nGoogle Places: ${a.valor || '—'}`)}">${est('sospechoso', `${n} distint${o}: reemplaza`)}</span>`;
+    if (a.estado === 'solo_historia') return `<span title="${esc(`Queda el vigente (${a.actual || '—'}): ${a.motivo || ''}`)}">${est('pendiente', `${n} distint${o}: solo historia`)}</span>`;
+    if (a.estado === 'igual') return `<span class="small muted">${n}: ya lo tiene</span>`;
+    return '';
+  }).filter(Boolean);
+  return `${f.aporta_algo ? '' : '<div class="td-strong muted">No aporta nada</div>'}<div class="chips-aporta">${chips.join(' ')}</div>`;
+}
+
+function queSeAgrego(d) {
+  if (!d) return '<span class="muted">—</span>';
+  const REAL = { nuevo: ['ok', g => g], reemplazo: ['sospechoso', () => 'reemplazó al vigente'], historia: ['pendiente', () => 'solo historia'] };
+  const partes = ['telefono', 'web', 'direccion'].filter(k => d[k]).map(k => {
+    const [n, g] = DATO[k];
+    if (d[k] === 'ya_tenia' || d[k] === 'igual') return `<span class="small muted">${n}: ${d[k] === 'ya_tenia' ? 'ya lo tenía' : 'igual'}</span>`;
+    const [cls, txt] = REAL[d[k]];
+    return est(cls, d[k] === 'nuevo' ? `${n} ${g}` : `${n}: ${txt(g)}`);
+  });
+  const cambio = ['telefono', 'web', 'direccion'].some(k => ['nuevo', 'reemplazo'].includes(d[k]));
+  return `${cambio ? '' : '<div class="td-strong muted">Sin cambios</div>'}<div class="chips-aporta">${partes.join(' ')}</div>`;
+}
+
+const grupoDe = f => f.caso !== 'coincide' ? f.caso : !f.aporta ? 'coincide' : f.aporta_algo ? 'aporta' : 'sin_aporte';
+
 export async function descubrimientoLote(ctx, id) {
   const c = await api.get(`/descubrimiento/${id}`);
   const r = c.resultado || { resultados: [], resumen: {} };
   const preview = c.estado === 'preview';
+  const conAporte = r.resumen.aportan !== undefined;   // los lotes anteriores a D58 no tienen «Qué aporta»
+  const confirmado = !!(r.confirmado && r.confirmado.detalle);
+  const detalle = Object.fromEntries(((r.confirmado || {}).detalle || []).map(d => [d.i, d]));
   main().innerHTML = pageHeader(`Descubrimiento #${c.id}`, ESTADO_CORRIDA[c.estado] || c.estado,
     `${esc((c.filtros || {}).consulta || '')} · ${esc(c.creado_por)}, ${esc(fechaHora(c.creado))} · gasto ${usd(c.gasto)}`,
     (c.estado === 'confirmada' ? `<button class="btn btn-outline btn-sm btn-del" id="de-deshacer">Deshacer</button>` : '') +
     `<a class="btn btn-outline btn-sm" href="#/descubrimiento">Volver</a>`) +
     ((r.avisos || []).length ? `<div class="alert alert-warn mb">${r.avisos.map(esc).join('<br>')}</div>` : '') +
-    stats([[r.resumen.nueva || 0, 'nuevas', 's-ok'], [r.resumen.coincide || 0, 'coinciden con una empresa'], [r.resumen.ya_guardado || 0, 'ya guardadas']]) +
+    stats([[r.resumen.nueva || 0, 'nuevas', 's-ok'], [r.resumen.coincide || 0, 'coinciden con una empresa'],
+      ...(conAporte ? [[r.resumen.aportan, 'coinciden y aportan']] : []), [r.resumen.ya_guardado || 0, 'ya guardadas']]) +
     (r.confirmado ? `<div class="alert alert-success mb">Confirmado: ${num(r.confirmado.altas)} altas en la base provisoria, ${num(r.confirmado.completadas)} empresas completadas,
-      ${num(r.confirmado.telefonos)} teléfonos nuevos. <a class="link" href="#/provisorias">Ver la base provisoria</a></div>` : '') +
-    card(`${num(r.resultados.length)} resultados`, tabla([
+      ${num(r.confirmado.telefonos)} teléfonos nuevos${r.confirmado.sin_cambios !== undefined ? `, ${num(r.confirmado.sin_cambios)} empresas completadas sin cambios` : ''}.
+      <a class="link" href="#/provisorias">Ver la base provisoria</a></div>` : '') +
+    card(`${num(r.resultados.length)} resultados`, (r.resultados.length ? `<div class="toolbar mb">${tabs('de-filtro', [['', 'Todas'], ['nueva', 'Nuevas'],
+      ...(conAporte ? [['aporta', 'Coinciden y aportan'], ['sin_aporte', 'Coinciden sin aporte']] : [['coincide', 'Coinciden']]), ['ya_guardado', 'Ya guardadas']], '')}
+      ${preview && conAporte ? `<button class="btn btn-outline btn-sm" id="de-omitir">Omitir las que no aportan</button>` : ''}</div>` : '') + tabla([
       { t: 'Caso', f: f => est(...CASO[f.caso]) },
       { t: 'En Google Places', f: f => `<span class="td-strong">${esc(f.nombre)}</span><div class="small muted">${esc(f.direccion || '')}</div>
         <div class="small">${esc(f.telefono || 'sin teléfono')}${f.web ? ` · ${esc(f.web)}` : ''}${f.cerrado ? ' · ' + est('error', 'cerrada') : ''}</div>` },
       { t: 'En la base', f: f => f.empresa ? `<a class="link mono" href="#/empresas/${esc(f.empresa.codigo)}">${esc(rutFmt(f.empresa.codigo))}</a> ${esc(f.empresa.razon_social || '')}
         ${f.regla ? `<div class="small muted">por ${esc(CRITERIO[f.regla] || f.regla.replace('_web', ' web'))}${f.tipo === 'flexible' ? ` (similitud ${Math.round(100 * f.similitud)} %: revisá)` : ''}</div>` : ''}` : '<span class="muted">—</span>' },
-      { t: 'Qué hacer', f: f => !preview || f.caso === 'ya_guardado' ? '<span class="muted">—</span>' : `<select class="fselect" data-sel="${f.i}">
+      { t: confirmado ? 'Qué se agregó' : 'Qué aporta', f: f => f.caso !== 'coincide' ? '' : confirmado
+        ? (detalle[f.i] ? queSeAgrego(detalle[f.i]) : '<span class="muted">No se guardó</span>') : queAporta(f) },
+      ...(preview ? [{ t: 'Qué hacer', f: f => f.caso === 'ya_guardado' ? '<span class="muted">—</span>' : `<select class="fselect" data-sel="${f.i}" style="min-width:190px">
         ${f.caso === 'coincide' ? `<option value="completar" ${f.marcada ? 'selected' : ''}>Completar la empresa</option><option value="alta">Alta en la provisoria</option>`
           : `<option value="alta" ${f.marcada ? 'selected' : ''}>Alta en la provisoria</option>`}
-        <option value="omitir" ${f.marcada ? '' : 'selected'}>No guardar</option></select>` },
-    ], r.resultados, 'Sin resultados'), '', true) +
+        <option value="omitir" ${f.marcada ? '' : 'selected'}>No guardar</option></select>` }] : []),
+    ], r.resultados.map(f => ({ ...f, __tr: `data-grupo="${grupoDe(f)}"` })), 'Sin resultados'),
+    `<button class="btn btn-outline btn-sm" id="de-csv">Descargar CSV</button>`, true) +
     (preview ? `<div class="toolbar"><button class="btn btn-orange" id="de-confirmar">Confirmar</button>
       <button class="btn btn-outline" id="de-descartar">Descartar</button></div>` : '');
+  // Filtro: se ocultan filas (no se quitan), así las elecciones de «Qué hacer» se conservan
+  $$('[data-tabs="de-filtro"] [data-tab]').forEach(b => b.onclick = () => {
+    $$('[data-tabs="de-filtro"] [data-tab]').forEach(t => t.classList.toggle('active', t === b));
+    $$('tr[data-grupo]').forEach(tr => { tr.style.display = !b.dataset.tab || tr.dataset.grupo === b.dataset.tab ? '' : 'none'; });
+  });
+  $('#de-csv').onclick = () => api.descargar(`/descubrimiento/${id}/preview.csv`).catch(e => toast(e.message, 'err'));
+  if ($('#de-omitir')) $('#de-omitir').onclick = () => {
+    const sels = $$('tr[data-grupo="sin_aporte"] [data-sel]');
+    sels.forEach(s => { s.value = 'omitir'; });
+    toast(sels.length ? `${num(sels.length)} coincidencias sin aporte quedan en «No guardar»` : 'No hay coincidencias sin aporte', 'ok');
+  };
   if (preview) {
     $('#de-confirmar').onclick = async () => {
       const seleccion = Object.fromEntries($$('[data-sel]').map(s => [s.dataset.sel, s.value]));

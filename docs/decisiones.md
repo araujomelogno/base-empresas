@@ -65,6 +65,7 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 | D55 | Rendimiento con una base grande: disponibilidad guardada con triggers, resumen precalculado, lista de Empresas por clave con total estimado, ANALYZE al terminar cada operación grande, 15 s por consulta y 503 claros | Vigente (24/11/2026) |
 | D56 | Armado de muestras: aviso de espera, Excel de tamaños, marco con total, sorteables y no sorteables por estrato, sin «Incluir empresas sin teléfono» y sorteo sistemático por CIIU con reemplazo vecino | Vigente (26/11/2026) |
 | D57 | Enriquecimiento: Brave con `country=ALL`, el motivo de cada error de proveedor visible en la pantalla y un paso 5 opcional de búsqueda web con Claude que solo acepta teléfonos verificados en la página citada | Vigente (26/11/2026) |
+| D58 | Descubrimiento: «Qué aporta» cada coincidencia (dato por dato, simulando la regla de supervivencia), «No guardar» por defecto si no aporta, filtro y «Omitir las que no aportan», «Qué se agregó» después de confirmar, CSV del preview y enlace al lote en la ficha | Vigente (26/11/2026) |
 
 ## D01 — Cloud SQL Postgres como núcleo
 
@@ -869,6 +870,56 @@ La configuración inicial usa 6 meses de enfriamiento desde el último contacto 
 - `ui_lang=es-UY`, hasta poder confirmarlo en la referencia de Brave.
 - Claude sin búsqueda web para datos de contacto: inventaría números.
 - Brave o Claude en el descubrimiento de empresas nuevas (P2 de la spec): va en otra spec, después de medir el paso 5.
+
+## D58 — Descubrimiento: qué aporta cada coincidencia
+
+**Contexto.** En el preview de un lote de descubrimiento, una coincidencia mostraba los datos de Google Places y la empresa con la que coincidió, pero no qué agregaría «Completar la empresa». Muchas no aportan nada (si coincidió por teléfono, ya tiene ese teléfono), y se confirmaban a ciegas o se revisaba ficha por ficha. Después de confirmar solo había totales. Ver `specs/SPEC_descubrimiento_que_aporta.md`.
+
+**Decisión.**
+
+1. **Qué aporta (A1).** `descubrimiento.agregar_aportes` agrega a cada fila «coincide» una lista `aporta`, con un elemento por dato que aplica «Completar»:
+   - **Teléfono:** `nuevo` (la empresa no tiene ese vínculo), `igual` (ya lo tiene) o `sin_dato` (Places no trajo uno discable).
+   - **Sitio:** mismo dominio (`proveedores.dominio`) es `igual`; sin sitio vigente, `nuevo`; si no, `distinto`.
+   - **Dirección:** la normalización de la regla `direccion` (`provisorias.direccion_normalizada`) y la similitud de trigramas con su umbral (0,85): `igual`, `nuevo` o `distinto`.
+   - **Distinto → simulación.** Se agrega a la historia del campo una fila candidata (fuente `descubrimiento`, la confianza configurada, fecha actual) y se aplica `empresas.ganador`, la misma regla de supervivencia. Si gana, `reemplaza`; si no, `solo_historia`, con el motivo: «el vigente viene de la sala», «el vigente tiene más confianza (50 contra 30; viene de una carga)» o «es igual de confiable y más reciente».
+   - **Place ID:** `nuevo`, `igual` o `distinto`. **No cuenta como aporte**: toda coincidencia que no estaba guardada lo trae, y si contara ninguna quedaría en «No aporta nada» (contradice el primer criterio de aceptación).
+   - `aporta_algo` = hay algún `nuevo` o `reemplaza` en teléfono, sitio o dirección.
+   - **Acción por defecto.** «Completar» solo si la regla es exacta **y** aporta algo; si no aporta, «No guardar» aunque la regla sea exacta. Las flexibles siguen en «No guardar» con el aviso «revisá».
+   - **Rendimiento.** Los datos de las empresas coincidentes se precargan para todo el lote, con 4 consultas: vigentes y place ID, historia de sitio y dirección (`_CANDIDATOS_VARIAS`), vínculos con los teléfonos del lote, y la similitud de todos los pares de direcciones (`unnest` de dos arreglos). Un lote de 60 filas usa 4 consultas (test).
+   - El resumen del lote agrega `aportan`.
+2. **Pantalla (A2).**
+   - Columna **Qué aporta**, entre «En la base» y «Qué hacer»:
+     - chip verde para lo nuevo («Teléfono nuevo», «Sitio nuevo», «Dirección nueva»);
+     - naranja para «distinto: reemplaza», con el valor actual y el de Places al pasar el mouse;
+     - gris para «distinto: solo historia», con el motivo;
+     - texto tenue «ya lo tiene» para los iguales;
+     - «No aporta nada» arriba cuando no aporta.
+   - Tarjeta **coinciden y aportan**.
+   - **Filtro:** Todas · Nuevas · Coinciden y aportan · Coinciden sin aporte · Ya guardadas. Oculta filas sin quitarlas, así no se pierden las elecciones de «Qué hacer».
+   - **Omitir las que no aportan** pone «No guardar» solo en las coincidencias sin aporte.
+   - Un lote anterior a D58 (sin `aporta`) muestra «—» y el filtro «Coinciden» en lugar de los dos nuevos.
+3. **Después de confirmar (A3).**
+   - **Detalle.** `confirmar` guarda en `resultado.confirmado.detalle`, por cada empresa completada, `{i, empresa_id, telefono, web, direccion}`:
+     - teléfono: `nuevo` o `ya_tenia`, según `vincular`;
+     - sitio y dirección: `nuevo`, `igual`, `reemplazo` (cambió el vigente, según los `cambios` de `aplicar_valores`) o `historia`.
+     - Se calcula con las mismas comparaciones que el preview, así la simulación y lo real se pueden contrastar (test con todos los casos).
+   - **Pantalla.** La columna pasa a **Qué se agregó**: «Sin cambios» si no hubo nada nuevo ni reemplazado; «No se guardó» para las coincidencias omitidas.
+   - **Aviso.** Suma «K empresas completadas sin cambios».
+   - **Auditoría.** Guarda los conteos, sin el detalle.
+4. **CSV del preview (P1).** `GET /descubrimiento/{id}/preview.csv` (separador `;`, UTF-8 con BOM):
+   - los datos de Places, la empresa de la base, regla y similitud;
+   - «Qué aporta» con las mismas etiquetas de la pantalla, la acción sugerida y, si el lote está confirmado, «Qué se agregó».
+   - Botón **Descargar CSV** en el lote.
+5. **Enlace en la ficha (P1).** En «Valores vigentes», un dato que vino de un descubrimiento o de un enriquecimiento enlaza al lote. Los teléfonos ya enlazaban al lote en la columna Origen.
+6. **Sin migraciones.** Todo va en el JSON `resultado` del lote.
+
+**Riesgos aceptados.**
+- **Sitio o dirección «igual» con texto distinto.** Si el sitio o la dirección de Places es «igual» por dominio o similitud pero el texto es distinto, al completar se agrega igual a la historia y, si gana, el texto vigente cambia de forma (`http://x.com.uy` → `https://www.x.com.uy/`). Se informa «igual» porque el dato es el mismo. «Completar» sigue aplicando los mismos campos (fuera de alcance cambiarlo).
+- **La simulación usa la hora del preview.** Si entre el preview y la confirmación entra un dato nuevo para esa empresa (una carga, la sala), lo real puede diferir de lo simulado. Por eso «Qué se agregó» muestra lo que pasó, no lo previsto.
+
+**Descartado.**
+- Elegir dato por dato qué completar, y aplicar departamento y localidad al completar (P2 de la spec).
+- La misma columna en el enriquecimiento (P2).
 
 ## Preguntas abiertas que heredan del PRD
 

@@ -268,3 +268,19 @@ python docs/build/manual_brave.py docs/Manual_de_usuario_Base_de_Empresas.docx d
 ```bash
 soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
 ```
+
+## Descubrimiento: qué aporta cada coincidencia (D58)
+
+`capturas_descubrimiento.js` saca `82-descubrimiento-resumen` y `83-descubrimiento-que-aporta` (el preview del lote `LOTE`), `84-descubrimiento-sin-aporte` (el filtro «Coinciden sin aporte» después de «Omitir las que no aportan»), `85-descubrimiento-confirmado` y `86-descubrimiento-que-se-agrego` (**confirma el lote**) y `87-ficha-dato-del-lote` (la ficha de `RUT_FICHA`, una empresa que el lote completó). También baja el CSV del preview. Necesita un lote en «preview» con coincidencias de todos los tipos: en la demo se arma llamando a `descubrimiento.estimar` y `descubrimiento.buscar` con `proveedores.places_buscar` reemplazado por una lista de lugares que coinciden con empresas existentes (una sin aporte, una sin sitio, una con sitio de una carga, una con sitio de un enriquecimiento, una por razón social y una nueva). `manual_descubrimiento.py` actualiza la guía 29, agrega la guía 34 y un término al glosario; se aplica después de `manual_brave.py` y después se regenera el PDF:
+
+```bash
+BASE=http://localhost:8080 LOTE=13 RUT_FICHA=55001217 node docs/build/capturas_descubrimiento.js docs/manual/img
+```
+
+```bash
+python docs/build/manual_descubrimiento.py docs/Manual_de_usuario_Base_de_Empresas.docx docs/manual/img
+```
+
+```bash
+soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
+```

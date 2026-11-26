@@ -1,6 +1,9 @@
 """Fase 2 (SPEC_fase2_enriquecimiento): calidad de la base, enriquecimiento bajo demanda, duplicados difusos,
 grupos económicos y descubrimiento de empresas nuevas."""
-from fastapi import APIRouter, Depends, HTTPException
+import csv as csvmod
+import io
+
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
 from .. import calidad, descubrimiento, duplicados, empresas, enriquecimiento as enr, tareas
@@ -258,6 +261,18 @@ def deshacer_busqueda(corrida_id: int, conn=Depends(get_conn), u: Usuario = Depe
 @router.get("/descubrimiento")
 def busquedas(conn=Depends(get_conn), u: Usuario = Depends(requiere(*GESTION))):
     return enr.listar(conn, "descubrimiento")
+
+
+@router.get("/descubrimiento/{corrida_id}/preview.csv")
+def busqueda_csv(corrida_id: int, conn=Depends(get_conn), u: Usuario = Depends(requiere(*GESTION))):
+    """P1 (D58): el preview de un lote, con «Qué aporta» (y «Qué se agregó» si está confirmado)."""
+    cab, filas = descubrimiento.preview_csv(conn, corrida_id)
+    salida = io.StringIO()
+    w = csvmod.writer(salida, delimiter=";")
+    w.writerow(cab)
+    w.writerows(filas)
+    return Response(content=salida.getvalue().encode("utf-8-sig"), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="descubrimiento_{corrida_id}.csv"'})
 
 
 @router.get("/descubrimiento/{corrida_id}")

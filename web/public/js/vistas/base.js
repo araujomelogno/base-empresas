@@ -255,7 +255,10 @@ export async function ficha(ctx, rut, params) {
       const h = vig[c];
       let val = c === 'naturaleza' && e.naturaleza ? `${e.naturaleza.nombre} (${e.naturaleza.codigo})${e.naturaleza.excluida ? ' ' + est('error', 'excluida') : ''}` : esc(e[c] ?? '—');
       if (c === 'estado') val = estDe('empresa', e.estado);
-      return `<dt>${t}</dt><dd>${val}${h ? `<span class="fuente">· ${esc(h.fuente_tipo)}${h.fuente_id ? ' #' + h.fuente_id : ''} · conf. ${h.confianza} · ${fecha(h.fecha)}</span>` : ''}</dd>`;
+      // D58 (P1): un dato que vino de un descubrimiento o de un enriquecimiento lleva al lote
+      const lote = h && h.fuente_id && ['descubrimiento', 'enriquecimiento'].includes(h.fuente_tipo)
+        ? `<a class="link" href="#/${h.fuente_tipo}/${h.fuente_id}">${esc(h.fuente_tipo)} #${h.fuente_id}</a>` : null;
+      return `<dt>${t}</dt><dd>${val}${h ? `<span class="fuente">· ${lote || `${esc(h.fuente_tipo)}${h.fuente_id ? ' #' + h.fuente_id : ''}`} · conf. ${h.confianza} · ${fecha(h.fecha)}</span>` : ''}</dd>`;
     }).join('')}</dl>`) + (e.sucursales.length ? card('Sucursales', tabla([{ t: 'Dirección', k: 'direccion' },
       { t: 'Departamento', k: 'departamento' }, { t: 'Localidad', k: 'localidad' }, { t: 'Fuente', k: 'fuente_tipo' }], e.sucursales), '', true) : '') +
       card('Atributos', e.atributos.length ? `<dl class="kv">${e.atributos.map(a => {

@@ -496,7 +496,7 @@ def test_descubrimiento_preview_y_confirmar(api, sql, monkeypatch):
     r = api.post(f"/descubrimiento/{est['id']}/buscar", rol="steward")
     assert r.status_code == 200, r.text
     prev = r.json()["resultado"]
-    assert prev["resumen"] == {"ya_guardado": 0, "coincide": 0, "nueva": 3}
+    assert prev["resumen"] == {"ya_guardado": 0, "coincide": 0, "nueva": 3, "aportan": 0}
     assert sql.execute("SELECT count(*) AS n FROM empresa").fetchone()["n"] == 0   # nada hasta confirmar
     r = api.post(f"/descubrimiento/{est['id']}/confirmar", rol="steward", json={"seleccion": {"2": "omitir"}})
     assert r.status_code == 200, r.text

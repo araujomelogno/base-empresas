@@ -419,3 +419,4 @@ details.motivos { display: inline-block; text-align: right; }
 details.motivos summary { cursor: pointer; text-decoration: underline dotted; list-style: none; }
 details.motivos summary::-webkit-details-marker { display: none; }
 .modal-backdrop.espera { z-index: 200; }
+.chips-aporta { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
