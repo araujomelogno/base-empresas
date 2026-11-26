@@ -59,7 +59,8 @@ def conexion():
 
 # D55: rutas que no son pantallas y pueden tardar más que los 15 s de una consulta de la web
 _SIN_LIMITE = ("/api/jobs/", "/api/tareas/")
-_LIMITE_LARGO = (("/csv", 120), ("/sortear", 120), ("/muestras/marco", 120), ("/api/calidad", 60))
+_LIMITE_LARGO = (("/csv", 120), ("/sortear", 120), ("/muestras/marco", 120), ("/muestras/tamanos", 120),
+                 ("tamanos.xlsx", 120), ("/aplicar", 120), ("/api/calidad", 60))
 
 
 def limite_de_ruta(ruta: str) -> float | None:

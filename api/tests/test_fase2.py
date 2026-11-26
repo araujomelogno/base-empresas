@@ -331,8 +331,11 @@ def test_telefono_de_places_sin_verificar_y_en_el_csv(api, sql, monkeypatch):
     claves(api, "google_places")
     Falso(monkeypatch, places={f"Imprenta Número {i} S.A.": [lugar(f"Imprenta Número {i}", tel=f"4733{i:04d}")] for i in range(3)})
     est = estudio(api)
+    cfg = api.get("/config").json()["parametros"]   # D56: solo la regla de Configuración deja sortear sin teléfono
+    cfg["reglas_disponibilidad"]["sin_telefono_discable"] = False
+    api.put("/config", json={"parametros": cfg})
     m = api.post("/muestras", rol="jefe", json={"estudio_id": est["id"], "nombre": "M", "criterios": {
-        "n_por_estrato": 3, "incluir_sin_telefono": True}}).json()
+        "n_por_estrato": 3}}).json()
     api.post(f"/muestras/{m['id']}/sortear", rol="jefe", json={"semilla": 1})
     _, c = correr(api, rol="jefe", origen="muestra", muestra_id=m["id"])   # el jefe puede desde una muestra
     assert c["resultado"]["con_telefono_nuevo"] == 3

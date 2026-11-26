@@ -163,6 +163,11 @@ def validar_estrato(meta: dict, d) -> dict | None:
     return None
 
 
+AVISO_SIN_TELEFONO = 'La opción "Incluir empresas sin teléfono" ya no existe: las empresas sin teléfono no se sortean'
+METODOS = {"aleatorio": "Aleatorio simple", "sistematico_ciiu": "Sistemático por CIIU"}
+ORDEN_SISTEMATICO = ("ciiu",)   # P2: otras variables de orden
+
+
 def validar(conn, c: dict, avisos: list | None = None, tamanos: bool = True) -> dict:
     """Valida y normaliza los criterios. Con avisos (aplicar un template), lo que ya no existe se saca y se
     avisa en lugar de rechazar. tamanos=False: el paso 3 puede faltar (template parcial)."""
@@ -241,10 +246,22 @@ def validar(conn, c: dict, avisos: list | None = None, tamanos: bool = True) -> 
             por.append(k)
         if d:
             estratos_def[k] = d
+    metodo = c.get("metodo") or "aleatorio"
+    if metodo not in METODOS:
+        problema(f"Método de sorteo desconocido: {metodo}")
+        metodo = "aleatorio"
     estratos = c.get("estratos") or []
     for e in estratos:
         if int(e.get("n", 0)) < 0 or int(e.get("reemplazos", 0)) < 0:
             raise HTTPException(422, "Tamaños y reemplazos no pueden ser negativos")
+    if metodo == "sistematico_ciiu":   # D56: el reemplazo es el vecino de un titular
+        sin_tit = [e["estrato"] for e in estratos if int(e.get("n", 0)) == 0 and int(e.get("reemplazos", 0)) > 0]
+        if c.get("n_por_estrato") is not None and not estratos and int(c.get("n_por_estrato") or 0) == 0 \
+                and int(c.get("reemplazos_por_estrato") or 0) > 0:
+            sin_tit = ["todos"]
+        if sin_tit:
+            raise HTTPException(422, "Con sorteo sistemático, un estrato sin titulares no puede tener reemplazos"
+                                     f" ({', '.join(sin_tit[:5])}{'…' if len(sin_tit) > 5 else ''})")
     if tamanos and not estratos and c.get("n_por_estrato") is None:
         raise HTTPException(422, "Indicá el tamaño por estrato (lista de estratos o n_por_estrato)")
     salida = {"filtros": filtros, "atributos": atributos, "origenes": origenes, "estratificar_por": por,
@@ -259,8 +276,11 @@ def validar(conn, c: dict, avisos: list | None = None, tamanos: bool = True) -> 
         salida["estratos_descartados"] = sorted({str(x) for x in c["estratos_descartados"]})
     if c.get("incluir_provisoria"):  # F6.1 (Q2): desmarcado por defecto
         salida["incluir_provisoria"] = True
-    if c.get("incluir_sin_telefono"):  # R3 (Q1): desmarcado por defecto
-        salida["incluir_sin_telefono"] = True
+    if c.get("incluir_sin_telefono") and avisos is not None:  # D56: la opción se eliminó; se descarta con aviso
+        avisos.append(AVISO_SIN_TELEFONO)
+    if metodo != "aleatorio":   # sin la clave, aleatorio: los criterios de las muestras viejas no cambian
+        salida["metodo"] = metodo
+        salida["orden_sistematico"] = list(ORDEN_SISTEMATICO)
     if c.get("una_por_grupo"):  # Fase 2, B4 (Q3): la pantalla la trae marcada; sin la clave, como antes
         salida["una_por_grupo"] = True
     return salida

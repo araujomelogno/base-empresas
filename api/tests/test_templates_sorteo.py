@@ -142,15 +142,19 @@ def test_casillas_filtro_y_estrato_no_restringen(api, sql):
 # ─── R3 Empresas sin teléfono ───
 
 def test_empresas_sin_telefono_por_muestra(api, sql):
+    """D56: la opción «Incluir empresas sin teléfono» ya no existe; solo la regla de Configuración las deja entrar."""
     base(api, 12, sin_telefono=3)
     est = estudio(api)
     sin = marco(api, {"estratificar_por": ["tamano"]})
     con = marco(api, {"estratificar_por": ["tamano"], "incluir_sin_telefono": True})
     assert sin["marco"] == 9 and sin["exclusiones"]["sin_telefono_discable"] == 3
-    assert con["marco"] == 12 and con["sin_telefono"] == 3 and "sin_telefono_discable" not in con["exclusiones"]
+    assert con["marco"] == 9 and con["avisos"][0].startswith('La opción "Incluir empresas sin teléfono" ya no existe')
+    cfg = api.get("/config").json()["parametros"]
+    cfg["reglas_disponibilidad"]["sin_telefono_discable"] = False
+    assert api.put("/config", json={"parametros": cfg}).status_code == 200
     mid, r = sortear(api, est, {"n_por_estrato": 12, "incluir_sin_telefono": True})
     assert r["sin_telefono"] == 3 and r["estratos"][0]["sin_telefono"] == 3
-    assert api.get(f"/muestras/{mid}").json()["criterios"]["incluir_sin_telefono"] is True
+    assert "incluir_sin_telefono" not in api.get(f"/muestras/{mid}").json()["criterios"]
     parte = est["partes"][0]["id"]
     planilla = leer_csv(api.get(f"/muestras/{mid}/csv?parte_id={parte}&formato=planilla", rol="coordinador"))
     sin_tel = [f for f in planilla if not f.get("tel_1")]

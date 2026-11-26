@@ -376,15 +376,69 @@ Cada **parte** es una encuesta de Alchemer con su survey ID, su link base y su r
 Desde el estudio, **Nueva muestra**:
 
 0. **Partir de un template** (opcional): elegí uno y los pasos 1 a 3 se completan con sus valores. Todo se puede ajustar antes de sortear (ver «Templates de sorteo»).
-1. **Filtros:** «+ Agregar filtro» ofrece cualquier dato de la empresa (ver «Filtros y estratos»), los orígenes de los teléfonos, «Incluir la base provisoria», «Incluir empresas sin teléfono discable» y «Como máximo una empresa por grupo económico» (marcada: si sale una empresa de un grupo que ya tiene otra en la muestra, se saltea y sigue la siguiente del orden). Sin filtros entra toda la base disponible.
-2. **Estratos:** «+ Agregar estrato» con cualquier dato, y **Ver marco disponible**. El sistema muestra cuántas empresas cumplen los filtros, cuántas están disponibles, cuántas excluye cada regla y cuántas hay en cada estrato.
-3. **Tamaño por estrato:** titulares y reemplazos de cada estrato (con "Aplicar a todos" para cargarlos de una vez). Opcionalmente, una semilla. **Guardar como template…** guarda los pasos 1 a 3 para la próxima vez.
+1. **Filtros:** «+ Agregar filtro» ofrece cualquier dato de la empresa (ver «Filtros y estratos»), los orígenes de los teléfonos, «Incluir la base provisoria» y «Como máximo una empresa por grupo económico» (marcada: si sale una empresa de un grupo que ya tiene otra en la muestra, se saltea y sigue la siguiente del orden). Sin filtros entra toda la base.
+2. **Estratos:** «+ Agregar estrato» con cualquier dato, y **Ver marco disponible**. El sistema muestra cuántas empresas cumplen los filtros, cuántas son **sorteables** y cuántas **no sorteables**, con el motivo (ver «El marco: sorteables y no sorteables»).
+3. **Tamaño por estrato:** el **método de sorteo** (ver «Sorteo sistemático por CIIU»), y titulares y reemplazos de cada estrato: a mano, con "Aplicar a todos" o con el **Excel de tamaños** (ver abajo). Opcionalmente, una semilla. **Guardar como template…** guarda los pasos 1 a 3 para la próxima vez.
+
+**Mientras consulta.** «Ver marco disponible», elegir un template y «Crear y sortear» pueden tardar varios segundos con la base grande. Mientras tanto el botón queda deshabilitado y un aviso dice qué está haciendo («Recuperando el marco disponible…», «Aplicando el template…», «Sorteando…») con los segundos que lleva; a los 20 segundos agrega «La base es grande; puede tardar hasta 2 minutos». No hace falta volver a tocar el botón: un doble clic hace una sola consulta. Si algo falla, el aviso muestra el mensaje y el botón vuelve a quedar activo.
+
+![Mientras se consulta el marco](img/73-espera-marco.png)
+
+Si después de ver el marco cambiás un filtro o un estrato, el resultado queda marcado **«Volvé a consultar el marco»**: los números de abajo son los de antes y no se puede sortear hasta volver a consultarlo.
 
 ![Armado de una muestra](img/16-nueva-muestra.png)
 
 Al tocar **Crear y sortear** el sistema congela el marco (snapshot), aplica las reglas de la configuración vigente, sortea dentro de cada estrato y guarda la semilla y la versión de configuración. Los titulares quedan liberados; los reemplazos, en reserva y en orden.
 
 **Incluir la base provisoria.** Desmarcado por defecto: el marco es solo la base definitiva. Si lo marcás, las empresas sin RUT entran con su estrato y las mismas reglas de disponibilidad.
+
+### El marco: sorteables y no sorteables
+
+El marco tiene **todas** las empresas que cumplen los filtros, repartidas en sus estratos. Algunas no se pueden sortear: no tienen teléfono discable, están en enfriamiento o en otra muestra activa, piden no ser llamadas, su naturaleza está excluida, cerraron, o no tienen un teléfono del origen elegido. La tabla del paso 3 dice, para cada estrato:
+
+| Columna | Qué es |
+| --- | --- |
+| Total | Todas las empresas del estrato |
+| Sorteables | Las que pueden salir sorteadas. Los titulares y reemplazos pedidos se comparan contra este número («faltan N» al lado, si no alcanza) |
+| No sorteables | Total menos sorteables. Pasando el mouse o tocando el número se ve el motivo («sin teléfono discable: 20 · enfriamiento: 5»). Una empresa con dos motivos cuenta en los dos, pero una sola vez en «No sorteables» |
+
+**Descargar no sorteables** baja un CSV con esas empresas, su estrato y su motivo, por ejemplo para mandarlas a enriquecer.
+
+**Las empresas sin teléfono no se sortean.** La opción «Incluir empresas sin teléfono discable» ya no existe: una empresa sin teléfono aparece en el marco como no sorteable y nunca sale sorteada. Lo único que la deja entrar es apagar la regla «Excluir empresas sin teléfono discable» en Configuración, para todas las muestras. Un template o una muestra en borrador que tenían la opción muestran el aviso «La opción "Incluir empresas sin teléfono" ya no existe» y se sortean sin ella. Las muestras ya sorteadas con esa opción no cambian y se siguen verificando igual.
+
+### Excel de tamaños
+
+Con muchos estratos (por ejemplo, departamento × tamaño), los tamaños se cargan más rápido desde una planilla:
+
+1. Después de **Ver marco disponible**, en el paso 3, **Descargar Excel**. La hoja «Tamaños» tiene una fila por estrato con el total, las sorteables y las no sorteables, las columnas **Titulares** y **Reemplazos** (en amarillo, con los valores que había en la pantalla), «¿Alcanza?» y un «Tamaño proporcional sugerido» (reparte el total de titulares en proporción a las sorteables). La hoja está protegida sin contraseña: solo se editan Titulares y Reemplazos.
+2. Completá Titulares y Reemplazos (podés usar fórmulas). No agregues ni renombres estratos: la columna Estrato es la clave.
+3. **Importar Excel**. Los valores se cargan en la tabla y un recuadro dice «Se importaron N estratos · M avisos · K errores». **Importar no guarda nada**: revisá y tocá **Crear y sortear** (o **Guardar template**).
+
+| En el Excel | Qué pasa al importar |
+| --- | --- |
+| Un estrato que ya no está en el marco | Se ignora, con aviso |
+| Un estrato del marco que no está en el Excel | Queda con el valor de la pantalla, con aviso |
+| Una celda vacía | Cuenta como 0 |
+| Un valor negativo, con decimales o un texto | Error en esa fila (no se importa); las demás sí |
+| Titulares + reemplazos más que las sorteables | Se importa, con el aviso «no alcanza» |
+| Un Excel armado con otros filtros o estratos | Se importa, con el aviso «revisá los estratos» |
+
+El Excel también se baja desde el detalle de una muestra (**Excel de tamaños**): en una muestra ya sorteada es solo de lectura, con los números del momento del sorteo.
+
+### Sorteo sistemático por CIIU
+
+En el paso 3, **Método de sorteo**:
+
+- **Aleatorio simple** (como siempre): dentro de cada estrato, cada empresa sorteable tiene la misma chance; el orden lo da la semilla.
+- **Sistemático por CIIU:** la lista del estrato se ordena por CIIU completo (las sin CIIU al final) y se toma una empresa cada N/n, con un arranque al azar. Así la muestra recorre **todas las actividades** del estrato en proporción a cuántas empresas tiene cada una: con 1.000 empresas en 10 CIIU de 100 cada uno y 50 titulares, cada CIIU recibe 5.
+
+En el sistemático, **el reemplazo de cada titular es su vecino**: la empresa siguiente de la lista, que tiene una actividad igual o parecida. En «Empresas de la muestra» cada reemplazo dice **«Vecino de …»** con la razón social de su titular. Los reemplazos se liberan por estrato y en orden, como siempre; además, sobre un titular, **Liberar su reemplazo** libera justo su vecino. Con sorteo sistemático, un estrato sin titulares no puede tener reemplazos.
+
+El método queda guardado en la muestra y en los templates, y «Verificar reproducibilidad» funciona igual con los dos: el sorteo congela el CIIU de cada empresa, así que cambiar después un CIIU no altera la verificación.
+
+![Paso 3: método de sorteo, Excel de tamaños y sorteables por estrato](img/74-paso3-excel-metodo.png)
+
+![Reemplazos «Vecino de» en una muestra sistemática](img/75-vecino-de.png)
 
 ### Filtros y estratos
 
@@ -401,18 +455,19 @@ Al crear una muestra (y en los templates) sirve **cualquier dato de la empresa**
 - Las empresas sin dato van al estrato «(sin dato)». Se pueden combinar varios datos (tamaño × departamento × tramo de empleados); si hay demasiados estratos o un texto con muchos valores, la vista previa avisa.
 - El estrato de cada empresa se calcula al sortear y queda congelado: cambiar después un dato de una empresa sorteada no altera «Verificar reproducibilidad».
 
-**Origen de los teléfonos** deja solo las empresas con al menos un teléfono discable de los orígenes elegidos; el cuadro de exclusiones dice cuántas dejó afuera.
+**Origen de los teléfonos** deja solo las empresas con al menos un teléfono discable de los orígenes elegidos; las demás quedan como no sorteables, con el motivo «sin teléfono del origen elegido».
 
-![Filtros y estratos: (1) agregar un filtro con cualquier dato, (2) origen de los teléfonos, (3) incluir empresas sin teléfono, (4) tramos de un número, (5) ver el marco](img/54-asistente-filtros.png)
+- Los estratos se calculan sobre **todas** las empresas que cumplen los filtros (también las no sorteables): un «Agrupar en Otros los de menos de N empresas» cuenta el total del estrato.
+
+![Filtros y estratos: (1) agregar un filtro con cualquier dato, (2) origen de los teléfonos, (4) tramos de un número, (5) ver el marco. La opción (3) «Incluir empresas sin teléfono» ya no existe](img/54-asistente-filtros.png)
 
 ### Empresas sin teléfono
 
-**Incluir empresas sin teléfono discable** (paso 1) viene desmarcado: como siempre, las empresas sin un número que se pueda llamar no entran. Marcado, entran **solo en esa muestra** (para estudios donde el teléfono se consigue después); las demás reglas se aplican igual. Si la regla está apagada en la Configuración general, la opción aparece marcada y deshabilitada.
+Las empresas sin teléfono discable no se sortean (ver «El marco: sorteables y no sorteables»). Para trabajarlas, **Descargar no sorteables** en el paso 2 las lista con su estrato, por ejemplo para enriquecerlas. Solo si la regla «Excluir empresas sin teléfono discable» está apagada en la Configuración general entran a las muestras; en ese caso:
 
-- La vista previa y el resultado del sorteo dicen cuántas empresas sin teléfono entraron, por estrato.
-- Con un filtro por origen, una empresa sin teléfonos no tiene ningún número de ese origen: no entra.
 - En la muestra, **Empresas de la muestra → Sin teléfono** las lista, para completarlas desde la ficha. En cuanto tienen un número, la próxima exportación lo incluye.
 - El CSV «Una fila por empresa» las trae con las columnas de teléfono vacías; «Una fila por número» no (no tienen números).
+- Las muestras sorteadas antes de noviembre de 2026 con la opción «Incluir empresas sin teléfono» siguen diciendo cuántas entraron.
 
 ### Templates de sorteo
 
@@ -434,11 +489,11 @@ Un **template** guarda los pasos 1 a 3 de una muestra (filtros, estratos con sus
 | Reproducible ✓ | El re-sorteo da la misma lista en el mismo orden |
 | Reproducible ✓ — N empresas se borraron después del sorteo | Coincide contando las empresas que se borraron (por «Borrar empresa» o «Borrar carga»). La lista dice el estrato, el orden, el rol, el RUT si se conoce, y cuándo y quién las borró. La pantalla de la muestra también avisa «N empresas borradas después del sorteo» |
 | ¡El re-sorteo no coincide! | La muestra se alteró de verdad: revisar la Auditoría |
-| No verificable | Se borraron empresas de esta muestra con una versión anterior del sistema, que no guardaba los borrados. Ver Auditoría |
+| No verificable | Se borraron empresas de esta muestra con una versión anterior del sistema, que no guardaba los borrados (ver Auditoría); o el sorteo es sistemático y el marco congelado no guardó el CIIU |
 
 ### Seguir la muestra
 
-La pantalla de la muestra muestra los totales, las exclusiones del sorteo, los avisos (por ejemplo, "el estrato Grande no alcanza: pidió 10 y hay 8 disponibles"), el **avance por estrato** (llamados, contactabilidad, completas, tasa de respuesta, rechazos, fuera de marco) y la lista **Empresas de la muestra**, 50 por página, con el total arriba, filtros por estrato, rol, liberado y estado en cada parte, y búsqueda por RUT, razón social o EC_ID_ITEM. Los filtros se mantienen al cambiar de página.
+La pantalla de la muestra muestra los totales, las no sorteables por motivo, el método de sorteo, los avisos (por ejemplo, "el estrato Grande no alcanza: pidió 10 y hay 8 sorteables"), el marco de cada estrato (total / sorteables), el **avance por estrato** (llamados, contactabilidad, completas, tasa de respuesta, rechazos, fuera de marco) y la lista **Empresas de la muestra**, 50 por página, con el total arriba, filtros por estrato, rol, liberado y estado en cada parte, y búsqueda por RUT, razón social o EC_ID_ITEM. Los filtros se mantienen al cambiar de página.
 
 ![Muestra](img/17-muestra.png)
 
@@ -757,6 +812,8 @@ Registro inalterable de cargas, fusiones, exclusiones, sorteos, exportaciones, i
 | --- | --- |
 | Disponibilidad guardada | La disponibilidad de cada empresa, calculada al cambiar algo que la afecta y guardada, para que el buscador no la recalcule en cada búsqueda. La ficha y el sorteo la calculan en el momento |
 | Estadísticas de la base | Lo que Postgres sabe de cada tabla (cuántas filas, qué valores) para elegir cómo buscar. Se actualizan solas al terminar cada operación grande |
+| Sorteable | Empresa del marco que puede salir sorteada: no la bloquea ninguna regla (sin teléfono, enfriamiento, muestra activa, no llamar, naturaleza excluida, cerrada) ni el filtro de origen |
+| Sorteo sistemático | Método que ordena el estrato por CIIU y toma una empresa cada N/n: la muestra recorre todas las actividades. El reemplazo de cada titular es su vecino en la lista |
 | RUT no verificado | Identificador de 6 a 11 dígitos (por ejemplo, una cédula) aceptado sin controlar el registro ni el dígito verificador. Se filtra en Empresas y el tablero de calidad lo cuenta aparte |
 | Ítem de muestra | Una empresa sorteada en una muestra, con su estrato, rol (titular o reemplazo) y orden |
 | Parte | Una encuesta de Alchemer dentro de un estudio, con su respondente objetivo |

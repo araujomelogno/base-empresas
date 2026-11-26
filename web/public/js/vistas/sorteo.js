@@ -3,7 +3,14 @@
 // paso 3: tamaño por estrato. Un template guarda los pasos 1 a 3 y se aplica con un clic.
 import * as api from '../api.js';
 import { $, $$, esc, main, toast, num, fechaHora, est, etiqueta, pageHeader, stats, tabla, card, modal, confirmar,
-  chips, activarChips, chipsSel } from '../ui.js';
+  chips, activarChips, chipsSel, conEspera, hayEspera } from '../ui.js';
+
+// D56: métodos de sorteo
+export const METODOS = { aleatorio: 'Aleatorio simple', sistematico_ciiu: 'Sistemático por CIIU' };
+const MOTIVO = { sin_telefono_discable: 'sin teléfono discable', enfriamiento: 'enfriamiento', muestra_activa: 'en muestra activa',
+  no_llamar: 'no llamar', naturaleza_excluida: 'naturaleza excluida', cerrada: 'empresa cerrada', baja: 'dada de baja',
+  filtro_origen: 'sin teléfono del origen elegido' };
+export const motivoTexto = (k) => MOTIVO[k] || etiqueta(k);
 
 const MODOS_TEXTO = [['contiene', 'Contiene…'], ['valores', 'Es uno de…'], ['con', 'Tiene dato'], ['sin', 'No tiene dato']];
 const SIN = '(sin dato)';
@@ -22,8 +29,9 @@ export function criteriosTexto(c, datosLista, origenes) {
   Object.entries(c.atributos || {}).forEach(([k, s]) => partes.push(`${nombreDato(datos, 'atributo.' + k)}: ${f(s)}`));
   if ((c.origenes || []).length) partes.push(`teléfonos de: ${c.origenes.map(o => nombreO[o] || o).join(', ')}`);
   if (c.incluir_provisoria) partes.push('incluye la base provisoria');
-  if (c.incluir_sin_telefono) partes.push('incluye empresas sin teléfono');
+  if (c.incluir_sin_telefono) partes.push('incluía empresas sin teléfono (opción anterior a noviembre de 2026)');
   if (c.una_por_grupo) partes.push('una empresa por grupo económico');
+  if (c.metodo && c.metodo !== 'aleatorio') partes.push(`sorteo ${(METODOS[c.metodo] || c.metodo).toLowerCase()}`);
   if ((c.estratificar_por || []).length) partes.push(`estratos: ${c.estratificar_por.map(k => {
     const d = (c.estratos_def || {})[k];
     const det = !d ? '' : d.cortes && !d.por ? ` (tramos ${d.cortes.join(', ')})` : d.por ? ` (${d.por === 'anio' ? 'por año' : d.por === 'semestre' ? 'por semestre' : 'tramos ' + d.cortes.join(', ')})`
@@ -36,7 +44,7 @@ export function criteriosTexto(c, datosLista, origenes) {
 // Estado del asistente a partir de unos criterios (de un template o de una muestra)
 function estadoDe(c = {}) {
   const st = { filtros: {}, legado: { ...(c.filtros || {}) }, origenes: [...(c.origenes || [])],
-    incluir_provisoria: !!c.incluir_provisoria, incluir_sin_telefono: !!c.incluir_sin_telefono,
+    incluir_provisoria: !!c.incluir_provisoria, metodo: c.metodo || 'aleatorio',
     // Fase 2 (Q3): una muestra nueva la trae marcada; un template o una muestra guardada, como estaba
     una_por_grupo: Object.keys(c).length ? !!c.una_por_grupo : true,
     por: [...(c.estratificar_por || [])], defs: JSON.parse(JSON.stringify(c.estratos_def || {})), tamanos: {},
@@ -57,7 +65,7 @@ export async function asistente(ctx, { estudioId = null, templateId = null, para
   const datos = Object.fromEntries(ds.datos.map(d => [d.clave, d]));
   const natNombre = Object.fromEntries(ds.naturalezas.map(n => [n.codigo, n.nombre]));
   const valoresCache = {};
-  let st = estadoDe({}), template = null, avisosTemplate = [], marcoActual = null;
+  let st = estadoDe({}), template = null, avisosTemplate = [], marcoActual = null, marcoViejo = false;
 
   const titulo = editarTemplate ? 'Editar template' : 'Nueva muestra';
   main().innerHTML = pageHeader(titulo, editarTemplate ? '' : '— ' + e.nombre, editarTemplate
@@ -111,7 +119,6 @@ export async function asistente(ctx, { estudioId = null, templateId = null, para
     });
     st.origenes = chipsSel(main(), 'origenes');
     st.incluir_provisoria = $('#m-provisoria').checked;
-    st.incluir_sin_telefono = $('#m-sintel').checked && ds.regla_sin_telefono;
     st.una_por_grupo = $('#m-grupo').checked;
   };
   const controlFiltro = (k, s) => {
@@ -146,9 +153,8 @@ export async function asistente(ctx, { estudioId = null, templateId = null, para
       <div class="form-group mt"><label>Origen de los teléfonos</label>${chips('origenes', origenes.map(o => [o.codigo, o.nombre]), st.origenes)}
         <div class="field-hint">Solo empresas con al menos un teléfono discable de estos orígenes. Sin selección, no filtra.</div></div>
       <label class="check mt"><input type="checkbox" id="m-provisoria" ${st.incluir_provisoria ? 'checked' : ''} /> Incluir la base provisoria (empresas sin RUT)</label>
-      <label class="check"><input type="checkbox" id="m-sintel" ${st.incluir_sin_telefono || !ds.regla_sin_telefono ? 'checked' : ''} ${ds.regla_sin_telefono ? '' : 'disabled'} /> Incluir empresas sin teléfono discable</label>
-      <div class="field-hint" id="m-sintel-hint">${ds.regla_sin_telefono ? 'Desmarcado: como siempre, las empresas sin teléfono discable no entran. Marcado: entran solo en esta muestra (las demás reglas se aplican igual).'
-        : 'Desactivado en la configuración general: las empresas sin teléfono entran en todas las muestras.'}</div>
+      <div class="field-hint">${ds.regla_sin_telefono ? 'Las empresas sin teléfono discable aparecen en el marco como no sorteables y nunca se sortean.'
+        : 'La regla «Excluir empresas sin teléfono discable» está apagada en Configuración: las empresas sin teléfono se pueden sortear.'}</div>
       <label class="check mt"><input type="checkbox" id="m-grupo" ${st.una_por_grupo ? 'checked' : ''} /> Como máximo una empresa por grupo económico</label>
       <div class="field-hint">Si sale sorteada una empresa de un grupo que ya tiene otra en la muestra, se saltea y sigue la siguiente del orden.</div>`;
     activarChips(el, () => {});
@@ -165,8 +171,6 @@ export async function asistente(ctx, { estudioId = null, templateId = null, para
     $('#m-add-filtro').onchange = (ev) => {
       leerPaso1(); const k = ev.target.value; st.filtros[k] = {}; pintarPaso1();
     };
-    const hint = () => { if ($('#m-sintel').checked && chipsSel(el, 'origenes').length) $('#m-sintel-hint').textContent = 'Con un filtro por origen, una empresa sin teléfonos no tiene ningún número de ese origen: no entra aunque esta opción esté marcada.'; };
-    $('#m-sintel').onchange = hint; hint();
     Object.entries(st.filtros).forEach(([k, s]) => { if ((s.valores || s._modo === 'valores') && datos[k] && datos[k].tipo === 'texto' && !valoresCache[k]) cargarValores(k); });
   };
   const cargarValores = async (k) => {
@@ -237,8 +241,9 @@ export async function asistente(ctx, { estudioId = null, templateId = null, para
     });
     st.por.forEach(k => { if (st.defs[k]) c.estratos_def[k] = st.defs[k]; });
     if (st.incluir_provisoria) c.incluir_provisoria = true;
-    if (st.incluir_sin_telefono) c.incluir_sin_telefono = true;
     if (st.una_por_grupo) c.una_por_grupo = true;
+    if ($('#m-metodo')) st.metodo = $('#m-metodo').value;
+    if (st.metodo && st.metodo !== 'aleatorio') c.metodo = st.metodo;
     if (conTamanos) {
       const filas = $$('[data-n]').map(i => ({ estrato: i.dataset.n, n: +i.value || 0, reemplazos: +($(`[data-r="${CSS.escape(i.dataset.n)}"]`).value) || 0 }));
       c.estratos = filas.filter(x => x.n || x.reemplazos);
@@ -247,57 +252,142 @@ export async function asistente(ctx, { estudioId = null, templateId = null, para
     return c;
   };
   async function verMarco() {
+    if (hayEspera()) return;
     leerPaso1(); leerPaso2();
-    let r;
-    try { r = await api.post('/muestras/marco', criterios(false)); } catch (err) { return toast(err.message, 'err'); }
-    marcoActual = r;
+    const r = await conEspera($('#m-marco'), 'Recuperando el marco disponible…', () => api.post('/muestras/marco', criterios(false)));
+    if (r) mostrarMarco(r);
+  }
+  // R1: si cambia un filtro o un estrato, el marco que se ve queda marcado como desactualizado (no se recalcula solo)
+  const marcarViejo = () => {
+    if (!marcoActual || marcoViejo) return;
+    marcoViejo = true;
+    const res = $('#m-marco-res');
+    if (res) res.insertAdjacentHTML('afterbegin', '<div class="alert alert-warn mb" id="m-marco-viejo"><span><strong>Cambiaste filtros o estratos.</strong> Volvé a consultar el marco: los números de abajo son los de antes.</span></div>');
+    $$('#m-marco-res .stats, #m-estratos .card').forEach(x => x.classList.add('desactualizado'));
+  };
+  ['m-paso1', 'm-paso2'].forEach(id => {
+    const el = $('#' + id);
+    el.addEventListener('change', (ev) => { if (!ev.target.closest('#m-marco-res')) marcarViejo(); });
+    el.addEventListener('input', (ev) => { if (ev.target.matches('input[type=text], input[type=number], input[type=date]')) marcarViejo(); });
+    el.addEventListener('click', (ev) => { if (ev.target.closest('.chip, [data-quitar-f], [data-quitar-e], [data-quitar-legado]')) marcarViejo(); });
+  });
+  function mostrarMarco(r) {
+    marcoActual = r; marcoViejo = false;
     const ex = Object.entries(r.exclusiones).filter(([k]) => k !== 'total_excluidas');
-    $('#m-marco-res').innerHTML = stats([[r.universo, 'Cumplen filtros', 's-total'], [r.marco, 'Disponibles', 's-ok'],
-      [r.exclusiones.total_excluidas || 0, 'Excluidas', 's-bad'], ...(st.incluir_sin_telefono ? [[r.sin_telefono, 'Sin teléfono', 's-warn']] : [])]) +
-      (ex.length ? `<div class="small"><strong>Excluidas por regla</strong> (una empresa puede caer en varias): ${ex.map(([k, n]) => `${esc(etiqueta(k))} <strong>${num(n)}</strong>`).join(' · ')}</div>` : '') +
+    $('#m-marco-res').innerHTML = stats([[r.universo, 'Cumplen filtros', 's-total'], [r.marco, 'Sorteables', 's-ok'],
+      [r.universo - r.marco, 'No sorteables', 's-bad']]) +
+      (ex.length ? `<div class="small"><strong>No sorteables por motivo</strong> (una empresa puede tener varios): ${ex.map(([k, n]) => `${esc(motivoTexto(k))} <strong>${num(n)}</strong>`).join(' · ')}
+        · <a class="link" href="javascript:void 0" id="m-no-sorteables">Descargar no sorteables</a></div>` : '') +
       (r.avisos || []).map(a => `<div class="alert alert-warn mt"><span>${esc(a)}</span></div>`).join('');
+    if ($('#m-no-sorteables')) $('#m-no-sorteables').onclick = (ev) => {
+      leerPaso1(); leerPaso2();
+      return conEspera(ev.target, 'Preparando la lista de no sorteables…',
+        () => api.descargar('/muestras/marco/no-sorteables.csv', null, criterios(false)));
+    };
     pintarPaso3(r);
   }
   const pintarPaso3 = (r) => {
     const enMarco = new Set(r.estratos.map(x => x.estrato));
     const delTemplate = new Set(st.template_estratos);
     const filas = [...r.estratos.map(x => ({ ...x, nuevo: template && delTemplate.size && !delTemplate.has(x.estrato) && !(x.estrato in st.tamanos) })),
-      ...[...delTemplate].filter(x => !enMarco.has(x)).map(x => ({ estrato: x, disponibles: 0, sin_empresas: true }))];
+      ...[...delTemplate].filter(x => !enMarco.has(x)).map(x => ({ estrato: x, total: 0, sorteables: 0, no_sorteables: 0, disponibles: 0, sin_empresas: true }))];
+    const motivos = (x) => Object.entries(x.motivos || {}).map(([k, n]) => `${motivoTexto(k)}: ${num(n)}`).join(' · ');
     const val = (x, k) => (st.tamanos[x.estrato] || {})[k] ?? (k === 'n' ? (st.n_todos === '' ? 0 : st.n_todos) : (st.r_todos === '' ? 0 : st.r_todos));
     $('#m-estratos').innerHTML = card('3 · Tamaño por estrato y reemplazos', `
+      <div class="form-row mb"><div class="form-group"><label for="m-metodo">Método de sorteo</label>
+        <select class="fselect" id="m-metodo">${Object.entries(METODOS).map(([k, t]) => `<option value="${k}" ${st.metodo === k ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <div class="field-hint" id="m-metodo-ayuda"></div></div>
+        <div class="form-group"><label>Tamaños desde una planilla</label><div class="gap">
+          <button class="btn btn-outline btn-sm" id="m-excel-bajar">Descargar Excel</button>
+          <button class="btn btn-outline btn-sm" id="m-excel-subir">Importar Excel</button><input type="file" id="m-excel-archivo" accept=".xlsx" hidden /></div>
+          <div class="field-hint">Completá Titulares y Reemplazos en el Excel y volvé a subirlo: los valores se cargan en la tabla y se guardan con el botón de abajo.</div></div></div>
+      <div id="m-excel-res"></div>
       <div class="toolbar mb"><span class="small muted">Aplicar a todos:</span><input type="number" id="m-n-todos" placeholder="n" style="width:90px" value="${esc(st.n_todos)}" />
         <input type="number" id="m-r-todos" placeholder="reemplazos" style="width:120px" value="${esc(st.r_todos)}" /><button class="btn btn-outline btn-sm" id="m-aplicar">Aplicar</button></div>
       ${tabla([{ t: 'Estrato', f: x => `<span class="td-strong">${esc(x.estrato)}</span>${x.sin_empresas ? ` ${est('sospechoso', 'estrato del template sin empresas en el marco')}` : ''}${x.nuevo ? ` ${est('preview', 'nuevo')}` : ''}` },
-        { t: 'Disponibles', cls: 'num', f: x => num(x.disponibles) },
-        ...(st.incluir_sin_telefono ? [{ t: 'Sin teléfono', cls: 'num', f: x => num(x.sin_telefono || 0) }] : []),
+        { t: 'Total', cls: 'num', f: x => num(x.total ?? x.disponibles) },
+        { t: 'Sorteables', cls: 'num', f: x => `<strong>${num(x.sorteables ?? x.disponibles)}</strong>` },
+        { t: 'No sorteables', cls: 'num', f: x => x.no_sorteables ? `<details class="motivos"><summary title="${esc(motivos(x))}">${num(x.no_sorteables)}</summary><div class="small muted">${esc(motivos(x))}</div></details>` : '0' },
         { t: 'Titulares', f: x => `<input type="number" min="0" data-n="${esc(x.estrato)}" value="${x.nuevo ? 0 : val(x, 'n')}" style="width:100px" />` },
-        { t: 'Reemplazos', f: x => `<input type="number" min="0" data-r="${esc(x.estrato)}" value="${x.nuevo ? 0 : val(x, 'r')}" style="width:100px" />` }],
-      filas, 'No hay empresas disponibles con esos filtros')}
+        { t: 'Reemplazos', f: x => `<input type="number" min="0" data-r="${esc(x.estrato)}" value="${x.nuevo ? 0 : val(x, 'r')}" style="width:100px" />` },
+        { t: '', f: x => `<span class="small" data-alcanza="${esc(x.estrato)}" data-sorteables="${x.sorteables ?? x.disponibles ?? 0}"></span>` }],
+      filas, 'No hay empresas con esos filtros')}
       ${editarTemplate ? `<div class="mt gap"><button class="btn btn-orange" id="m-guardar-t">Guardar template</button></div>` : `
       <div class="form-row mt"><div class="form-group"><label>Nombre de la muestra</label><input type="text" id="m-nombre" value="Muestra ${e.muestras.length + 1}" /></div>
       <div class="form-group"><label>Semilla (opcional)</label><input type="number" id="m-semilla" placeholder="se genera al azar" />
       <div class="field-hint">Con la misma semilla y el mismo marco, el sorteo da la misma lista.</div></div></div>
       <div class="gap"><button class="btn btn-orange" id="m-sortear">Crear y sortear</button>
       ${ctx.puede('jefe') ? `<button class="btn btn-outline" id="m-guardar-t">Guardar como template…</button>` : ''}</div>`}`);
+    // «Faltan N» al lado de cada estrato: los tamaños pedidos se comparan contra las sorteables
+    const alcanza = () => $$('[data-alcanza]').forEach(s => {
+      const e = s.dataset.alcanza;
+      const pedido = (+$(`[data-n="${CSS.escape(e)}"]`).value || 0) + (+$(`[data-r="${CSS.escape(e)}"]`).value || 0);
+      const falta = pedido - (+s.dataset.sorteables);
+      s.innerHTML = falta > 0 ? est('sospechoso', `faltan ${num(falta)}`) : '';
+    });
+    $$('[data-n], [data-r]').forEach(i => { i.oninput = alcanza; });
+    alcanza();
+    const ayuda = { aleatorio: 'Cada empresa sorteable del estrato tiene la misma chance; el orden lo da la semilla.',
+      sistematico_ciiu: 'Ordena el estrato por CIIU y toma una cada N/n empresas: la muestra recorre todas las actividades. El reemplazo de cada titular es su vecino en la lista.' };
+    const pintarAyuda = () => { $('#m-metodo-ayuda').textContent = ayuda[$('#m-metodo').value] || ''; };
+    $('#m-metodo').onchange = () => { st.metodo = $('#m-metodo').value; pintarAyuda(); };
+    pintarAyuda();
     $('#m-aplicar').onclick = () => {
       st.n_todos = $('#m-n-todos').value; st.r_todos = $('#m-r-todos').value;
       $$('[data-n]').forEach(i => { if (st.n_todos !== '') i.value = st.n_todos; });
       $$('[data-r]').forEach(i => { if (st.r_todos !== '') i.value = st.r_todos; });
+      alcanza();
+    };
+    // R2: Excel de tamaños
+    $('#m-excel-bajar').onclick = (ev) => {
+      if (marcoViejo) return toast('Volvé a consultar el marco antes de descargar el Excel', 'err');
+      leerPaso1(); leerPaso2();
+      return conEspera(ev.target, 'Armando el Excel…', () => api.descargar('/muestras/marco/tamanos.xlsx', null, {
+        criterios: criterios(true), estudio_id: editarTemplate ? null : +estudioId,
+        nombre: editarTemplate ? (template ? template.nombre : null) : ($('#m-nombre') ? $('#m-nombre').value : null) }));
+    };
+    $('#m-excel-subir').onclick = () => $('#m-excel-archivo').click();
+    $('#m-excel-archivo').onchange = async (ev) => {
+      const archivo = ev.target.files[0];
+      ev.target.value = '';
+      if (!archivo) return;
+      leerPaso1(); leerPaso2();
+      const res = await conEspera($('#m-excel-subir'), 'Leyendo el Excel…',
+        () => api.upload('/muestras/tamanos/importar', archivo, { criterios: JSON.stringify(criterios(false)) }));
+      if (!res) return;
+      res.tamanos.forEach(x => {
+        const n = $(`[data-n="${CSS.escape(x.estrato)}"]`), r = $(`[data-r="${CSS.escape(x.estrato)}"]`);
+        if (n) n.value = x.n;
+        if (r) r.value = x.reemplazos;
+        st.tamanos[x.estrato] = { n: x.n, r: x.reemplazos };
+      });
+      alcanza();
+      const lista = (t, xs, cls) => xs.length ? `<details class="mt"><summary>${t} (${xs.length})</summary><ul class="aviso-lista">${xs.map(a => `<li>${esc(a)}</li>`).join('')}</ul></details>` : '';
+      $('#m-excel-res').innerHTML = `<div class="alert ${res.errores.length ? 'alert-warn' : 'alert-success'} mb"><div>
+        <strong>Se importaron ${num(res.importados)} estratos · ${num(res.avisos.length)} avisos · ${num(res.errores.length)} errores.</strong>
+        Revisá la tabla y guardá: todavía no se guardó nada.${lista('Errores (esas filas no se importaron)', res.errores)}${lista('Avisos', res.avisos)}</div></div>`;
     };
     if ($('#m-sortear')) $('#m-sortear').onclick = sortear;
     if ($('#m-guardar-t')) $('#m-guardar-t').onclick = guardarTemplate;
   };
   async function sortear() {
+    if (hayEspera()) return;
+    if (marcoViejo) return toast('Cambiaste filtros o estratos: volvé a consultar el marco antes de sortear', 'err');
     leerPaso1(); leerPaso2();
     const c = criterios(true);
     if (!c.estratos.length) return toast('Indicá el tamaño de al menos un estrato', 'err');
     const total = c.estratos.reduce((a, x) => a + x.n, 0);
-    if (!await confirmar('Sortear muestra', `Se sortean ${num(total)} titulares y ${num(c.estratos.reduce((a, x) => a + x.reemplazos, 0))} reemplazos en ${c.estratos.length} estratos. Las empresas sorteadas quedan bloqueadas para otras muestras mientras esta esté activa.`, 'Sortear')) return;
-    const m = await api.post('/muestras', { estudio_id: +estudioId, nombre: $('#m-nombre').value, criterios: c, template_id: template ? template.id : null });
+    if (!await confirmar('Sortear muestra', `Se sortean ${num(total)} titulares y ${num(c.estratos.reduce((a, x) => a + x.reemplazos, 0))} reemplazos en ${c.estratos.length} estratos, con el método ${(METODOS[st.metodo] || '').toLowerCase()}. Las empresas sorteadas quedan bloqueadas para otras muestras mientras esta esté activa.`, 'Sortear')) return;
     const semilla = $('#m-semilla').value;
-    await api.post(`/muestras/${m.id}/sortear`, { semilla: semilla ? +semilla : null });
+    let creada = null;
+    const ok = await conEspera($('#m-sortear'), 'Sorteando…', async () => {
+      creada = creada || await api.post('/muestras', { estudio_id: +estudioId, nombre: $('#m-nombre').value, criterios: c, template_id: template ? template.id : null });
+      await api.post(`/muestras/${creada.id}/sortear`, { semilla: semilla ? +semilla : null });
+      return true;
+    });
+    if (!ok) { if (creada) ctx.ir('muestras/' + creada.id); return; }   // quedó en borrador: se ve en su detalle
     toast('Muestra sorteada', 'ok');
-    ctx.ir('muestras/' + m.id);
+    ctx.ir('muestras/' + creada.id);
   }
   async function guardarTemplate() {
     leerPaso1(); leerPaso2();
@@ -316,13 +406,14 @@ export async function asistente(ctx, { estudioId = null, templateId = null, para
   }
 
   const aplicarTemplate = async (id) => {
-    const ap = await api.post(`/muestra-templates/${id}/aplicar`);
+    const ap = await conEspera($('#m-template'), 'Aplicando el template…', () => api.post(`/muestra-templates/${id}/aplicar`));
+    if (!ap) return;
     template = ap.template;
     st = estadoDe(ap.criterios);
     avisosTemplate = ap.avisos;
     $('#m-template-avisos').innerHTML = avisosTemplate.length
       ? `<div class="alert alert-warn mb"><div><strong>El template usa cosas que ya no existen:</strong><ul class="aviso-lista">${avisosTemplate.map(a => `<li>${esc(a)}</li>`).join('')}</ul></div></div>` : '';
-    pintarPaso1(); pintarPaso2(); await verMarco();
+    pintarPaso1(); pintarPaso2(); mostrarMarco(ap.marco);
   };
   pintarPaso1(); pintarPaso2();
   if ($('#m-template')) $('#m-template').onchange = async (ev) => {
