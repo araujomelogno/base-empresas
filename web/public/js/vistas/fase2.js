@@ -88,13 +88,19 @@ export async function calidadLista(ctx, indicador, params) {
   });
 }
 
+// Nombre de cada paso de la cascada (D57: el paso 5, búsqueda web con Claude)
+const PASO = { google_places: 'Google Places', brave: 'Brave Search', claude: 'Claude', sitio: 'Lectura del sitio',
+  claude_web: 'Búsqueda web (Claude)', propias: 'Fuentes propias' };
+const RESULTADO_EMP = { con_telefono: 'con teléfono', sin_resultado: 'sin resultado', tope: 'tope', ya_tenia: 'ya tenía',
+  baja: 'dada de baja', error: 'error' };
+
 // ── B2 · Lanzar una corrida: estimación, aprobación y seguimiento ──
 export async function enriquecer(ctx, body) {
   let e;
   try { e = await api.post('/enriquecimiento/estimar', body); } catch (err) { return toast(err.message, 'err'); }
   const x = e.estimacion;
   const salteadas = Object.values(x.salteadas || {});
-  const proveedores = Object.entries(x.proveedores).map(([p, s]) => `${({ google_places: 'Google Places', brave: 'Brave Search', claude: 'Claude' })[p]}: ${s}`).join(' · ');
+  const proveedores = Object.entries(x.proveedores).map(([p, s]) => `${PASO[p] || p}: ${s}`).join(' · ');
   if (!x.empresas) {
     await modal({ titulo: 'No hay empresas para enriquecer', cuerpo: e.opciones.candidatas
       ? `<p>De ${num(e.opciones.candidatas)} empresas, ninguna necesita enriquecerse:</p>
@@ -108,7 +114,8 @@ export async function enriquecer(ctx, body) {
     ${salteadas.length ? `<div class="small mb"><strong>Se saltean</strong> (no se gasta en ellas):<ul>${salteadas.map(s => `<li>${num(s.cantidad)} ${esc(s.motivo)}</li>`).join('')}</ul></div>` : ''}
     <div class="small mb">Costo máximo por proveedor: ${Object.entries(x.por_proveedor_maximo).map(([p, v]) => `${esc(p)} ${usd(v)}`).join(' · ')}.
       ${x.places_gratis ? `${num(x.places_gratis)} llamadas a Places entran en las gratuitas del mes.` : ''}
-      El esperado usa una tasa de éxito de Places de ${Math.round(100 * x.tasa_exito_places)} %.</div>
+      El esperado usa una tasa de éxito de Places de ${Math.round(100 * x.tasa_exito_places)} %.
+      ${x.busqueda_web ? `<br><strong>Búsqueda web (Claude): hasta ${usd(x.busqueda_web.maximo)}</strong> (se esperan unos ${usd(x.busqueda_web.esperado)}: solo para las empresas que Places, Brave y el sitio no resuelven).` : ''}</div>
     <div class="small mb">Gasto del mes: ${usd(x.gasto_mes)} de ${usd(x.tope_mensual)} (quedan ${usd(x.restante_mes)}) · tope por corrida ${usd(x.tope_corrida)}.
       La cascada ${x.corte === 'telefono' ? 'se corta apenas consigue un teléfono' : 'sigue hasta tener teléfono y sitio web'}.</div>
     <div class="small muted mb">${esc(proveedores)}</div>
@@ -144,6 +151,13 @@ export async function corridas(ctx) {
 
 export async function corrida(ctx, id) {
   let c = await api.get(`/enriquecimiento/${id}`);
+  // D57 (B3): debajo de una fila con error, el motivo más frecuente («422: country: …» × 3) y los demás al pasar el mouse
+  const motivoPaso = (p) => {
+    const m = p.resultado === 'error' ? (c.errores || {})[p.proveedor] || [] : [];
+    if (!m.length) return '';
+    const todos = m.map(x => `${x.motivo} × ${x.n}`).join('\n');
+    return `<div class="small motivo-error" title="${esc(todos)}">${esc(m[0].motivo)} × ${num(m[0].n)}${m.length > 1 ? ` <span class="muted">y ${m.length - 1} motivo${m.length > 2 ? 's' : ''} más</span>` : ''}</div>`;
+  };
   const r = c.resultado || {};
   const x = c.estimacion || {};
   const puedeDeshacer = ctx.puede('steward') && ['terminada', 'detenida_tope', 'cancelada', 'error'].includes(c.estado);
@@ -161,10 +175,12 @@ export async function corrida(ctx, id) {
     ((r.avisos || []).length ? `<div class="alert alert-warn mb">${r.avisos.map(esc).join('<br>')}</div>` : '') +
     `<div class="grid-2">${card('Gasto por proveedor', tabla([{ t: 'Proveedor', k: 'p' }, { t: 'Gasto', cls: 'num', f: f => usd(f.g) }],
         Object.entries(r.gasto_por_proveedor || {}).map(([p, g]) => ({ p, g })), 'Sin gasto'), '', true)}
-      ${card('Pasos', tabla([{ t: 'Paso', f: p => esc(({ google_places: 'Google Places', brave: 'Brave Search', claude: 'Claude', sitio: 'Lectura del sitio' })[p.proveedor] || p.proveedor) },
+      ${card('Pasos', tabla([{ t: 'Paso', f: p => `${esc(PASO[p.proveedor] || p.proveedor)}${motivoPaso(p)}${p.proveedor === 'claude_web' && p.propuestos !== null
+          ? `<div class="small muted">${num(p.propuestos)} teléfonos propuestos · ${num(p.verificados)} verificados · ${num(p.busquedas)} búsquedas</div>` : ''}` },
         { t: 'Resultado', f: p => est(p.resultado === 'ok' ? 'ok' : p.resultado === 'tope' ? 'sospechoso' : p.resultado === 'error' ? 'error' : 'pendiente', p.resultado.replace('_', ' ')) },
         { t: 'Cantidad', cls: 'num', f: p => num(p.n) }, { t: 'Costo', cls: 'num', f: p => usd(p.costo) }], c.pasos, 'Todavía no hay pasos'), '', true)}</div>` +
-    (r.procesadas ? card('Empresas', `<div class="toolbar mb">${tabs('co-res', [['', 'Todas'], ['con_telefono', 'Con teléfono nuevo'], ['sin_resultado', 'Sin resultado'], ['tope', 'Por el tope']], '')}</div>
+    (r.procesadas ? card('Empresas', `<div class="toolbar mb">${tabs('co-res', [['', 'Todas'], ['con_telefono', 'Con teléfono nuevo'], ['sin_resultado', 'Sin resultado'],
+      ...(r.con_error ? [['error', 'Con error']] : []), ['tope', 'Por el tope']], '')}</div>
       <div id="co-emp"></div>`) : '');
   const empresas = async (resultado = '', pagina = 1) => {
     const e = await api.get(`/enriquecimiento/${id}/empresas`, { resultado, pagina });
@@ -173,7 +189,12 @@ export async function corrida(ctx, id) {
       { t: 'Razón social', f: f => `<span class="td-strong">${esc(f.razon_social || '—')}</span>` },
       { t: 'Teléfonos nuevos', cls: 'num', f: f => num(f.telefonos_nuevos) },
       { t: 'Además', f: f => [f.web && 'sitio web', f.direccion && 'dirección', f.email && 'email', f.estudio && 'sitio de estudio contable'].filter(Boolean).join(', ') || '—' },
-      { t: 'Resultado', f: f => est(f.resultado === 'con_telefono' ? 'ok' : f.resultado === 'tope' ? 'sospechoso' : 'pendiente', ({ con_telefono: 'con teléfono', sin_resultado: 'sin resultado', tope: 'tope', ya_tenia: 'ya tenía', baja: 'dada de baja' })[f.resultado] || f.resultado) },
+      { t: 'Resultado', f: f => {
+        const motivos = (f.errores || []).map(x => `${x.proveedor}: ${x.motivo}`).join('\n');
+        const chip = est(f.resultado === 'con_telefono' ? 'ok' : f.resultado === 'tope' ? 'sospechoso' : f.resultado === 'error' ? 'error' : 'pendiente',
+          RESULTADO_EMP[f.resultado] || f.resultado);
+        return motivos ? `<span title="${esc(motivos)}" class="con-motivo">${chip}</span>` : chip;
+      } },
     ], e.filas, 'Ninguna') + (e.total > 50 ? `<div class="small muted mt">${num(e.total)} en total · página ${pagina}
       ${pagina > 1 ? `<a class="link" data-pag="${pagina - 1}">anterior</a>` : ''} ${pagina * 50 < e.total ? `<a class="link" data-pag="${pagina + 1}">siguiente</a>` : ''}</div>` : '');
     $$('#co-emp [data-pag]').forEach(a => a.onclick = () => empresas(resultado, +a.dataset.pag));
@@ -345,6 +366,10 @@ export function tarjetaEnriquecimiento(p, dominios, estado, editable) {
     <div class="form-row"><div class="form-group"><label>Modelo de Claude</label><input type="text" id="en-modelo" value="${esc(p.modelo_claude)}" ${dis} /></div>
       ${n('cin', 'Claude: US$ por millón de tokens de entrada', p.precio_claude_entrada, 'step="0.01" min="0"')}
       ${n('cout', 'Claude: US$ por millón de tokens de salida', p.precio_claude_salida, 'step="0.01" min="0"')}</div>
+    <div class="form-row"><div class="form-group"><label class="check"><input type="checkbox" id="en-act-claude_web" ${p.claude_web_activo ? 'checked' : ''} ${dis} /> <strong>Búsqueda web con Claude</strong></label>
+        <div class="field-hint">Último paso, solo para las empresas que siguen sin teléfono. Usa la clave de Claude. Solo entran los teléfonos que aparecen en la página que Claude cita.</div></div>
+      ${n('web-busq', 'Búsquedas máximas por empresa', p.claude_web_busquedas, 'min="1" max="10"')}
+      ${n('web-precio', 'Precio por búsqueda (US$)', p.precio_busqueda_web, 'step="0.001" min="0"', 'US$10 cada 1.000 búsquedas. Los tokens se cobran con los precios de Claude.')}</div>
     <div class="form-row">${n('mes', 'Tope mensual duro (US$)', p.tope_mensual, 'step="1" min="0"')}
       ${n('corrida', 'Tope por corrida (US$)', p.tope_corrida, 'step="1" min="0"')}
       ${n('max', 'Máximo de empresas por corrida', p.max_empresas_corrida, 'min="1"')}</div>
@@ -364,7 +389,8 @@ export function leerEnriquecimiento(p) {
     enriquecimiento: { ...p.enriquecimiento, google_places_activo: $('#en-act-google_places').checked, brave_activo: $('#en-act-brave').checked,
       claude_activo: $('#en-act-claude').checked, precio_places: f('places'), places_gratis_mes: f('gratis'), precio_brave: f('brave'),
       modelo_claude: $('#en-modelo').value.trim(), precio_claude_entrada: f('cin'), precio_claude_salida: f('cout'), tope_mensual: f('mes'),
-      tope_corrida: f('corrida'), max_empresas_corrida: f('max'), confianza: f('conf'), dias_sin_reenriquecer: f('dias'), corte: $('#en-corte').value },
+      tope_corrida: f('corrida'), max_empresas_corrida: f('max'), confianza: f('conf'), dias_sin_reenriquecer: f('dias'), corte: $('#en-corte').value,
+      claude_web_activo: $('#en-act-claude_web').checked, claude_web_busquedas: f('web-busq'), precio_busqueda_web: f('web-precio') },
     dominios_genericos: $('#en-genericos').value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
   };
 }

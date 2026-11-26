@@ -252,3 +252,19 @@ python docs/build/manual_muestras.py docs/Manual_de_usuario_Base_de_Empresas.doc
 ```bash
 soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
 ```
+
+## Enriquecimiento: errores visibles y búsqueda web con Claude (D57)
+
+`capturas_brave.js` saca `76-pasos-motivo-error` y `77-empresas-con-error` (una corrida con errores: `CORRIDA_ERROR`), `78-pasos-busqueda-web` (una corrida que llegó al paso 5: `CORRIDA_WEB`), `79-config-busqueda-web`, `80-ficha-pagina-fuente` (la ficha de la empresa que enriqueció el paso 5: `RUT_WEB`) y `81-estimacion-busqueda-web` (abre la estimación de `RUT_EST` y la cancela). Necesita la demo con la búsqueda web activada. La corrida con errores se arma con la API en `PROVEEDORES_MODO=real` y claves falsas (sin red, cada proveedor falla con su motivo); la del paso 5, en modo simulado con Claude (paso 4) apagado y empresas sin teléfono. `manual_brave.py` actualiza la guía 27, agrega la guía 33 y un término al glosario; se aplica después de `manual_muestras.py` y después se regenera el PDF:
+
+```bash
+BASE=http://localhost:8080 CORRIDA_ERROR=4 CORRIDA_WEB=3 RUT_WEB=55001217 RUT_EST=550041118 node docs/build/capturas_brave.js docs/manual/img
+```
+
+```bash
+python docs/build/manual_brave.py docs/Manual_de_usuario_Base_de_Empresas.docx docs/manual/img
+```
+
+```bash
+soffice --headless --convert-to pdf docs/Manual_de_usuario_Base_de_Empresas.docx --outdir docs
+```

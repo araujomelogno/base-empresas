@@ -64,6 +64,7 @@ Estado de cada decisión: **Vigente** (aplicada en el código), **Provisoria** (
 | D54 | Identificadores de 6 a 11 dígitos aceptados como «RUT no verificado» (empresa.rut varchar(12) y rut_verificado), con interruptor en Configuración; un RUT de 12 dígitos se sigue validando | Vigente (23/11/2026) |
 | D55 | Rendimiento con una base grande: disponibilidad guardada con triggers, resumen precalculado, lista de Empresas por clave con total estimado, ANALYZE al terminar cada operación grande, 15 s por consulta y 503 claros | Vigente (24/11/2026) |
 | D56 | Armado de muestras: aviso de espera, Excel de tamaños, marco con total, sorteables y no sorteables por estrato, sin «Incluir empresas sin teléfono» y sorteo sistemático por CIIU con reemplazo vecino | Vigente (26/11/2026) |
+| D57 | Enriquecimiento: Brave con `country=ALL`, el motivo de cada error de proveedor visible en la pantalla y un paso 5 opcional de búsqueda web con Claude que solo acepta teléfonos verificados en la página citada | Vigente (26/11/2026) |
 
 ## D01 — Cloud SQL Postgres como núcleo
 
@@ -802,6 +803,72 @@ La configuración inicial usa 6 meses de enfriamiento desde el último contacto 
 - Otras variables de orden (P2).
 - Asignar tamaños dentro de la pantalla (proporcional o Neyman): el Excel trae una sugerencia proporcional como ayuda.
 - Botón de cancelar en el aviso de espera: la consulta sigue en el servidor igual.
+
+## D57 — Enriquecimiento: Brave sin país, errores visibles y búsqueda web con Claude
+
+**Contexto.** En la corrida #2 («4 Cabezas SAS») el paso Brave Search terminó en «error». La causa era `country=uy`: Brave respondió **HTTP 422** (`VALIDATION`, `loc: ["query","country"]`) porque Uruguay no está en su lista de países. La pantalla mostraba «error» sin el motivo, que solo se veía con SQL. Además, una empresa sin sitio en Places ni en Brave terminaba «sin resultado» sin otro intento. Ver `specs/SPEC_brave_pais_y_errores_visibles.md`.
+
+**Decisión.**
+
+1. **Parámetros de Brave (B1).** Son constantes en `proveedores.py`, con el enlace a la referencia de la API (`api-dashboard.search.brave.com/app/documentation/web-search/query`):
+   - `BRAVE_PAIS = "ALL"`. Sin `country`, Brave usa `US`, así que se manda explícito. La consulta ya lleva «Uruguay» y la localidad.
+   - `search_lang = "es"` **se mantiene**. El 422 del 26/11 rechazó solo `country`, y la validación de Brave lista todos los campos inválidos de un pedido.
+   - `ui_lang` **no se manda**. Desde este entorno no se pudo leer la referencia (el dominio de la documentación está bloqueado) ni confirmar que `es-UY` esté admitido, y sin él Brave responde igual.
+2. **El motivo del proveedor en el error (B2).**
+   - **Detalle.** `detalle_error(respuesta, clave)` arma el texto:
+     - Brave: `loc: msg` de cada error de validación (por ejemplo, «country: Input should be …»), o si no, `detail`;
+     - Google y Anthropic: `error.message`.
+     - Cambia la clave por `***` si aparece, y recorta a 300 caracteres.
+   - **Mensajes.** Los errores de Places y Brave quedan como «Brave Search respondió 422: country: Input should be …». Los de Claude pasan por `error_claude`, que agrega el detalle del SDK.
+   - **429 de Brave.** Se reintenta **una vez** después de 1,1 s. Solo se cobra el pedido que respondió bien: la reserva se hace una vez por paso.
+3. **El motivo en la pantalla (B3).**
+   - **API.** `GET /enriquecimiento/{id}` agrega `errores`: por proveedor, `[{motivo, n}]` agrupados, del más frecuente al menos. Sale del `detalle->>'error'` de los pasos con resultado «error».
+   - **Pasos.** Debajo de cada fila con error va el motivo más frecuente con su cantidad; los demás, al pasar el mouse.
+   - **Empresas.**
+     - Una empresa que terminó sin teléfono y con algún paso en error queda con resultado **«error»** (antes, «sin resultado»), con la lista de errores en su salida.
+     - El chip muestra los motivos en el `title`.
+     - Aparece la pestaña «Con error» y el resumen de la corrida agrega `con_error`.
+     - La tasa de éxito cuenta estas empresas como intentadas.
+4. **Paso 5: búsqueda web con Claude (B4).**
+   - **Cuándo.** Al final de la cascada, solo si la empresa sigue sin teléfono discable, el proveedor `claude_web` está activo y hay clave de Claude. Usa la misma clave (`empresas-anthropic-key`) y el modelo configurado.
+   - **Llamada.** `claude_buscar_web` usa la herramienta de búsqueda web del servidor de Anthropic, con `max_uses` = búsquedas máximas (por defecto 3) y `user_location` en Uruguay (`country: "UY"`, `America/Montevideo`).
+     - **Versión.** Con Haiku, `web_search_20250305` (la básica); con los demás modelos, `web_search_20260209`, con filtrado dinámico.
+     - **Pausas.** Si el servidor corta su bucle (`stop_reason = pause_turn`), se continúa hasta 4 veces, sumando tokens y búsquedas.
+     - **Respuesta.** Las instrucciones piden un JSON (`telefonos` con su `url`, `web`, `email`, `direccion`, `confianza`), vacío si no hay una fuente clara de **esa** empresa, y prohíben los datos personales.
+   - **Verificación obligatoria** (`verificar_telefonos`, contra números inventados). Cada teléfono propuesto:
+     - necesita su URL;
+     - se baja esa página (una sola, sin seguir enlaces) y el número, normalizado, tiene que aparecer en ella, escrito de cualquier forma;
+     - esa página solo se lee si su dirección es pública (`host_publico`): nunca una IP privada, local o de metadatos de la nube, tampoco después de una redirección, porque la URL la eligió el modelo a partir de páginas de terceros;
+     - en un **directorio** (`cfg["directorios"]`), además, tiene que estar a menos de 300 caracteres de al menos la mitad de las palabras del nombre;
+     - si es un celular junto al nombre de una persona, se descarta como dato personal.
+     - Solo cuentan las respuestas con `confianza ≥ 0,5` y sin negativa del modelo.
+     - Los descartados quedan en el detalle del paso como «no verificados», con la URL y el motivo y **sin el número**.
+   - **Origen.**
+     - Los teléfonos verificados entran con el origen nuevo **«Búsqueda web (Claude)»** (`claude_web`, migración `0023`). El vínculo guarda la URL en `telefono_vinculo_historia.detalle.url`, y la ficha muestra «página fuente» con el enlace.
+     - Del mismo resultado también entran el email (solo genérico), la dirección y la web (si no es un directorio).
+     - Se deshace como cualquier otra corrida.
+   - **Detalle del paso** (`enriquecimiento_paso`, proveedor `claude_web`): búsquedas, tokens, propuestos, verificados, no verificados con sus motivos, URLs, confianza, la reserva y `excede_reserva`.
+   - **Costo y topes.**
+     - **Reserva.** Antes de llamar se reserva `búsquedas máximas × precio por búsqueda + costo de los tokens estimados` (30.000 de entrada y 2.000 de salida, con los precios de Claude). Si no alcanza el tope, la corrida se detiene «por el tope» sin llamar.
+     - **Costo registrado.** Se registra el real: búsquedas usadas × precio + tokens reales. Si alguna vez superara la reserva, queda marcado `excede_reserva`.
+     - **Estimación.** Suma este paso al máximo (todas las empresas) y al esperado (la fracción `1 − tasa de éxito de Places`), y lo muestra aparte: «Búsqueda web (Claude): hasta US$X».
+   - **Configuración.** En Configuración → Enriquecimiento se agregan:
+     - el interruptor «Búsqueda web con Claude», **apagado por defecto**;
+     - las búsquedas máximas por empresa (1 a 10, por defecto 3);
+     - el precio por búsqueda (por defecto US$0,01).
+
+     Los tokens estimados se pueden cambiar por la API. Apagar Claude por clave inválida apaga también este paso.
+5. **Migración `0023`.** Registra el origen `claude_web` (sistema, prioridad 920) y agrega `claude_web` al check de proveedor de `enriquecimiento_paso`. No reescribe datos.
+
+**Riesgos aceptados.**
+- La verificación lee la página con el mismo lector simple del paso 4: una página que arma los números con JavaScript no los muestra y el teléfono se descarta aunque sea real. Se prefiere perder alguno a aceptar uno inventado.
+- Un número que aparece en la página citada puede ser de otra empresa del mismo directorio o grupo. La regla de cercanía al nombre en los directorios y la confianza mínima lo reducen, pero no lo eliminan.
+- El costo real por empresa depende de cuánto texto devuelven las búsquedas. La reserva usa 30.000 tokens de entrada, que cubren lo medido en la documentación (10.000 a 30.000).
+
+**Descartado.**
+- `ui_lang=es-UY`, hasta poder confirmarlo en la referencia de Brave.
+- Claude sin búsqueda web para datos de contacto: inventaría números.
+- Brave o Claude en el descubrimiento de empresas nuevas (P2 de la spec): va en otra spec, después de medir el paso 5.
 
 ## Preguntas abiertas que heredan del PRD
 

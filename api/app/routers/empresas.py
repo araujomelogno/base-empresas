@@ -226,7 +226,11 @@ def ficha(rut: str, conn=Depends(get_conn), u: Usuario = Depends(usuario_actual)
         " EXISTS (SELECT 1 FROM v_vinculo_discable d WHERE d.vinculo_id = v.id) AS discable,"
         " EXISTS (SELECT 1 FROM no_llamar n WHERE n.activo AND n.alcance = 'telefono' AND n.objeto_id = t.id) AS no_llamar,"
         " (SELECT coalesce(json_agg(json_build_object('codigo', o.codigo, 'nombre', o.nombre, 'fuente_tipo', x.fuente_tipo,"
-        "   'fuente_id', x.fuente_id, 'fecha', x.fecha) ORDER BY o.prioridad), '[]'::json)"
+        "   'fuente_id', x.fuente_id, 'fecha', x.fecha,"
+        # D57: la página fuente de un teléfono enriquecido (búsqueda web con Claude o sitio web)
+        "   'url', (SELECT h.detalle->>'url' FROM telefono_vinculo_historia h WHERE h.vinculo_id = v.id"
+        "     AND h.fuente_tipo = x.fuente_tipo AND h.fuente_id IS NOT DISTINCT FROM x.fuente_id AND h.detalle ? 'url'"
+        "     ORDER BY h.id DESC LIMIT 1)) ORDER BY o.prioridad), '[]'::json)"
         "   FROM telefono_vinculo_origen x JOIN origen_telefono o ON o.id = x.origen_id WHERE x.vinculo_id = v.id) AS origenes"
         " FROM telefono_vinculo v JOIN telefono t ON t.id = v.telefono_id LEFT JOIN contacto c ON c.id = v.contacto_id"
         " WHERE v.empresa_id = %s ORDER BY discable DESC, t.e164", (eid,)).fetchall()

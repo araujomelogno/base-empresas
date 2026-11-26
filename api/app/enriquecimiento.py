@@ -2,7 +2,8 @@
 
 Flujo: estimar (crea la corrida «estimada», sin gastar) → aprobar (con un tope por corrida y el tope mensual
 duro) → tarea en Cloud Tasks que recorre las empresas con la cascada de lo más barato a lo más caro:
-fuentes propias (US$0) → Google Places → Brave (si falta sitio) → lectura del sitio + Claude (si falta teléfono).
+fuentes propias (US$0) → Google Places → Brave (si falta sitio) → lectura del sitio + Claude (si falta teléfono) →
+búsqueda web con Claude (D57: último recurso, opcional; solo entran los teléfonos que aparecen en la página citada).
 Según la configuración (Q1), la cascada se corta apenas hay un teléfono o sigue hasta tener teléfono y sitio.
 
 Topes: antes de cada llamada paga se RESERVA su costo máximo en enriquecimiento_paso, con un lock, verificando
@@ -25,8 +26,9 @@ from .util import razon_normalizada
 
 PROVEEDORES = config.PROVEEDORES
 NOMBRES = {"google_places": "Google Places", "brave": "Brave Search", "claude": "Claude", "sitio": "Lectura del sitio",
-           "propias": "Fuentes propias"}
-ORIGEN_DE = {"google_places": "google_places", "claude": "web"}   # origen del teléfono según el paso que lo trajo
+           "propias": "Fuentes propias", "claude_web": "Búsqueda web (Claude)"}
+ORIGEN_DE = {"google_places": "google_places", "claude": "web", "claude_web": "claude_web"}   # origen del teléfono
+ORIGENES_ENRIQUECIMIENTO = ("google_places", "web", "claude_web")
 MOTIVO_ESTUDIO = "sitio de estudio contable/jurídico (enriquecimiento)"
 TERMINADAS = ("terminada", "detenida_tope", "cancelada", "error")
 _LOCK = "SELECT pg_advisory_xact_lock(hashtext('enriquecimiento_gasto'))"
@@ -71,6 +73,11 @@ def _usable(estado: dict, p: str) -> bool:
     return estado[p]["activo"] and estado[p]["configurado"]
 
 
+def _usable_web(cfg: dict, estado: dict) -> bool:
+    """El paso 5 usa la clave de Claude: hace falta la clave y el interruptor propio (desactivado por defecto)."""
+    return bool(cfg.get("claude_web_activo")) and estado["claude"]["configurado"]
+
+
 # ─────────────────────────────────────────────────────────────
 # Gasto
 # ─────────────────────────────────────────────────────────────
@@ -92,6 +99,16 @@ def costo_claude(cfg: dict, entrada: int, salida: int) -> float:
     return (entrada * cfg["precio_claude_entrada"] + salida * cfg["precio_claude_salida"]) / 1_000_000
 
 
+def reserva_web(cfg: dict) -> float:
+    """D57: lo máximo que cuesta el paso 5 en una empresa (búsquedas máximas y tokens estimados)."""
+    return (cfg["claude_web_busquedas"] * cfg["precio_busqueda_web"]
+            + costo_claude(cfg, cfg["tokens_web_entrada_estimados"], cfg["tokens_web_salida_estimados"]))
+
+
+def costo_web(cfg: dict, busquedas: int, entrada: int, salida: int) -> float:
+    return busquedas * cfg["precio_busqueda_web"] + costo_claude(cfg, entrada, salida)
+
+
 def resumen_gasto(conn) -> dict:
     """Tarjeta de enriquecimiento del tablero de calidad: gasto del mes contra el tope y costo por teléfono verificado."""
     cfg, _ = cfg_vigente(conn)
@@ -101,7 +118,7 @@ def resumen_gasto(conn) -> dict:
         " GROUP BY proveedor")}
     total = float(conn.execute("SELECT coalesce(sum(costo), 0) AS g FROM enriquecimiento_paso").fetchone()["g"])
     enr = ("FROM telefono_vinculo v WHERE EXISTS (SELECT 1 FROM telefono_vinculo_origen x JOIN origen_telefono o"
-           " ON o.id = x.origen_id WHERE x.vinculo_id = v.id AND o.codigo IN ('google_places', 'web'))")
+           " ON o.id = x.origen_id WHERE x.vinculo_id = v.id AND o.codigo IN ('google_places', 'web', 'claude_web'))")
     verif_total = conn.execute(f"SELECT count(*) AS n {enr} AND v.estado = 'verificado'").fetchone()["n"]
     verif_mes = conn.execute(
         f"SELECT count(*) AS n {enr} AND v.estado = 'verificado' AND EXISTS (SELECT 1 FROM telefono_vinculo_historia h"
@@ -214,12 +231,17 @@ def _costos(cfg: dict, filas: list[dict], gratis: int, estado: dict, tasa: float
     brave = n * cfg["precio_brave"] if _usable(estado, "brave") else 0.0
     claude = (n * costo_claude(cfg, cfg["tokens_entrada_estimados"], cfg["tokens_salida_estimados"])
               if _usable(estado, "claude") else 0.0)
+    web = n * reserva_web(cfg) if _usable_web(cfg, estado) else 0.0   # D57: hasta todas (el máximo)
     resto = (1 - tasa) if con_places else 1.0
+    por = {"Google Places": round(places, 4), "Brave Search": round(brave, 4), "Claude": round(claude, 4)}
+    if web:
+        por["Búsqueda web (Claude)"] = round(web, 4)
     return {"empresas": n, "llamadas_places": con_places, "places_gratis": min(con_places, gratis),
-            "maximo": round(places + brave + claude, 4),
-            "esperado": round(places + resto * (brave + claude), 4),
-            "por_proveedor_maximo": {"Google Places": round(places, 4), "Brave Search": round(brave, 4),
-                                     "Claude": round(claude, 4)}}
+            "maximo": round(places + brave + claude + web, 4),
+            # las que llegan al paso 5: por defecto, las que Places no resuelve
+            "esperado": round(places + resto * (brave + claude + web), 4),
+            "busqueda_web": {"maximo": round(web, 4), "esperado": round(resto * web, 4)} if web else None,
+            "por_proveedor_maximo": por}
 
 
 def _estimacion(conn, cfg: dict, filas: list[dict], salteadas: dict) -> dict:
@@ -244,9 +266,12 @@ def _estimacion(conn, cfg: dict, filas: list[dict], salteadas: dict) -> dict:
             "tope_corrida": cfg["tope_corrida"], "permitido": permitido, "max_empresas_permitidas": lo,
             "max_empresas_corrida": cfg["max_empresas_corrida"], "tasa_exito_places": tasa, "corte": cfg["corte"],
             "excede": c["maximo"] > permitido + 1e-9 or len(filas) > cfg["max_empresas_corrida"],
-            "proveedores": {k: v["estado"] for k, v in estado.items()}, "precios": {
+            "proveedores": {**{k: v["estado"] for k, v in estado.items()},
+                            "claude_web": ("activo" if _usable_web(cfg, estado) else "desactivado"
+                                           if estado["claude"]["configurado"] else "no configurado")}, "precios": {
                 "places": cfg["precio_places"], "brave": cfg["precio_brave"], "modelo_claude": cfg["modelo_claude"],
-                "claude_entrada": cfg["precio_claude_entrada"], "claude_salida": cfg["precio_claude_salida"]}}
+                "claude_entrada": cfg["precio_claude_entrada"], "claude_salida": cfg["precio_claude_salida"],
+                "busqueda_web": cfg["precio_busqueda_web"]}}
 
 
 ORIGENES = ("muestra", "lista", "ficha")
@@ -419,12 +444,17 @@ class Corrida:
         self.id, self.cfg, self.actor = c["id"], cfg, actor
         self.tope = float((c["estimacion"] or {}).get("permitido", cfg["tope_corrida"]))
         self.usable = {p: _usable(estado, p) for p in PROVEEDORES}
+        self.usable["claude_web"] = _usable_web(cfg, estado)
         self.avisos: list[str] = []
 
     def apagar(self, p: str, motivo: str):
         if self.usable.get(p):
             self.usable[p] = False
             self.avisos.append(f"{NOMBRES[p]}: {motivo}. Se salteó en el resto de la corrida.")
+        if p == "claude":   # la búsqueda web usa la misma clave
+            self.usable["claude_web"] = False
+        if p == "claude_web":
+            self.apagar("claude", motivo)
 
     def pagar(self, empresa_id, proveedor, costo_max, consulta=None):
         r = reservar(self.id, empresa_id, proveedor, costo_max, self.tope, self.cfg, consulta)
@@ -449,6 +479,10 @@ def procesar_empresa(run: Corrida, eid: int) -> dict:
                "url": None}
     nombre = emp["fantasia"] or emp["razon_social"] or ""
     tope = None
+    errores: list[dict] = []   # D57 (B3): el motivo de cada paso que terminó en error, para la pantalla
+
+    def error(proveedor: str, e: Exception):
+        errores.append({"proveedor": NOMBRES[proveedor], "motivo": str(e)})
 
     def falta_tel():
         return not (tel or hallado["telefonos"])
@@ -468,6 +502,7 @@ def procesar_empresa(run: Corrida, eid: int) -> dict:
                 lugares, _ = proveedores.places_buscar(consulta)
             except proveedores.ProveedorError as e:
                 cerrar_paso(pid, costo if e.cobrada else 0, "error", {"error": str(e)})
+                error("google_places", e)
                 if e.clave_invalida:
                     run.apagar("google_places", str(e))
             else:
@@ -492,6 +527,7 @@ def procesar_empresa(run: Corrida, eid: int) -> dict:
                 resultados = proveedores.brave_buscar(consulta)
             except proveedores.ProveedorError as e:
                 cerrar_paso(pid, costo if e.cobrada else 0, "error", {"error": str(e)})
+                error("brave", e)
                 if e.clave_invalida:
                     run.apagar("brave", str(e))
             else:
@@ -506,6 +542,7 @@ def procesar_empresa(run: Corrida, eid: int) -> dict:
                 texto, leidas = proveedores.leer_sitio(sitio)
             except proveedores.ProveedorError as e:
                 paso_gratis(run.id, eid, "sitio", "error", {"error": str(e)}, url=sitio)
+                error("sitio", e)
                 texto = None
             if texto:
                 paso_gratis(run.id, eid, "sitio", "ok", {"paginas": len(leidas), "caracteres": len(texto)}, url=leidas[0])
@@ -515,6 +552,7 @@ def procesar_empresa(run: Corrida, eid: int) -> dict:
                     ext = proveedores.claude_extraer(texto, emp["razon_social"] or nombre, cfg["modelo_claude"])
                 except proveedores.ProveedorError as e:
                     cerrar_paso(pid, 0, "error", {"error": str(e)})
+                    error("claude", e)
                     if e.clave_invalida:
                         run.apagar("claude", str(e))
                 else:
@@ -532,10 +570,52 @@ def procesar_empresa(run: Corrida, eid: int) -> dict:
                         hallado["email"] = ext.emails[0] if ext.emails else None
                         hallado["direccion"] = hallado["direccion"] or ext.direccion
                         hallado["estudio"] = ext.estudio
+        # 5. Búsqueda web con Claude (D57): último recurso, solo si todavía falta teléfono. Cada número tiene que
+        #    aparecer en la página que Claude citó; si no, se descarta.
+        if run.usable["claude_web"] and falta_tel():
+            pid, reserva = run.pagar(eid, "claude_web", reserva_web(cfg), emp["razon_social"] or nombre)
+            try:
+                b = proveedores.claude_buscar_web({"razon_social": emp["razon_social"], "fantasia": emp["fantasia"],
+                                                   "rut": emp["codigo"] if emp["base"] == "definitiva" else None,
+                                                   "localidad": emp["localidad"], "departamento": emp["departamento"]},
+                                                  cfg["modelo_claude"], cfg["claude_web_busquedas"])
+            except proveedores.ProveedorError as e:
+                cerrar_paso(pid, 0, "error", {"error": str(e)})
+                error("claude_web", e)
+                if e.clave_invalida:
+                    run.apagar("claude_web", str(e))
+            else:
+                costo = costo_web(cfg, b.busquedas, b.tokens_entrada, b.tokens_salida)
+                confiable = b.confianza >= 0.5 and not b.rechazada
+                v = proveedores.verificar_telefonos(b, emp["razon_social"] or nombre, cfg["directorios"]) \
+                    if confiable else proveedores.Verificacion()
+                email = b.email if b.email and proveedores._email_generico(b.email) else None
+                # Nunca los números propuestos ni nombres en el registro: cantidades y las URLs de las fuentes
+                cerrar_paso(pid, costo, "ok" if v.telefonos else "sin_resultado",
+                            {"telefono": bool(v.telefonos), "busquedas": b.busquedas, "tokens_entrada": b.tokens_entrada,
+                             "tokens_salida": b.tokens_salida, "propuestos": len(b.telefonos),
+                             "verificados": len(v.telefonos), "no_verificados": len(v.no_verificados),
+                             "motivos_no_verificados": [x["motivo"] for x in v.no_verificados],
+                             "urls": sorted({u for _, u in v.telefonos} | {x["url"] for x in v.no_verificados if x["url"]}),
+                             "confianza": b.confianza, "rechazada": b.rechazada,
+                             "datos_personales_descartados": v.personales, "reserva": round(reserva, 6),
+                             "excede_reserva": costo > reserva + 1e-9},
+                            url=v.telefonos[0][1] if v.telefonos else None)
+                if v.telefonos:
+                    hallado["telefonos"] += [(e164, "claude_web", {"url": url}) for e164, url in v.telefonos]
+                    hallado["url"] = hallado["url"] or v.telefonos[0][1]
+                    hallado["email"] = hallado["email"] or email
+                    hallado["direccion"] = hallado["direccion"] or b.direccion
+                    if b.web and not hallado["web"] and not web:
+                        d = proveedores.dominio(b.web)
+                        if d and not any(d == x or d.endswith("." + x) for x in cfg["directorios"]):
+                            hallado["web"] = b.web
     except TopeAlcanzado:
         tope = True
     salida.update(aplicar(run, emp, hallado))
-    salida["resultado"] = "con_telefono" if salida["telefonos_nuevos"] else "tope" if tope else "sin_resultado"
+    salida["errores"] = errores
+    salida["resultado"] = ("con_telefono" if salida["telefonos_nuevos"] else "tope" if tope
+                           else "error" if errores else "sin_resultado")
     if tope:
         salida["_tope"] = True
     return salida
@@ -621,12 +701,13 @@ def _cerrar(cid, estado, resultados, run, total, error=None) -> dict:
                "con_telefono_nuevo": sum(1 for r in resultados if r.get("telefonos_nuevos")),
                "telefonos_nuevos": sum(r.get("telefonos_nuevos", 0) for r in resultados),
                "sin_resultado": sum(1 for r in resultados if r["resultado"] == "sin_resultado"),
+               "con_error": sum(1 for r in resultados if r["resultado"] == "error"),
                "con_web": sum(1 for r in resultados if r.get("web")),
                "con_email": sum(1 for r in resultados if r.get("email")),
                "estudios": sum(1 for r in resultados if r.get("estudio")),
                "gasto_por_proveedor": {k: round(v, 4) for k, v in por.items()}, "avisos": run.avisos,
                "empresas": resultados}
-        base = sum(1 for r in resultados if r["resultado"] in ("con_telefono", "sin_resultado"))
+        base = sum(1 for r in resultados if r["resultado"] in ("con_telefono", "sin_resultado", "error"))
         res["tasa_telefono"] = round(100.0 * res["con_telefono_nuevo"] / base, 1) if base else None
         # Una corrida ya marcada «cancelada» (botón Cancelar) no vuelve a «terminada»
         conn.execute("UPDATE enriquecimiento_corrida SET estado = CASE WHEN estado = 'cancelada' THEN 'cancelada' ELSE %s END,"
@@ -704,8 +785,18 @@ def detalle(conn, corrida_id: int) -> dict:
     c = dict(c)
     c["n_empresas"] = len(c.pop("empresa_ids") or [])
     c["pasos"] = conn.execute(
-        "SELECT proveedor, resultado, count(*) AS n, sum(costo) AS costo FROM enriquecimiento_paso WHERE corrida_id = %s"
+        "SELECT proveedor, resultado, count(*) AS n, sum(costo) AS costo,"
+        " sum((detalle->>'propuestos')::int) AS propuestos, sum((detalle->>'verificados')::int) AS verificados,"
+        " sum((detalle->>'busquedas')::int) AS busquedas"
+        " FROM enriquecimiento_paso WHERE corrida_id = %s"
         " GROUP BY proveedor, resultado ORDER BY proveedor, resultado", (corrida_id,)).fetchall()
+    # D57 (B3): por proveedor, los motivos de error agrupados con su cantidad (los más frecuentes primero)
+    errores: dict[str, list] = {}
+    for r in conn.execute(
+            "SELECT proveedor, coalesce(detalle->>'error', 'sin detalle') AS motivo, count(*) AS n FROM enriquecimiento_paso"
+            " WHERE corrida_id = %s AND resultado = 'error' GROUP BY 1, 2 ORDER BY 1, 3 DESC, 2", (corrida_id,)):
+        errores.setdefault(r["proveedor"], []).append({"motivo": r["motivo"], "n": r["n"]})
+    c["errores"] = errores
     return c
 
 
